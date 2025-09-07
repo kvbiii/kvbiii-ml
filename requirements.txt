@@ -1,0 +1,6 @@
+imbalanced-learn>=0.14.0
+Jinja2>=3.1.6
+optuna>=4.5.0
+pydantic-settings>=2.10.1
+pytest>=8.4.2
+shap>=0.48.0
