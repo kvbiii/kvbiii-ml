@@ -48,8 +48,12 @@ class CategoricalCleaner(BaseEstimator, TransformerMixin):
             for feature in features:
                 if feature in X.columns:
                     X[feature] = X[feature].astype("object")
-                    X[feature] = X[feature].apply(lambda x: str(x) if pd.notna(x) else x)
-                    X[feature] = X[feature].replace(fill_value, np.nan).infer_objects(copy=False)
+                    X[feature] = X[feature].apply(
+                        lambda x: str(x) if pd.notna(x) else x
+                    )
+                    X[feature] = (
+                        X[feature].replace(fill_value, np.nan).infer_objects(copy=False)
+                    )
                     X[feature] = X[feature].astype("category")
         return X
 
