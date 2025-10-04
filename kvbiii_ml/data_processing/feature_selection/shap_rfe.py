@@ -2,7 +2,10 @@ import gc
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator
+import sys
+from pathlib import Path
 
+sys.path.append(str(Path(__file__).resolve().parents[3]))
 from kvbiii_ml.evaluation.metrics import (
     METRICS,
     get_metric_direction,
@@ -30,6 +33,7 @@ class ShapRecursiveFeatureElimination:
         alpha: float = 0.95,
         verbose: bool = True,
         protected_features: list[str] | None = None,
+        max_samples_shap: int = 50000,
     ) -> None:
         """Initialize the SHAP-RFE selector.
 
@@ -41,6 +45,7 @@ class ShapRecursiveFeatureElimination:
             alpha (float, optional): Weight for the final selection score mix. Defaults to 0.95.
             verbose (bool, optional): Whether to print progress messages. Defaults to True.
             protected_features (list[str], optional): Features that should never be removed.
+            max_samples_shap (int, optional): Maximum samples for SHAP computation. Defaults to 50000.
         """
         self.estimator = estimator
         self.cross_validator = cross_validator
@@ -50,6 +55,7 @@ class ShapRecursiveFeatureElimination:
         self.alpha = alpha
         self.verbose = verbose
         self.protected_features = protected_features or []
+        self.max_samples_shap = max_samples_shap
         self._large_dataset_warning_printed = False
         self.history_schema = {
             "step": int,
@@ -59,13 +65,10 @@ class ShapRecursiveFeatureElimination:
             "metric_value": float,
             "metric_change": float,
         }
-        if self.cross_validator.metric_name not in METRICS:
-            raise ValueError(
-                f"Unsupported metric: {self.cross_validator.metric_name}. Supported metrics are: {', '.join(METRICS.keys())}"
-            )
-        self.eval_metric = get_metric_function(self.cross_validator.metric_name)
-        self.metric_type = get_metric_type(self.cross_validator.metric_name)
-        self.direction = get_metric_direction(self.cross_validator.metric_name)
+
+        self.eval_metric = self.cross_validator.metric_fn
+        self.metric_type = self.cross_validator.metric_type
+        self.direction = self.cross_validator.metric_direction
         self._cv_cache_key = None
         self._cv_cache_result = None
 
@@ -136,8 +139,9 @@ class ShapRecursiveFeatureElimination:
             )
             if self.verbose:
                 print(
-                    f"\n🔁 Step {step_idx} | Features remaining: {len(current_features)}"
+                    f"\n🔁 Step {step_idx} | Number of features remaining: {len(current_features)}"
                 )
+                print(f"\n🔬 Features remaining: {current_features}\n")
                 print(
                     f"📊 Average {self.cross_validator.metric_name}: {fold_base_metric:.6f} ± {fold_base_metric_std:.6f}"
                 )
@@ -225,16 +229,16 @@ class ShapRecursiveFeatureElimination:
         Returns:
             tuple[pd.DataFrame, pd.Series]: Potentially sampled X and corresponding y.
         """
-        if X.shape[0] > 100000:
+        if X.shape[0] > self.max_samples_shap:
             if self.verbose and not self._large_dataset_warning_printed:
                 self._large_dataset_warning_printed = True
                 print(
                     f"⚠️ Large dataset detected: {X.shape[0]} samples. "
-                    "For computational efficiency, only a random subset of 100,000 samples will be used for SHAP-based feature elimination in each step. "
+                    f"For computational efficiency, only a random subset of {self.max_samples_shap} samples will be used for SHAP-based feature elimination in each step. "
                     "This may affect the stability of feature importance estimates. "
                     "Consider running on the full dataset if reproducibility is critical."
                 )
-            X = X.sample(n=100000, random_state=17)
+            X = X.sample(n=self.max_samples_shap, random_state=17)
             y = y.loc[X.index]
         return X, y
 
@@ -329,122 +333,247 @@ class ShapRecursiveFeatureElimination:
 
         fold_features_metric_monitor = {f: [] for f in current_features}
 
-        for (train_idx, valid_idx), fitted in zip(
-            self.cv.split(X[current_features], y), fitted_estimators
+        for fold_idx, ((train_idx, valid_idx), fitted) in enumerate(
+            zip(self.cv.split(X[current_features], y), fitted_estimators)
         ):
-            X_valid = X.iloc[valid_idx][current_features]
-            y_valid = y.iloc[valid_idx]
-
-            shap_values = compute_shap_values(fitted, X_valid, current_features)
-            vals = shap_values.values
-            base = shap_values.base_values
-
-            if vals.ndim == 2:
-                total = vals.sum(axis=1)
-                preds_matrix = None
+            try:
+                X_valid = X.iloc[valid_idx][current_features]
+                y_valid = y.iloc[valid_idx]
                 try:
-                    reduced_all = total[None, :] - vals.T
-                    if np.asarray(base).ndim == 0:
-                        base_arr = float(base)
-                        preds_matrix = base_arr + reduced_all
-                    else:
-                        base_arr = np.asarray(base)
-                        preds_matrix = base_arr + reduced_all
-                    if self.problem_type == "classification":
-                        pred_prob = 1 / (1 + np.exp(-preds_matrix))
-                        if pred_prob.ndim == 3 and y_valid.ndim == 1:
-                            pred_prob = pred_prob[:, :, 1]
-                        for feat_idx, feature in enumerate(current_features):
-                            if self.metric_type == "probs":
-                                pred = pred_prob[feat_idx]
-                            else:
-                                pred = (pred_prob[feat_idx] >= 0.5).astype(int)
-                            metric_without_feature = self.eval_metric(y_valid, pred)
-                            fold_features_metric_monitor[feature].append(
-                                metric_without_feature
-                            )
-                    else:
-                        for feat_idx, feature in enumerate(current_features):
-                            pred = preds_matrix[feat_idx]
-                            metric_without_feature = self.eval_metric(y_valid, pred)
-                            fold_features_metric_monitor[feature].append(
-                                metric_without_feature
-                            )
-                finally:
-                    del vals, base, shap_values, preds_matrix
-                    gc.collect()
-            elif vals.ndim == 3:
-                preds_tensor = None
-                try:
-                    total = vals.sum(axis=1)
-                    vals_swapped = vals.swapaxes(0, 1)
-                    reduced_all = total[None, :, :] - vals_swapped
-                    if np.asarray(base).ndim == 0:
-                        base_arr = float(base)
-                        preds_tensor = base_arr + reduced_all
-                    else:
-                        base_arr = np.asarray(base)
-                        preds_tensor = base_arr + reduced_all
-                    if self.problem_type == "classification":
-                        pred_prob = 1 / (1 + np.exp(-preds_tensor))
-                        if pred_prob.ndim == 4 and y_valid.ndim == 1:
-                            pred_prob = pred_prob[:, :, :, 1]
-                        for feat_idx, feature in enumerate(current_features):
-                            feat_pred = pred_prob[feat_idx]
-                            if self.metric_type == "probs":
-                                pred = feat_pred
-                            else:
-                                pred = (feat_pred >= 0.5).astype(int)
-                            metric_without_feature = self.eval_metric(y_valid, pred)
-                            fold_features_metric_monitor[feature].append(
-                                metric_without_feature
-                            )
-                    else:
-                        for feat_idx, feature in enumerate(current_features):
-                            pred = preds_tensor[feat_idx]
-                            metric_without_feature = self.eval_metric(y_valid, pred)
-                            fold_features_metric_monitor[feature].append(
-                                metric_without_feature
-                            )
-                finally:
-                    del vals, base, shap_values, preds_tensor
-                    gc.collect()
+                    shap_values = compute_shap_values(fitted, X_valid, current_features)
+                except Exception as e:
+                    if self.verbose:
+                        print(f"⚠️ SHAP computation failed for fold {fold_idx}: {e}")
+                    continue
+                self._process_shap_fold(
+                    shap_values,
+                    y_valid,
+                    current_features,
+                    fold_features_metric_monitor,
+                )
+
+            except Exception as e:
+                if self.verbose:
+                    print(f"⚠️ Error processing fold {fold_idx}: {e}")
+                continue
+            finally:
+                gc.collect()
+
+        avg_metric_feature = {}
+        for feature in current_features:
+            if fold_features_metric_monitor[feature]:
+                avg_metric_feature[feature] = float(
+                    np.mean(fold_features_metric_monitor[feature])
+                )
             else:
-                try:
-                    for feat_idx, feature in enumerate(current_features):
-                        shap_reduced = vals.copy()
-                        shap_reduced[:, feat_idx] = 0
-                        if self.problem_type == "classification":
-                            pred_logit = base[0] + shap_reduced.sum(axis=1)
-                            pred_prob = 1 / (1 + np.exp(-pred_logit))
-                            if pred_prob.ndim == 2 and y_valid.ndim == 1:
-                                pred_prob = pred_prob[:, 1]
-                            reduced_prediction = (
-                                pred_prob
-                                if self.metric_type == "probs"
-                                else (pred_prob >= 0.5).astype(int)
-                            )
-                        else:
-                            reduced_prediction = base[0] + shap_reduced.sum(axis=1)
-                        metric_without_feature = self.eval_metric(
-                            y_valid, reduced_prediction
-                        )
-                        fold_features_metric_monitor[feature].append(
-                            metric_without_feature
-                        )
-                finally:
-                    del vals, base, shap_values
-                    gc.collect()
+                avg_metric_feature[feature] = float(
+                    np.mean(self._cv_cache_result["valid_scores"])
+                )
 
-        avg_metric_feature = {
-            feature: float(np.mean(fold_features_metric_monitor[feature]))
-            for feature in current_features
-        }
         return (
             avg_metric_feature,
             float(np.mean(self._cv_cache_result["valid_scores"])),
             float(np.std(self._cv_cache_result["valid_scores"])),
         )
+
+    def _process_shap_fold(
+        self,
+        shap_values,
+        y_valid: pd.Series,
+        current_features: list[str],
+        fold_features_metric_monitor: dict,
+    ) -> None:
+        """Process SHAP values for a single fold with improved memory management."""
+        vals = shap_values.values
+        base = shap_values.base_values
+
+        try:
+            if vals.ndim == 2:
+                self._process_2d_shap(
+                    vals,
+                    base,
+                    y_valid,
+                    current_features,
+                    fold_features_metric_monitor,
+                )
+            elif vals.ndim == 3:
+                self._process_3d_shap(
+                    vals,
+                    base,
+                    y_valid,
+                    current_features,
+                    fold_features_metric_monitor,
+                )
+            else:
+                if self.verbose:
+                    print(
+                        f"⚠️ Unsupported SHAP values dimension: {vals.ndim}. Skipping fold."
+                    )
+                return
+        finally:
+            del vals, base, shap_values
+            gc.collect()
+
+    def _process_2d_shap(
+        self,
+        vals,
+        base,
+        y_valid,
+        current_features,
+        fold_features_metric_monitor,
+    ):
+        """Process 2D SHAP values with vectorized operations for efficiency."""
+        try:
+            total = vals.sum(axis=1, keepdims=True)
+            reduced_vals_matrix = total - vals
+            if np.asarray(base).ndim == 0:
+                base_val = float(base)
+                pred_matrix = base_val + reduced_vals_matrix
+            else:
+                base_arr = np.asarray(base)
+                pred_matrix = base_arr[:, np.newaxis] + reduced_vals_matrix
+
+            if self.problem_type == "classification":
+                pred_prob_matrix = 1 / (1 + np.exp(-np.clip(pred_matrix, -500, 500)))
+                if pred_prob_matrix.ndim == 3 and y_valid.ndim == 1:
+                    pred_prob_matrix = pred_prob_matrix[:, :, 1]
+                elif pred_prob_matrix.ndim == 2 and pred_prob_matrix.shape[1] != len(
+                    current_features
+                ):
+                    pred_prob_matrix = (
+                        pred_prob_matrix[:, 1::2]
+                        if pred_prob_matrix.shape[1] % 2 == 0
+                        else pred_prob_matrix
+                    )
+                if self.metric_type == "probs":
+                    final_pred_matrix = pred_prob_matrix
+                else:
+                    if pred_prob_matrix.ndim == 2 and pred_prob_matrix.shape[1] == len(
+                        current_features
+                    ):
+                        final_pred_matrix = (pred_prob_matrix >= 0.5).astype(int)
+                    else:
+                        final_pred_matrix = np.argmax(pred_prob_matrix, axis=-1).astype(
+                            int
+                        )
+            else:
+                final_pred_matrix = pred_matrix
+            for feat_idx, feature in enumerate(current_features):
+                try:
+                    if final_pred_matrix.ndim == 2:
+                        final_pred = final_pred_matrix[:, feat_idx]
+                    else:
+                        final_pred = final_pred_matrix[feat_idx]
+
+                    metric_without_feature = self.eval_metric(y_valid, final_pred)
+                    fold_features_metric_monitor[feature].append(metric_without_feature)
+
+                except Exception as e:
+                    if self.verbose:
+                        print(f"⚠️ Error processing feature {feature}: {e}")
+                    continue
+
+        except Exception as e:
+            if self.verbose:
+                print(
+                    f"⚠️ Vectorized processing failed, falling back to iterative method: {e}"
+                )
+
+        finally:
+            if "total" in locals():
+                del total
+            if "reduced_vals_matrix" in locals():
+                del reduced_vals_matrix
+            if "pred_matrix" in locals():
+                del pred_matrix
+            if "pred_prob_matrix" in locals():
+                del pred_prob_matrix
+            if "final_pred_matrix" in locals():
+                del final_pred_matrix
+            gc.collect()
+
+    def _process_3d_shap(
+        self, vals, base, y_valid, current_features, fold_features_metric_monitor
+    ):
+        """Process 3D SHAP values with vectorized operations for efficiency."""
+        try:
+            total = vals.sum(axis=1)
+            reduced_vals_matrix = total[:, np.newaxis, :] - vals
+            base_arr = np.asarray(base, dtype=float)
+            scalar_base = base_arr.ndim == 0
+
+            if scalar_base:
+                pred_matrix = base_arr.item() + reduced_vals_matrix
+            else:
+                if base_arr.ndim == 1 and reduced_vals_matrix.ndim == 3:
+                    pred_matrix = (
+                        base_arr[:, np.newaxis, np.newaxis] + reduced_vals_matrix
+                    )
+                else:
+                    pred_matrix = base_arr[:, np.newaxis, :] + reduced_vals_matrix
+            if self.problem_type == "classification":
+                pred_prob_matrix = 1 / (1 + np.exp(-np.clip(pred_matrix, -500, 500)))
+                if pred_prob_matrix.ndim == 3 and y_valid.ndim == 1:
+                    if pred_prob_matrix.shape[2] == 2:
+                        pred_prob_matrix = pred_prob_matrix[:, :, 1]
+                    elif pred_prob_matrix.shape[2] == 1:
+                        pred_prob_matrix = pred_prob_matrix[:, :, 0]
+                if self.metric_type == "probs":
+                    final_pred_matrix = pred_prob_matrix
+                else:
+                    if pred_prob_matrix.ndim == 3:
+                        final_pred_matrix = np.argmax(pred_prob_matrix, axis=-1).astype(
+                            int
+                        )
+                    else:
+                        final_pred_matrix = (pred_prob_matrix >= 0.5).astype(int)
+            else:
+                if pred_matrix.ndim == 3:
+                    final_pred_matrix = pred_matrix[:, :, 0]
+                else:
+                    final_pred_matrix = pred_matrix
+            n = len(y_valid)
+            for feat_idx, feature in enumerate(current_features):
+                try:
+                    if final_pred_matrix.ndim == 2:
+                        final_pred = final_pred_matrix[:, feat_idx]
+                    else:
+                        final_pred = final_pred_matrix[feat_idx]
+                    final_pred = np.asarray(final_pred)
+                    if final_pred.ndim == 0:
+                        final_pred = np.full(n, final_pred.item())
+                    elif final_pred.shape[0] != n:
+                        if final_pred.size == n:
+                            final_pred = final_pred.reshape(n, -1).ravel()
+                        else:
+                            final_pred = np.full(n, final_pred.ravel()[0])
+                    metric_without_feature = self.eval_metric(y_valid, final_pred)
+                    fold_features_metric_monitor[feature].append(metric_without_feature)
+                except Exception as e:
+                    if self.verbose:
+                        print(f"⚠️ Error processing feature {feature}: {e}")
+                    continue
+        except Exception as e:
+            if self.verbose:
+                print(
+                    f"⚠️ Vectorized 3D processing failed, falling back to iterative method: {e}"
+                )
+            self._process_3d_shap_fallback(
+                vals, base, y_valid, current_features, fold_features_metric_monitor
+            )
+
+        finally:
+            if "total" in locals():
+                del total
+            if "reduced_vals_matrix" in locals():
+                del reduced_vals_matrix
+            if "pred_matrix" in locals():
+                del pred_matrix
+            if "pred_prob_matrix" in locals():
+                del pred_prob_matrix
+            if "final_pred_matrix" in locals():
+                del final_pred_matrix
+            gc.collect()
 
     def _log_step(
         self,
@@ -543,9 +672,11 @@ if __name__ == "__main__":
     from sklearn.ensemble import RandomForestClassifier
 
     X_df, y_ser = load_breast_cancer(return_X_y=True, as_frame=True)
+    y_ser = y_ser.astype("category")
     clf = RandomForestClassifier(random_state=17, max_depth=5, n_estimators=100)
 
     cv = CrossValidationTrainer(
+        problem_type="classification",
         metric_name="Accuracy",
         cv=KFold(n_splits=5, shuffle=True, random_state=17),
         processors=None,
