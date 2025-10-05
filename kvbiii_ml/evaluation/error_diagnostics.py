@@ -2,11 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-try:  # optional interactive dependency
-    from IPython.display import display  # type: ignore
-except Exception:  # pragma: no cover
-    def display(obj):  # type: ignore
-        print(obj)
+from IPython.display import display
 
 
 def get_top_regression_under_over_errors(
@@ -89,15 +85,10 @@ def display_regression_under_over_errors(
                     fmt[col] = "{:+.2f}%"
                 else:
                     fmt[col] = "{:.4f}"
-        # Build styler
         styler = df.style.set_caption(title).format(fmt)
-        numeric_cols = [c for c in df.columns if df[c].dtype.kind in "fc"]
         error_cols = [c for c in df.columns if "Error" in c]
         if error_cols:
-            # Larger absolute error -> darker (reverse green-red)
-            styler = styler.background_gradient(
-                subset=error_cols, cmap="RdYlGn_r"
-            )
+            styler = styler.background_gradient(subset=error_cols, cmap="RdYlGn_r")
         if "Percentage Error (%)" in df.columns:
             styler = styler.bar(
                 subset=["Percentage Error (%)"],
@@ -156,196 +147,156 @@ def display_regression_under_over_errors(
 
 def get_top_classification_errors(
     y_true: pd.Series,
-    y_pred_proba: np.ndarray | pd.DataFrame,
+    y_pred_proba: np.ndarray,
+    class_id: int,
+    id2label: dict[int, str],
     top_n: int = 15,
-    positive_class: int | str | None = None,
 ) -> pd.DataFrame:
-    """Compute top misclassified samples for (binary or multi-class) classification.
+    """
+    Get top classification errors for a specific class based on biggest probability difference.
 
-    For binary classification, probabilities (shape (n_samples, 2) or (n_samples,))
-    are used to derive predicted labels. For multi-class, argmax is applied.
-    The returned DataFrame is sorted by model confidence in the *wrong* class
-    (largest probability assigned to the predicted but incorrect label).
+    The function always returns errors (false positives and false negatives)
+    sorted by the magnitude of the difference between the model's predicted
+    class probability and the true class probability (higher = more confident error).
 
     Args:
-        y_true (pd.Series): True class labels.
-        y_pred_proba (np.ndarray | pd.DataFrame): Predicted class probabilities.
-        top_n (int, optional): Number of misclassified rows to return. Defaults to 15.
-        positive_class (int | str | None, optional): Explicit positive class for
-            binary one-column probability input. If None and a single probability
-            column is provided, assumes positive class is 1.
+        y_true (pd.Series): True class labels (index-aligned).
+        y_pred_proba (np.ndarray): Predicted probabilities array (n_samples, n_classes).
+        class_id (int): Target class ID to analyze errors for.
+        id2label (dict[int, str]): Mapping from class index to class name.
+        top_n (int, optional): Number of rows to return. Defaults to 15.
 
     Returns:
-        pd.DataFrame: Misclassified samples with columns: true, predicted, confidence,
-            probability_true_class, probability_predicted_class, margin (prob_pred - prob_true).
+        pd.DataFrame: Top classification errors sorted by confidence/error magnitude.
     """
     if not isinstance(y_true, pd.Series):
-        raise TypeError("y_true must be a pandas Series.")
-    proba = (
-        y_pred_proba.values
-        if isinstance(y_pred_proba, pd.DataFrame)
-        else np.asarray(y_pred_proba)
-    )
-    if proba.ndim == 1:  # single probability (positive class)
-        pos = 1 if positive_class is None else positive_class
-        neg = 0 if pos != 0 else 1
-        proba = np.vstack([1 - proba, proba]).T
-        classes = [neg, pos]
+        raise TypeError("y_true must be a pandas Series aligned to predictions.")
+    if y_pred_proba.shape[0] != len(y_true):
+        raise ValueError("y_pred_proba must have the same number of samples as y_true")
+
+    if isinstance(y_true.iloc[0], str):
+        label2id = {v: k for k, v in id2label.items()}
+        y_true_indices = y_true.map(label2id)
     else:
-        classes = list(range(proba.shape[1]))
-    y_pred = np.array(classes)[np.argmax(proba, axis=1)]
-    mis_mask = y_pred != y_true.values
-    if not mis_mask.any():
-        return pd.DataFrame(
-            columns=[
-                "True Label",
-                "Predicted Label",
-                "Confidence (Pred)",
-                "Prob True Label",
-                "Prob Pred Label",
-                "Margin",
-            ]
-        )
-    proba_true = proba[np.arange(len(proba)), y_true.map({c: i for i, c in enumerate(classes)}).values]
-    proba_pred = proba[np.arange(len(proba)), np.argmax(proba, axis=1)]
-    margin = proba_pred - proba_true
-    df = pd.DataFrame(
-        {
-            "True Label": y_true.values,
-            "Predicted Label": y_pred,
-            "Confidence (Pred)": proba_pred,
-            "Prob True Label": proba_true,
-            "Prob Pred Label": proba_pred,
-            "Margin": margin,
-        }
+        y_true_indices = y_true
+    if y_pred_proba.ndim == 1:
+        y_pred_proba = np.vstack([1 - y_pred_proba, y_pred_proba]).T
+    if class_id < 0 or class_id >= y_pred_proba.shape[1]:
+        raise ValueError(f"class_id {class_id} is out of bounds for predictions")
+    predicted_classes = np.argmax(y_pred_proba, axis=1)
+    predicted_confidences = np.max(y_pred_proba, axis=1)
+    true_class_probs = y_pred_proba[np.arange(len(y_true)), y_true_indices]
+    is_true_class = y_true_indices == class_id
+    is_pred_class = predicted_classes == class_id
+    false_negatives = is_true_class & ~is_pred_class
+    if np.sum(false_negatives) == 0:
+        return pd.DataFrame()
+    error_indices = np.where(false_negatives)[0]
+    error_magnitudes = (
+        predicted_confidences[error_indices] - true_class_probs[error_indices]
     )
-    df = df.loc[mis_mask]
-    df = df.sort_values(by=["Confidence (Pred)", "Margin"], ascending=False).head(top_n)
+    top_error_pos = np.argsort(error_magnitudes)[::-1][:top_n]
+    selected_indices = error_indices[top_error_pos]
+
+    df_data = []
+    for idx in selected_indices:
+        true_class_idx = y_true_indices.iloc[idx]
+        pred_class_idx = predicted_classes[idx]
+        row = pd.Series(
+            {
+                "True Class": id2label.get(true_class_idx, true_class_idx),
+                "Predicted Class": id2label.get(pred_class_idx, pred_class_idx),
+                "Predicted Class Probability": predicted_confidences[idx],
+                "True Class Probability": true_class_probs[idx],
+                "Error": float(predicted_confidences[idx] - true_class_probs[idx]),
+            },
+            name=y_true.index[idx],
+        )
+        df_data.append(row)
+
+    df = pd.DataFrame(df_data)
     return df
 
 
-class ErrorDiagnostics:
-    """Unified error diagnostics helper for regression and classification.
-
-    Provides a minimal API required by tests: initialization with problem_type
-    and a compute_errors method producing an error DataFrame.
-    """
-
-    def __init__(self, problem_type: str):
-        if problem_type not in {"classification", "regression"}:
-            raise ValueError("problem_type must be 'classification' or 'regression'")
-        self.problem_type = problem_type
-
-    def compute_errors(
-        self,
-        y_true: np.ndarray | pd.Series,
-        y_pred: np.ndarray | pd.Series,
-        X: pd.DataFrame | None = None,
-        probas: np.ndarray | None = None,
-    ) -> pd.DataFrame:
-        y_true_s = pd.Series(y_true).reset_index(drop=True)
-        y_pred_s = pd.Series(y_pred).reset_index(drop=True)
-        df = pd.DataFrame({"y_true": y_true_s, "y_pred": y_pred_s})
-        if self.problem_type == "classification":
-            df["error"] = (df["y_true"] != df["y_pred"]).astype(int)
-            if probas is not None:
-                p = np.asarray(probas)
-                if p.ndim == 1:
-                    # binary positive class prob
-                    prob_true = np.where(df["y_true"].values == 1, p, 1 - p)
-                else:
-                    # assume column order matches sorted unique classes
-                    classes = sorted(df["y_true"].unique())
-                    class_index = {c: i for i, c in enumerate(classes)}
-                    idx = [class_index[c] for c in df["y_true"].values]
-                    prob_true = p[np.arange(len(p)), idx]
-                df["proba_true_class"] = prob_true
-        else:  # regression
-            err = y_pred_s - y_true_s
-            df["error"] = err
-            df["absolute_error"] = err.abs()
-            df["squared_error"] = err**2
-            with np.errstate(divide="ignore", invalid="ignore"):
-                df["percentage_error"] = np.where(
-                    y_true_s == 0, np.nan, (err.abs() / y_true_s.abs()) * 100.0
-                )
-        if X is not None:
-            df = pd.concat([df, X.reset_index(drop=True)], axis=1)
-        return df
-
-    @staticmethod
-    def regression_under_over_errors(y_true, y_pred, top_n=15, log=False):
-        return get_top_regression_under_over_errors(y_true, y_pred, top_n=top_n, log=log)
-
-    @staticmethod
-    def classification_errors(y_true, y_pred_proba, top_n=15, positive_class=None):
-        return get_top_classification_errors(y_true, y_pred_proba, top_n=top_n, positive_class=positive_class)
-
-
-def display_classification_errors(errors_df: pd.DataFrame) -> None:
-    """Display styled table of misclassified samples.
+def display_classification_errors(
+    errors_by_class: dict, id2label: dict[int, str]
+) -> None:
+    """Display styled tables of classification errors for each class.
 
     Args:
-        errors_df (pd.DataFrame): Output from ``get_top_classification_errors``.
+        errors_by_class (dict): Dictionary mapping class_id to error DataFrame from get_top_classification_errors.
+        id2label (dict[int, str]): Mapping from class index to class name.
 
     Returns:
-        None: Renders styled table.
+        None: This function renders styled tables (best viewed in notebooks).
     """
-    if errors_df.empty:
-        display("No misclassifications found.")
-        return
-    fmt = {}
-    for col in errors_df.columns:
-        if errors_df[col].dtype.kind in "fc":
-            if "Prob" in col or "Confidence" in col:
-                fmt[col] = "{:.4f}"
-            elif col == "Margin":
-                fmt[col] = "{:+.4f}"
-    styler = errors_df.style.set_caption(
-        f"🔍 Top {len(errors_df)} Misclassified Samples (highest confidence)"
-    ).format(fmt)
-    # Emphasize high confidence wrong predictions
-    if "Confidence (Pred)" in errors_df.columns:
-        styler = styler.background_gradient(
-            subset=["Confidence (Pred)"], cmap="OrRd"
-        )
-    if "Margin" in errors_df.columns:
-        styler = styler.bar(subset=["Margin"], align="mid", color=["#d73027", "#1a9850"])
-    styler = styler.set_properties(
-        **{
-            "text-align": "left",
-            "font-family": "Times New Roman",
-            "font-size": "1.25em",
-            "background-color": "#f9f9f9",
-            "border": "3px solid #ddd",
-            "color": "#333",
-        }
-    ).set_table_styles(
-        [
-            {
-                "selector": "th",
-                "props": [
-                    ("font-weight", "bold"),
-                    ("border", "3px solid #ddd"),
-                    ("background-color", "#4a90e2"),
-                    ("color", "white"),
-                    ("text-align", "center"),
-                    ("font-size", "1.2em"),
-                    ("padding", "8px"),
-                ],
-            },
-            {
-                "selector": "caption",
-                "props": [
-                    ("font-size", "1.4em"),
-                    ("font-weight", "bold"),
-                    ("color", "#4a90e2"),
-                    ("margin-bottom", "12px"),
-                ],
-            },
+
+    def _style(df: pd.DataFrame, title: str):
+        fmt: dict[str, str] = {}
+        for col in df.columns:
+            if df[col].dtype.kind in "fc":
+                if "Probability" in col:
+                    fmt[col] = "{:.4f}"
+        if df.empty:
+            empty_df = pd.DataFrame({"No errors found": [""]})
+            styler = empty_df.style.set_caption(title)
+        else:
+            styler = df.style.set_caption(title).format(fmt)
+
+        prob_cols = [
+            c for c in df.columns if "Probability" in c and df[c].dtype.kind in "fc"
         ]
-    )
-    display(styler)
+        if prob_cols:
+            styler = styler.background_gradient(
+                subset=prob_cols, cmap="RdYlGn", vmin=0, vmax=1
+            )
+
+        if "Error" in df.columns:
+            styler = styler.bar(
+                subset=["Error"], align="mid", color="#d65f5f", vmin=0, vmax=1
+            )
+
+        styler = styler.set_properties(
+            **{
+                "text-align": "left",
+                "font-family": "Times New Roman",
+                "font-size": "1.25em",
+                "background-color": "#f9f9f9",
+                "border": "3px solid #ddd",
+                "color": "#333",
+            }
+        ).set_table_styles(
+            [
+                {
+                    "selector": "th",
+                    "props": [
+                        ("font-weight", "bold"),
+                        ("border", "3px solid #ddd"),
+                        ("background-color", "#4a90e2"),
+                        ("color", "white"),
+                        ("text-align", "center"),
+                        ("font-size", "1.2em"),
+                        ("padding", "8px"),
+                    ],
+                },
+                {
+                    "selector": "caption",
+                    "props": [
+                        ("font-size", "1.4em"),
+                        ("font-weight", "bold"),
+                        ("color", "#4a90e2"),
+                        ("margin-bottom", "12px"),
+                    ],
+                },
+            ]
+        )
+        return styler
+
+    for class_id, class_name in id2label.items():
+        if class_id in errors_by_class:
+            df = errors_by_class[class_id]
+            title = f"🎯 Class '{class_name}' - Top {len(df)} Classification Errors"
+            display(_style(df, title))
 
 
 if __name__ == "__main__":
@@ -353,7 +304,9 @@ if __name__ == "__main__":
     # Regression example
     y_true_reg = pd.Series(rng.normal(loc=100.0, scale=10.0, size=50))
     y_pred_reg = y_true_reg + rng.normal(loc=0.0, scale=5.0, size=50)
-    under_df, over_df = get_top_regression_under_over_errors(y_true_reg, y_pred_reg, top_n=5)
+    under_df, over_df = get_top_regression_under_over_errors(
+        y_true_reg, y_pred_reg, top_n=5
+    )
     display_regression_under_over_errors(under_df, over_df)
 
     # Classification example (binary)
@@ -361,5 +314,11 @@ if __name__ == "__main__":
     # Simulate probabilities with some signal
     raw_scores = y_true_cls + rng.normal(0, 0.8, size=60)
     prob_pos = 1 / (1 + np.exp(-raw_scores))
-    mis_cls_df = get_top_classification_errors(y_true_cls, prob_pos, top_n=10)
-    display_classification_errors(mis_cls_df)
+    errors_by_class = {}
+    id2label = {0: "Negative", 1: "Positive"}
+    for class_id, class_name in id2label.items():
+        df = get_top_classification_errors(
+            y_true_cls, prob_pos, class_id=class_id, id2label=id2label, top_n=10
+        )
+        errors_by_class[class_id] = df
+    display_classification_errors(errors_by_class, id2label)
