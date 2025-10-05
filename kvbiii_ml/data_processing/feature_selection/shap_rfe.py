@@ -6,12 +6,6 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[3]))
-from kvbiii_ml.evaluation.metrics import (
-    METRICS,
-    get_metric_direction,
-    get_metric_function,
-    get_metric_type,
-)
 from kvbiii_ml.evaluation.shap_values import compute_shap_values
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
@@ -66,9 +60,9 @@ class ShapRecursiveFeatureElimination:
             "metric_change": float,
         }
 
-        self.eval_metric = self.cross_validator.metric_fn
+        self.metric_fn = self.cross_validator.metric_fn
         self.metric_type = self.cross_validator.metric_type
-        self.direction = self.cross_validator.metric_direction
+        self.metric_direction = self.cross_validator.metric_direction
         self._cv_cache_key = None
         self._cv_cache_result = None
 
@@ -129,7 +123,7 @@ class ShapRecursiveFeatureElimination:
         removal_schedule = self.compute_removal_schedule(len(removable_features))
         if self.verbose:
             print(
-                f"🔍 Starting SHAP-RFE with {len(current_features)} features, target metric: {self.cross_validator.metric_name} ({self.direction}), steps: {self.steps}.\n📅 The number of features to remove every step: {removal_schedule}"
+                f"🔍 Starting SHAP-RFE with {len(current_features)} features, target metric: {self.cross_validator.metric_name} ({self.metric_direction}), steps: {self.steps}.\n📅 The number of features to remove every step: {removal_schedule}"
             )
             print(f"🛡️  Protected features: {self.protected_features}")
 
@@ -153,7 +147,7 @@ class ShapRecursiveFeatureElimination:
             feature_metric_diffs_df = pd.DataFrame(
                 list(removable_metrics.items()), columns=["feature", "metric_change"]
             )
-            ascending = self.direction == "minimize"
+            ascending = self.metric_direction == "minimize"
             feature_metric_diffs_df = feature_metric_diffs_df.sort_values(
                 by="metric_change", ascending=ascending
             )
@@ -465,7 +459,7 @@ class ShapRecursiveFeatureElimination:
                     else:
                         final_pred = final_pred_matrix[feat_idx]
 
-                    metric_without_feature = self.eval_metric(y_valid, final_pred)
+                    metric_without_feature = self.metric_fn(y_valid, final_pred)
                     fold_features_metric_monitor[feature].append(metric_without_feature)
 
                 except Exception as e:
@@ -547,7 +541,7 @@ class ShapRecursiveFeatureElimination:
                             final_pred = final_pred.reshape(n, -1).ravel()
                         else:
                             final_pred = np.full(n, final_pred.ravel()[0])
-                    metric_without_feature = self.eval_metric(y_valid, final_pred)
+                    metric_without_feature = self.metric_fn(y_valid, final_pred)
                     fold_features_metric_monitor[feature].append(metric_without_feature)
                 except Exception as e:
                     if self.verbose:
@@ -643,7 +637,7 @@ class ShapRecursiveFeatureElimination:
         metric_max = df["metric_value"].max()
         metric_min = df["metric_value"].min()
         denom_metric = metric_max - metric_min if metric_max != metric_min else 1.0
-        if self.direction == "maximize":
+        if self.metric_direction == "maximize":
             df["metric_norm"] = (df["metric_value"] - metric_min) / denom_metric
         else:
             df["metric_norm"] = (metric_max - df["metric_value"]) / denom_metric
