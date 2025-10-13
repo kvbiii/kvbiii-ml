@@ -276,33 +276,29 @@ class PermutationRecursiveFeatureElimination:
             )
         ):
             try:
-                X_valid = X.iloc[valid_idx][current_features].copy()
+                X_valid = X.iloc[valid_idx][current_features].values
                 y_valid = y.iloc[valid_idx]
-
-                baseline_pred = self._predict(fitted, X_valid)
+                X_valid_df = pd.DataFrame(X_valid, columns=current_features)
+                baseline_pred = self._predict(fitted, X_valid_df)
                 baseline_score = self.metric_fn(y_valid, baseline_pred)
+                for feat_idx, feature in enumerate(current_features):
+                    original_values = X_valid[:, feat_idx].copy()
+                    permutation_scores = np.zeros(self.n_repeats)
 
-                for feature in current_features:
-                    feature_importances = []
-                    for _ in range(self.n_repeats):
-                        X_permuted = X_valid.copy()
-                        X_permuted[feature] = self._rng.permutation(
-                            X_permuted[feature].values
+                    for repeat_idx in range(self.n_repeats):
+                        X_valid[:, feat_idx] = self._rng.permutation(original_values)
+                        X_permuted_df = pd.DataFrame(X_valid, columns=current_features)
+                        permuted_pred = self._predict(fitted, X_permuted_df)
+                        permutation_scores[repeat_idx] = self.metric_fn(
+                            y_valid, permuted_pred
                         )
+                    X_valid[:, feat_idx] = original_values
+                    if self.metric_direction == "maximize":
+                        importance = baseline_score - permutation_scores.mean()
+                    else:
+                        importance = permutation_scores.mean() - baseline_score
 
-                        permuted_pred = self._predict(fitted, X_permuted)
-                        permuted_score = self.metric_fn(y_valid, permuted_pred)
-
-                        if self.metric_direction == "maximize":
-                            importance = baseline_score - permuted_score
-                        else:
-                            importance = permuted_score - baseline_score
-
-                        feature_importances.append(importance)
-
-                    fold_importance_scores[feature].append(
-                        float(np.mean(feature_importances))
-                    )
+                    fold_importance_scores[feature].append(float(importance))
 
             except Exception as e:
                 if self.verbose:
