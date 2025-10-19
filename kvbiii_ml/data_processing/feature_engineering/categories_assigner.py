@@ -59,11 +59,13 @@ class CategoriesAssigner(BaseEstimator, TransformerMixin):
         for feature, categories in self.feature_groups.items():
             if feature in X.columns:
                 mode_val = self.feature_modes_.get(feature)
-                # Replace values not in categories (excluding NaN) with mode
-                mask_unknown = ~X[feature].isin(categories) & X[feature].notna()
-                if mask_unknown.any() and mode_val is not None:
-                    X.loc[mask_unknown, feature] = mode_val
-                X[feature] = pd.Categorical(X[feature], categories=categories)
+                s = X[feature].copy().astype("string")
+                not_na = s.notna()
+                categories_str = [str(c) for c in categories]
+                mask_unknown = not_na & ~s.isin(categories_str)
+                if mask_unknown.any() and mode_val is not None and not pd.isna(mode_val):
+                    s.loc[mask_unknown] = str(mode_val)
+                X[feature] = pd.Categorical(s, categories=categories_str)
         return X
 
     def get_feature_names_out(
