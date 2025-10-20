@@ -13,13 +13,17 @@ from sklearn.metrics import (
     f1_score,
     roc_auc_score,
 )
-from sklearn.metrics import classification_report, confusion_matrix, explained_variance_score
+from sklearn.metrics import (
+    classification_report,
+    confusion_matrix,
+    explained_variance_score,
+)
+
 try:  # Optional dependency for plotting
     import matplotlib.pyplot as plt  # type: ignore
 except Exception:  # pragma: no cover - allow running without matplotlib
     plt = None  # type: ignore
 from sklearn.metrics import roc_curve, auc
-
 
 
 def regression_results(
@@ -141,10 +145,47 @@ def classification_results(
     y_train_proba: np.ndarray | None = None,
     y_test_proba: np.ndarray | None = None,
     average: str = "weighted",
+    id2label: dict[int, str] | None = None,
+    cutoff: float | list[float] | None = None,
 ) -> pd.DataFrame:
     """
     Generates a comprehensive styled DataFrame with classification evaluation metrics.
+
+    Args:
+        cutoff (float | list[float] | None): Custom threshold(s) for classification.
+            - For binary: single float (e.g., 0.7)
+            - For multi-class: list of floats, one per class (e.g., [0.3, 0.4, 0.3])
+            If None, uses the original predictions.
     """
+
+    def apply_cutoff(
+        y_proba: np.ndarray, cutoff_value: float | list[float]
+    ) -> np.ndarray:
+        """Apply cutoff threshold(s) to probabilities to get predictions."""
+        if y_proba is None:
+            raise ValueError("Probabilities must be provided when using cutoff")
+
+        if isinstance(cutoff_value, (int, float)):
+            if y_proba.ndim == 1:
+                return (y_proba >= cutoff_value).astype(int)
+            else:
+                return (y_proba[:, 1] >= cutoff_value).astype(int)
+        else:
+            cutoff_array = np.array(cutoff_value)
+            if y_proba.shape[1] != len(cutoff_array):
+                raise ValueError(
+                    f"Number of cutoffs ({len(cutoff_array)}) must match number of classes ({y_proba.shape[1]})"
+                )
+            normalized = y_proba / cutoff_array
+            return np.argmax(normalized, axis=1)
+
+    if cutoff is not None:
+        if y_train_proba is None or y_test_proba is None:
+            raise ValueError(
+                "Probabilities (y_train_proba and y_test_proba) must be provided when using cutoff"
+            )
+        y_train_pred = apply_cutoff(y_train_proba, cutoff)
+        y_test_pred = apply_cutoff(y_test_proba, cutoff)
 
     def safe_roc_auc(
         y_true: pd.Series | np.ndarray, y_proba: np.ndarray, multi_class: str = "ovr"
@@ -235,144 +276,6 @@ def classification_results(
         )
     )
     return styled_df
-
-
-# ---------------------------------------------------------------------------
-# Backward compatible functional API expected by tests
-# ---------------------------------------------------------------------------
-def generate_classification_report(
-    y_true: np.ndarray,
-    y_pred: np.ndarray,
-    y_probas: np.ndarray | None = None,
-    class_names: list[str] | None = None,
-) -> dict:
-    report_text = classification_report(y_true, y_pred, target_names=class_names, zero_division=0)
-    cm = confusion_matrix(y_true, y_pred)
-    out = {
-        "classification_report": report_text,
-        "confusion_matrix": cm,
-        "accuracy": accuracy_score(y_true, y_pred),
-        "precision": precision_score(y_true, y_pred, average="binary", zero_division=0) if len(np.unique(y_true)) == 2 else precision_score(y_true, y_pred, average="weighted", zero_division=0),
-        "recall": recall_score(y_true, y_pred, average="binary", zero_division=0) if len(np.unique(y_true)) == 2 else recall_score(y_true, y_pred, average="weighted", zero_division=0),
-        "f1": f1_score(y_true, y_pred, average="binary", zero_division=0) if len(np.unique(y_true)) == 2 else f1_score(y_true, y_pred, average="weighted", zero_division=0),
-    }
-    if y_probas is not None:
-        try:
-            out["roc_auc"] = roc_auc_score(y_true, y_probas)
-        except Exception:
-            pass
-    return out
-
-
-def generate_regression_report(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
-    mse = mean_squared_error(y_true, y_pred)
-    mae = mean_absolute_error(y_true, y_pred)
-    r2 = r2_score(y_true, y_pred)
-    ev = explained_variance_score(y_true, y_pred)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        mape = float(np.mean(np.abs((y_true - y_pred) / np.where(y_true == 0, np.nan, y_true))))
-    return {
-        "mse": mse,
-        "rmse": float(np.sqrt(mse)),
-        "mae": mae,
-        "r2": r2,
-        "explained_variance": ev,
-        "mape": mape,
-    }
-
-
-def plot_confusion_matrix(
-    y_true: np.ndarray,
-    y_pred: np.ndarray,
-    class_names: list[str] | None = None,
-    normalize: bool = False,
-    cmap: str = "Blues",
-    figsize: tuple[int, int] = (6, 5),
-):  # pragma: no cover - visualization
-    if plt is None:
-        raise ImportError("matplotlib is required for plotting functions")
-    cm = confusion_matrix(y_true, y_pred)
-    if normalize:
-        with np.errstate(all="ignore"):
-            cm = cm.astype(float) / cm.sum(axis=1, keepdims=True)
-    plt.figure(figsize=figsize)
-    plt.imshow(cm, interpolation="nearest", cmap=cmap)
-    plt.title("Confusion Matrix")
-    plt.colorbar()
-    tick_marks = np.arange(cm.shape[0])
-    labels = class_names if class_names else [str(i) for i in range(cm.shape[0])]
-    plt.xticks(tick_marks, labels, rotation=45)
-    plt.yticks(tick_marks, labels)
-    plt.xlabel("Predicted")
-    plt.ylabel("True")
-    plt.tight_layout()
-    plt.show()
-
-
-def plot_roc_curve(
-    y_true: np.ndarray,
-    y_proba: np.ndarray,
-    label: str | None = None,
-    figsize: tuple[int, int] = (6, 5),
-):  # pragma: no cover - visualization
-    if plt is None:
-        raise ImportError("matplotlib is required for plotting functions")
-    fpr, tpr, _ = roc_curve(y_true, y_proba)
-    roc_auc = auc(fpr, tpr)
-    plt.figure(figsize=figsize)
-    plt.plot(fpr, tpr, label=f"{label or 'Model'} (AUC={roc_auc:.3f})")
-    plt.plot([0, 1], [0, 1], linestyle="--", color="grey")
-    plt.xlabel("False Positive Rate")
-    plt.ylabel("True Positive Rate")
-    plt.title("ROC Curve")
-    plt.legend()
-    plt.show()
-
-
-def plot_precision_recall_curve(
-    y_true: np.ndarray,
-    y_proba: np.ndarray,
-    label: str | None = None,
-    figsize: tuple[int, int] = (6, 5),
-):  # pragma: no cover - visualization
-    from sklearn.metrics import precision_recall_curve, average_precision_score
-
-    if plt is None:
-        raise ImportError("matplotlib is required for plotting functions")
-    precision, recall, _ = precision_recall_curve(y_true, y_proba)
-    ap = average_precision_score(y_true, y_proba)
-    plt.figure(figsize=figsize)
-    plt.plot(recall, precision, label=f"{label or 'Model'} (AP={ap:.3f})")
-    plt.xlabel("Recall")
-    plt.ylabel("Precision")
-    plt.title("Precision-Recall Curve")
-    plt.legend()
-    plt.show()
-
-
-def plot_regression_error(
-    y_true: np.ndarray, y_pred: np.ndarray, figsize: tuple[int, int] = (12, 8)
-):  # pragma: no cover - visualization
-    if plt is None:
-        raise ImportError("matplotlib is required for plotting functions")
-    errors = y_pred - y_true
-    plt.figure(figsize=figsize)
-    plt.subplot(2, 2, 1)
-    plt.scatter(y_true, y_pred, alpha=0.6)
-    plt.xlabel("True")
-    plt.ylabel("Predicted")
-    plt.title("Actual vs Predicted")
-    plt.subplot(2, 2, 2)
-    plt.hist(errors, bins=20, alpha=0.7)
-    plt.title("Error Distribution")
-    plt.subplot(2, 2, 3)
-    plt.scatter(y_pred, errors, alpha=0.6)
-    plt.axhline(0, color="red", linestyle="--")
-    plt.xlabel("Predicted")
-    plt.ylabel("Residual")
-    plt.title("Residual Plot")
-    plt.tight_layout()
-    plt.show()
 
 
 if __name__ == "__main__":
