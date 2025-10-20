@@ -151,6 +151,7 @@ def get_top_classification_errors(
     class_id: int,
     id2label: dict[int, str],
     top_n: int = 15,
+    cutoff: float | list[float] | None = None,
 ) -> pd.DataFrame:
     """
     Get top classification errors for a specific class based on biggest probability difference.
@@ -165,6 +166,10 @@ def get_top_classification_errors(
         class_id (int): Target class ID to analyze errors for.
         id2label (dict[int, str]): Mapping from class index to class name.
         top_n (int, optional): Number of rows to return. Defaults to 15.
+        cutoff (float | list[float] | None): Custom threshold(s) for classification.
+            - For binary: single float (e.g., 0.7)
+            - For multi-class: list of floats, one per class (e.g., [0.3, 0.4, 0.3])
+            If None, uses argmax for predictions.
 
     Returns:
         pd.DataFrame: Top classification errors sorted by confidence/error magnitude.
@@ -183,8 +188,25 @@ def get_top_classification_errors(
         y_pred_proba = np.vstack([1 - y_pred_proba, y_pred_proba]).T
     if class_id < 0 or class_id >= y_pred_proba.shape[1]:
         raise ValueError(f"class_id {class_id} is out of bounds for predictions")
-    predicted_classes = np.argmax(y_pred_proba, axis=1)
-    predicted_confidences = np.max(y_pred_proba, axis=1)
+    if cutoff is not None:
+        if isinstance(cutoff, (int, float)):
+            predicted_classes = (y_pred_proba[:, 1] >= cutoff).astype(int)
+            predicted_confidences = np.where(
+                predicted_classes == 1,
+                y_pred_proba[:, 1],
+                y_pred_proba[:, 0]
+            )
+        else:
+            cutoff_array = np.array(cutoff)
+            if y_pred_proba.shape[1] != len(cutoff_array):
+                raise ValueError(f"Number of cutoffs ({len(cutoff_array)}) must match number of classes ({y_pred_proba.shape[1]})")
+            normalized = y_pred_proba / cutoff_array
+            predicted_classes = np.argmax(normalized, axis=1)
+            predicted_confidences = y_pred_proba[np.arange(len(predicted_classes)), predicted_classes]
+    else:
+        predicted_classes = np.argmax(y_pred_proba, axis=1)
+        predicted_confidences = np.max(y_pred_proba, axis=1)
+    
     true_class_probs = y_pred_proba[np.arange(len(y_true)), y_true_indices]
     is_true_class = y_true_indices == class_id
     is_pred_class = predicted_classes == class_id
@@ -281,7 +303,8 @@ def display_classification_errors(
                 },
                 {
                     "selector": "caption",
-                    "props": [
+                    "props":
+                    [
                         ("font-size", "1.4em"),
                         ("font-weight", "bold"),
                         ("color", "#4a90e2"),
