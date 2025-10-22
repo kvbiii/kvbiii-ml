@@ -192,21 +192,23 @@ def get_top_classification_errors(
         if isinstance(cutoff, (int, float)):
             predicted_classes = (y_pred_proba[:, 1] >= cutoff).astype(int)
             predicted_confidences = np.where(
-                predicted_classes == 1,
-                y_pred_proba[:, 1],
-                y_pred_proba[:, 0]
+                predicted_classes == 1, y_pred_proba[:, 1], y_pred_proba[:, 0]
             )
         else:
             cutoff_array = np.array(cutoff)
             if y_pred_proba.shape[1] != len(cutoff_array):
-                raise ValueError(f"Number of cutoffs ({len(cutoff_array)}) must match number of classes ({y_pred_proba.shape[1]})")
+                raise ValueError(
+                    f"Number of cutoffs ({len(cutoff_array)}) must match number of classes ({y_pred_proba.shape[1]})"
+                )
             normalized = y_pred_proba / cutoff_array
             predicted_classes = np.argmax(normalized, axis=1)
-            predicted_confidences = y_pred_proba[np.arange(len(predicted_classes)), predicted_classes]
+            predicted_confidences = y_pred_proba[
+                np.arange(len(predicted_classes)), predicted_classes
+            ]
     else:
         predicted_classes = np.argmax(y_pred_proba, axis=1)
         predicted_confidences = np.max(y_pred_proba, axis=1)
-    
+
     true_class_probs = y_pred_proba[np.arange(len(y_true)), y_true_indices]
     is_true_class = y_true_indices == class_id
     is_pred_class = predicted_classes == class_id
@@ -230,7 +232,7 @@ def get_top_classification_errors(
                 "Predicted Class": id2label.get(pred_class_idx, pred_class_idx),
                 "Predicted Class Probability": predicted_confidences[idx],
                 "True Class Probability": true_class_probs[idx],
-                "Error": float(predicted_confidences[idx] - true_class_probs[idx]),
+                "Error": float(1 - true_class_probs[idx]),
             },
             name=y_true.index[idx],
         )
@@ -303,8 +305,7 @@ def display_classification_errors(
                 },
                 {
                     "selector": "caption",
-                    "props":
-                    [
+                    "props": [
                         ("font-size", "1.4em"),
                         ("font-weight", "bold"),
                         ("color", "#4a90e2"),
