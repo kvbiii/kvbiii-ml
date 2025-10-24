@@ -83,7 +83,7 @@ class PermutationRecursiveFeatureElimination:
                 - history (pd.DataFrame): Step-wise metrics and removals.
         """
         X = self._convert_categorical_to_codes(X)
-        current_features = list(X.columns)
+        current_features = sorted(list(X.columns))
         missing_protected = set(self.protected_features) - set(current_features)
         if missing_protected:
             raise ValueError(
@@ -273,7 +273,7 @@ class PermutationRecursiveFeatureElimination:
                 self.cross_validator.cv.split(X[current_features], y), fitted_estimators
             )
         ):
-            X_valid = X.iloc[valid_idx][current_features].values
+            X_valid = X.iloc[valid_idx][current_features]
             y_valid = y.iloc[valid_idx]
 
             baseline_pred = self._predict(
@@ -292,12 +292,14 @@ class PermutationRecursiveFeatureElimination:
                 leave=True,
             )
 
-            for feat_idx, feature in feature_iterator:
+            for iter_item in feature_iterator:
+                feature = iter_item[1] if isinstance(iter_item, tuple) else iter_item
+
                 # If cached, just reuse
                 if feature in self._metric_cache[fold_idx]:
                     permutation_scores = self._metric_cache[fold_idx][feature]
                 else:
-                    original_values = X_valid[:, feat_idx].copy()
+                    original_values = X_valid.loc[:, feature].to_numpy().copy()
                     permutation_scores = []
                     for repeat_idx in range(self.n_repeats):
                         if fold_idx not in self._permutation_cache:
@@ -318,14 +320,12 @@ class PermutationRecursiveFeatureElimination:
                             repeat_idx
                         ]
 
-                        X_valid[:, feat_idx] = original_values[permuted_indices]
-                        permuted_pred = self._predict(
-                            fitted, pd.DataFrame(X_valid, columns=current_features)
-                        )
+                        X_valid.loc[:, feature] = original_values[permuted_indices]
+                        permuted_pred = self._predict(fitted, X_valid)
                         permutation_scores.append(
                             self.metric_fn(y_valid, permuted_pred)
                         )
-                        X_valid[:, feat_idx] = original_values
+                        X_valid.loc[:, feature] = original_values
 
                     # cache scores (not just indices)
                     self._metric_cache[fold_idx][feature] = permutation_scores
@@ -386,8 +386,12 @@ class PermutationRecursiveFeatureElimination:
         for i in range(abs(diff)):
             idx = i % self.steps
             removal_counts[idx] += 1 if diff > 0 else -1
-        removal_counts = removal_counts[removal_counts > 0]
-        return removal_counts.tolist()
+        removal_counts = np.maximum(removal_counts, 0).astype(int)
+        removal_counts = removal_counts.tolist()
+        while removal_counts and removal_counts[-1] == 0:
+            removal_counts.pop()
+
+        return removal_counts
 
     def _log_step(
         self,
@@ -440,15 +444,7 @@ class PermutationRecursiveFeatureElimination:
     def select_features_weighted_score(
         self, history: pd.DataFrame, alpha: float | None = None
     ) -> tuple[list[str], float | None]:
-        """Select features by maximizing a weighted metric/features score.
-
-        Args:
-            history (pd.DataFrame): Step-wise history with metrics and features.
-            alpha (float | None, optional): Weight for metric vs. features. Defaults to self.alpha.
-
-        Returns:
-            tuple[list[str], float | None]: (selected_features, best_metric_value).
-        """
+        """Select features by maximizing a weighted metric/features score."""
         if history.empty:
             return [], None
         if alpha is None:
@@ -467,16 +463,12 @@ class PermutationRecursiveFeatureElimination:
         df["features_norm"] = 1 - (df["n_features_remaining"] - feat_min) / denom_feat
         df["score"] = alpha * df["metric_norm"] + (1 - alpha) * df["features_norm"]
         best_row = df.loc[df["score"].idxmax()]
-        removed = set(
-            history[history["n_features_removed"] < best_row["n_features_removed"]][
-                "removed_feature_name"
-            ].dropna()
+        selected = set(
+            history[history["step"] >= best_row["step"]]["removed_feature_name"]
         )
-        all_features = set(history["removed_feature_name"].dropna().unique())
-        all_features.update(self.protected_features)
-        selected = list(all_features - removed)
+        selected.update(self.protected_features)
         gc.collect()
-        return selected, best_row["metric_value"]
+        return list(sorted(selected)), best_row["metric_value"]
 
 
 if __name__ == "__main__":
@@ -486,7 +478,7 @@ if __name__ == "__main__":
 
     X, y = make_classification(
         n_samples=2000,
-        n_features=1000,
+        n_features=20,
         n_informative=10,
         n_redundant=5,
         n_repeated=0,
@@ -507,13 +499,15 @@ if __name__ == "__main__":
     selector = PermutationRecursiveFeatureElimination(
         estimator=clf,
         cross_validator=cross_validator,
-        steps=5,
+        steps=10,
         alpha=0.95,
         n_repeats=5,
         verbose=True,
+        protected_features=["feature_0", "feature_1"],
     )
 
     summary = selector.run(X_df, y_ser)
     print("\nSummary of Permutation Feature Importance RFE:")
     print(summary["history"])
     print("Selected features:", summary["selected_features"])
+    print(f"Number of selected features: {len(summary['selected_features'])}")
