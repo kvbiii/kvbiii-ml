@@ -259,7 +259,6 @@ class MutualInformationRecursiveFeatureElimination:
         _, valid_scores, _ = self.cross_validator.fit(
             self.estimator, X[current_features], y
         )
-        print(valid_scores)
         gc.collect()
         return float(np.mean(valid_scores)), float(np.std(valid_scores))
 
@@ -310,8 +309,7 @@ class MutualInformationRecursiveFeatureElimination:
         selected = set(
             history[history["step"] >= best_row["step"]]["removed_feature_name"]
         )
-        all_features = set(history["removed_feature_name"].dropna().unique())
-        all_features.update(self.protected_features)
+        selected.update(self.protected_features)
         gc.collect()
         return list(sorted(selected)), best_row["metric_value"]
 
@@ -337,7 +335,7 @@ if __name__ == "__main__":
         steps=10,
         alpha=0.85,
         verbose=True,
-        protected_features=["mean radius", "mean texture"],
+        # protected_features=["mean radius", "mean texture"],
     )
 
     summary = selector.run(X_df, y_ser)
