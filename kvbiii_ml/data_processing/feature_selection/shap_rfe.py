@@ -22,7 +22,6 @@ class ShapRecursiveFeatureElimination:
         self,
         estimator: BaseEstimator,
         cross_validator: CrossValidationTrainer,
-        problem_type: str,
         steps: int = 5,
         alpha: float = 0.95,
         verbose: bool = True,
@@ -34,7 +33,6 @@ class ShapRecursiveFeatureElimination:
         Args:
             estimator (BaseEstimator): Estimator to fit within each fold.
             cross_validator (CrossValidationTrainer): Cross-validation trainer instance.
-            problem_type (str): "classification" or "regression".
             steps (int, optional): Number of elimination iterations. Defaults to 5.
             alpha (float, optional): Weight for the final selection score mix. Defaults to 0.95.
             verbose (bool, optional): Whether to print progress messages. Defaults to True.
@@ -44,7 +42,6 @@ class ShapRecursiveFeatureElimination:
         self.estimator = estimator
         self.cross_validator = cross_validator
         self.cv = self.cross_validator.cv
-        self.problem_type = problem_type
         self.steps = steps
         self.alpha = alpha
         self.verbose = verbose
@@ -60,6 +57,7 @@ class ShapRecursiveFeatureElimination:
             "metric_change": float,
         }
 
+        self.problem_type = self.cross_validator.problem_type
         self.metric_fn = self.cross_validator.metric_fn
         self.metric_type = self.cross_validator.metric_type
         self.metric_direction = self.cross_validator.metric_direction
@@ -276,16 +274,35 @@ class ShapRecursiveFeatureElimination:
             list[int]: Non-empty positive counts to remove at each step.
         """
         if total_removable_features <= 0 or self.steps <= 0:
-            return []
+            # keep the schedule length equal to self.steps even if nothing to remove
+            return [0] * self.steps
+
         decay = np.linspace(1, 0.2, self.steps)
         weights = decay / decay.sum()
         removal_counts = np.round(weights * total_removable_features).astype(int)
+
         diff = total_removable_features - removal_counts.sum()
         for i in range(abs(diff)):
             idx = i % self.steps
             removal_counts[idx] += 1 if diff > 0 else -1
-        removal_counts = removal_counts[removal_counts > 0]
+
+        # Ensure we never remove all removable features: leave at least one feature overall
+        allowed_removals = max(0, total_removable_features - 1)
+        current_sum = int(removal_counts.sum())
+        if current_sum > allowed_removals:
+            # reduce removals starting from the last steps so earlier steps keep their relative weight
+            for idx in range(self.steps - 1, -1, -1):
+                if current_sum <= allowed_removals:
+                    break
+                if removal_counts[idx] > 0:
+                    dec = min(removal_counts[idx], current_sum - allowed_removals)
+                    removal_counts[idx] -= dec
+                    current_sum -= dec
+
+        # ensure non-negative ints and preserve number of steps
+        removal_counts = np.maximum(removal_counts, 0).astype(int)
         return removal_counts.tolist()
+
 
     def _cross_val_feature_metrics(
         self, X: pd.DataFrame, y: pd.Series, current_features: list[str]
@@ -620,15 +637,7 @@ class ShapRecursiveFeatureElimination:
     def select_features_weighted_score(
         self, history: pd.DataFrame, alpha: float | None = None
     ) -> tuple[list[str], float | None]:
-        """Select features by maximizing a weighted metric/features score.
-
-        Args:
-            history (pd.DataFrame): Step-wise history with metrics and features.
-            alpha (float | None, optional): Weight for metric vs. features. Defaults to self.alpha.
-
-        Returns:
-            tuple[list[str], float | None]: (selected_features, best_metric_value).
-        """
+        """Select features by maximizing a weighted metric/features score."""
         if history.empty:
             return [], None
         if alpha is None:
@@ -647,16 +656,12 @@ class ShapRecursiveFeatureElimination:
         df["features_norm"] = 1 - (df["n_features_remaining"] - feat_min) / denom_feat
         df["score"] = alpha * df["metric_norm"] + (1 - alpha) * df["features_norm"]
         best_row = df.loc[df["score"].idxmax()]
-        removed = set(
-            history[history["n_features_removed"] < best_row["n_features_removed"]][
-                "removed_feature_name"
-            ].dropna()
+        selected = set(
+            history[history["step"] >= best_row["step"]]["removed_feature_name"]
         )
-        all_features = set(history["removed_feature_name"].dropna().unique())
-        all_features.update(self.protected_features)
-        selected = list(all_features - removed)
+        selected.update(self.protected_features)
         gc.collect()
-        return selected, best_row["metric_value"]
+        return list(sorted(selected)), best_row["metric_value"]
 
 
 if __name__ == "__main__":
@@ -666,6 +671,7 @@ if __name__ == "__main__":
     from sklearn.ensemble import RandomForestClassifier
 
     X_df, y_ser = load_breast_cancer(return_X_y=True, as_frame=True)
+    protected_features = ["mean radius", "mean texture"]
     y_ser = y_ser.astype("category")
     clf = RandomForestClassifier(random_state=17, max_depth=5, n_estimators=100)
 
@@ -679,8 +685,8 @@ if __name__ == "__main__":
     shap_rfe = ShapRecursiveFeatureElimination(
         estimator=clf,
         cross_validator=cv,
-        problem_type="classification",
-        steps=5,
+        protected_features=protected_features,
+        steps=10,
         alpha=0.95,
         verbose=True,
     )
