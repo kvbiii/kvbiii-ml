@@ -218,26 +218,21 @@ if __name__ == "__main__":
 
     # 1. Single LGBMRegressor (regression)
     print("\n[1] Single LGBMRegressor (regression)")
-    try:
-        from lightgbm import LGBMRegressor
+    from lightgbm import LGBMRegressor
 
-        X_reg, y_reg = make_regression(
-            n_samples=300, n_features=10, n_informative=6, noise=0.2, random_state=42
-        )
-        feature_names_reg = [f"f{i}" for i in range(X_reg.shape[1])]
-        X_reg_df = pd.DataFrame(X_reg, columns=feature_names_reg)
-        X_train, X_test, y_train, y_test = train_test_split(
-            X_reg_df, y_reg, test_size=0.25, random_state=17
-        )
-        lgbm = LGBMRegressor(random_state=42, n_estimators=150, verbose=-1)
-        lgbm.fit(X_train, y_train)
-        shap_exp_lgbm = compute_shap_values(lgbm, X_test.head(20))
-        print("SHAP values shape:", shap_exp_lgbm.values.shape)
-        print("R2 sample:", r2_score(y_test[:20], lgbm.predict(X_test.head(20))))
-    except ImportError:
-        print(
-            "LightGBM not installed; skipping this example. Install lightgbm to enable."
-        )
+    X_reg, y_reg = make_regression(
+        n_samples=300, n_features=10, n_informative=6, noise=0.2, random_state=42
+    )
+    feature_names_reg = [f"f{i}" for i in range(X_reg.shape[1])]
+    X_reg_df = pd.DataFrame(X_reg, columns=feature_names_reg)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_reg_df, y_reg, test_size=0.25, random_state=17
+    )
+    lgbm = LGBMRegressor(random_state=42, n_estimators=150, verbose=-1)
+    lgbm.fit(X_train, y_train)
+    shap_exp_lgbm = compute_shap_values(lgbm, X_test.head(20))
+    print("SHAP values shape:", shap_exp_lgbm.values.shape)
+    print("R2 sample:", r2_score(y_test[:20], lgbm.predict(X_test.head(20))))
 
     # 2. EnsembleModel with classifiers
     print("\n[2] EnsembleModel with tree classifiers (classification)")
