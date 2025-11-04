@@ -8,22 +8,20 @@ class CountEncodingFeatureGenerator:
     """
 
     def __init__(self, features_names: list[str] | None = None, fill_value: int = 0):
-        """
-        Initialize the CountEncodingFeatureGenerator.
+        """Initialize the CountEncodingFeatureGenerator.
 
         Args:
-            features_names (list[str]): List of feature names to be count encoded.
-            fill_value (int): Value to fill for unseen categories during transform (default is 0).
+            features_names (list[str] | None, optional): List of feature names to be count encoded.
+                If None, all columns will be used. Defaults to None.
+            fill_value (int, optional): Value for unseen categories during transform. Defaults to 0.
         """
         self.features_names = features_names if features_names is not None else []
         self.fill_value = fill_value
-        self.count_maps_ = {}
+        self.count_maps_: dict[str, dict] = {}
         self._validate_init_params()
 
     def _validate_init_params(self):
-        """
-        Validate the parameters for count encoding.
-        """
+        """Validate the initialization parameters."""
         if not isinstance(self.features_names, list) or not all(
             isinstance(name, str) for name in self.features_names
         ):
@@ -32,43 +30,40 @@ class CountEncodingFeatureGenerator:
             raise ValueError("fill_value must be a numeric value.")
 
     def fit(self, df: pd.DataFrame) -> "CountEncodingFeatureGenerator":
-        """
-        Fit the CountEncodingFeatureGenerator by computing count maps for each feature.
+        """Fit the encoder by computing count maps for each feature.
 
         Args:
             df (pd.DataFrame): DataFrame to fit on.
 
         Returns:
-            CountEncodingFeatureGenerator: Fitted instance.
+            CountEncodingFeatureGenerator: The fitted instance.
         """
         self.count_maps_ = {}
-
-        # If no features specified, use all columns from df
-        if not self.features_names:
-            self.features_names = list(df.columns)
+        features_to_process = self.features_names or list(df.columns)
+        self.features_names = features_to_process
 
         for feature_name in tqdm(
-            self.features_names, desc="Computing count encoding maps"
+            features_to_process, desc="Computing count encoding maps"
         ):
             if feature_name not in df.columns:
                 raise ValueError(
-                    f"Feature '{feature_name}' not found among DataFrame features."
+                    f"Feature '{feature_name}' not found in DataFrame columns."
                 )
-
-            counts = df[feature_name].value_counts()
-            self.count_maps_[feature_name] = counts.to_dict()
+            self.count_maps_[feature_name] = df[feature_name].value_counts().to_dict()
 
         return self
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Transform the DataFrame with count encoding.
+        """Transform the DataFrame with count encoding.
 
         Args:
             df (pd.DataFrame): DataFrame to be transformed.
 
         Returns:
             pd.DataFrame: DataFrame with the count-encoded features added.
+
+        Raises:
+            ValueError: If the encoder has not been fitted yet.
         """
         if not self.count_maps_:
             raise ValueError(
@@ -76,26 +71,18 @@ class CountEncodingFeatureGenerator:
             )
 
         result_df = df.copy()
-
-        new_columns = {}
         for feature_name in tqdm(
             self.features_names, desc="Transforming with count encoding"
         ):
             count_map = self.count_maps_[feature_name]
-            encoded_values = (
+            result_df[f"CE_{feature_name}"] = (
                 df[feature_name].map(count_map).fillna(self.fill_value).astype("int32")
             )
-            new_columns[f"CE_{feature_name}"] = encoded_values
-
-        result_df = pd.concat(
-            [result_df, pd.DataFrame(new_columns, index=df.index)], axis=1
-        )
 
         return result_df
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Fit and transform the DataFrame with count encoding.
+        """Fit and transform the DataFrame with count encoding in one step.
 
         Args:
             df (pd.DataFrame): DataFrame to fit and transform.
@@ -103,23 +90,39 @@ class CountEncodingFeatureGenerator:
         Returns:
             pd.DataFrame: DataFrame with the count-encoded features added.
         """
-        return self.fit(df).transform(df)
+        self.count_maps_ = {}
+        result_df = df.copy()
+        features_to_process = self.features_names or list(df.columns)
+        self.features_names = features_to_process
+
+        for feature_name in tqdm(
+            features_to_process, desc="Fitting and transforming count encoding"
+        ):
+            if feature_name not in df.columns:
+                raise ValueError(
+                    f"Feature '{feature_name}' not found in DataFrame columns."
+                )
+            count_map = df[feature_name].value_counts().to_dict()
+            self.count_maps_[feature_name] = count_map
+            result_df[f"CE_{feature_name}"] = (
+                df[feature_name].map(count_map).fillna(self.fill_value).astype("int32")
+            )
+
+        return result_df
 
     def get_feature_names(self) -> list[str]:
-        """
-        Get the names of the generated count encoded features.
+        """Get the names of the generated count encoded features.
 
         Returns:
             list[str]: List of generated feature names.
         """
         return [f"CE_{feature_name}" for feature_name in self.features_names]
 
-    def get_count_maps(self) -> dict:
-        """
-        Get the count maps for each feature.
+    def get_count_maps(self) -> dict[str, dict]:
+        """Get the count maps for each feature.
 
         Returns:
-            dict: Dictionary containing count maps for each feature.
+            dict[str, dict]: A dictionary of count maps for each feature.
         """
         return self.count_maps_.copy()
 
