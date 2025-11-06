@@ -42,6 +42,7 @@ class BaseTrainer:
         if "sample_weight" in sig.parameters:
             fit_params["sample_weight"] = sample_weight
 
+        estimator = BaseTrainer._set_categorical_params(estimator, X_train)
         estimator.fit(X_train, y_train, **fit_params)
         return estimator
 
@@ -111,3 +112,30 @@ class BaseTrainer:
         if proba.ndim == 2 and proba.shape[1] == 2:
             return proba[:, 1]
         return proba
+
+    @staticmethod
+    def _set_categorical_params(
+        estimator: BaseEstimator, X_train: pd.DataFrame
+    ) -> BaseEstimator:
+        """Assign categorical feature parameters for supported estimators.
+
+        Args:
+            estimator (BaseEstimator): Estimator to configure.
+            X_train (pd.DataFrame): Training features to detect categorical cols.
+
+        Returns:
+            BaseEstimator: Estimator with categorical parameters set when
+            applicable.
+        """
+        try:
+            categorical_features = X_train.select_dtypes(
+                include="category"
+            ).columns.tolist()
+        except Exception:
+            categorical_features = []
+        name = estimator.__class__.__name__
+        if name.startswith("CatBoost"):
+            estimator = estimator.set_params(cat_features=categorical_features)
+        elif name.startswith("HistGradientBoosting"):
+            estimator = estimator.set_params(categorical_features=categorical_features)
+        return estimator
