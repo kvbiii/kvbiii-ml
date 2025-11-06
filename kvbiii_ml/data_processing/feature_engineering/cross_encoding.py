@@ -68,7 +68,6 @@ class CrossFeatureGenerator:
         Returns:
             CrossFeatureGenerator: Fitted instance.
         """
-        # If no features specified, use all columns from df
         if not self.features_names:
             self.features_names = list(df.columns)
             if len(self.features_names) < self.degree:
@@ -86,21 +85,19 @@ class CrossFeatureGenerator:
             self.feature_combinations_, desc=f"Fitting {self.degree}-way combinations"
         ):
             combo_name = "-".join(combo)
-
-            # Check if all columns in the combo are numerical
-            is_numerical = self._is_numerical_combo(df, combo)
+            is_numerical = self._is_numerical_combo(df, list(combo))
 
             if is_numerical:
                 self.numerical_combos_.add(combo_name)
             else:
-                combined_values = (
-                    df[list(combo)].astype(str).agg(self.separator.join, axis=1)
+                unique_combinations = (
+                    df[list(combo)].drop_duplicates().itertuples(index=False)
                 )
-                unique_values = combined_values.unique()
-                encoding_map = {val: idx for idx, val in enumerate(unique_values)}
+                encoding_map = {
+                    self.separator.join(map(str, row)): i
+                    for i, row in enumerate(unique_combinations)
+                }
                 self.encoding_maps_[combo_name] = encoding_map
-                del combined_values, unique_values
-                gc.collect()
         gc.collect()
         return self
 
@@ -128,13 +125,14 @@ class CrossFeatureGenerator:
             desc=f"Transforming {self.degree}-way combinations",
         ):
             combo_name = "-".join(combo)
+            combo_list = list(combo)
 
             if combo_name in self.numerical_combos_:
-                result_df[combo_name] = df[list(combo)].prod(axis=1)
+                result_df[combo_name] = df[combo_list].prod(axis=1)
             else:
                 encoding_map = self.encoding_maps_[combo_name]
                 combined_values = (
-                    df[list(combo)].astype(str).agg(self.separator.join, axis=1)
+                    df[combo_list].astype(str).agg(self.separator.join, axis=1)
                 )
                 result_df[combo_name] = (
                     combined_values.map(encoding_map).fillna(-1).astype("int32")
@@ -154,9 +152,8 @@ class CrossFeatureGenerator:
         Returns:
             pd.DataFrame: DataFrame with cross-encoded features added.
         """
-        result = self.fit(df).transform(df)
-        gc.collect()
-        return result
+        self.fit(df)
+        return self.transform(df)
 
     def get_feature_names(self) -> list[str]:
         """
