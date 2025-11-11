@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import shap
 import gc
+from sklearn.base import BaseEstimator
 
 
 def compute_shap_values(
@@ -23,18 +24,14 @@ def compute_shap_values(
     Raises:
         ValueError: If HistGradientBoosting models are detected (not supported).
     """
-    if feature_names is None:
-        feature_names = list(X.columns)
+    feature_names = feature_names or list(X.columns)
+    fitted_estimators = getattr(model, "fitted_estimators_", None)
 
-    is_ensemble = (
-        hasattr(model, "fitted_estimators_")
-        and getattr(model, "fitted_estimators_", None) is not None
+    return (
+        _compute_ensemble_shap(model, X, feature_names)
+        if fitted_estimators
+        else _compute_single_model_shap(model, X)
     )
-
-    if not is_ensemble:
-        return _compute_single_model_shap(model, X)
-
-    return _compute_ensemble_shap(model, X, feature_names)
 
 
 def _compute_single_model_shap(model: object, X: pd.DataFrame) -> shap.Explanation:
@@ -57,17 +54,32 @@ def _compute_single_model_shap(model: object, X: pd.DataFrame) -> shap.Explanati
             "interpretation, making SHAP values uninterpretable."
         )
 
+    X_ordered = _order_X_for_estimator(X, model)
+    explainer = shap.TreeExplainer(model, feature_perturbation="tree_path_dependent")
+
     try:
-        explainer = shap.TreeExplainer(
-            model, feature_perturbation="tree_path_dependent"
-        )
-        try:
-            result = explainer(X)
-        except AttributeError:
-            result = explainer(X.values)
-        return result
+        return explainer(X_ordered)
+    except AttributeError:
+        return explainer(X_ordered.values)
     finally:
         gc.collect()
+
+
+def _order_X_for_estimator(X: pd.DataFrame, estimator: BaseEstimator) -> pd.DataFrame:
+    """Reorder columns to match the estimator's expected feature order.
+
+    Args:
+        X (pd.DataFrame): Input features.
+        estimator (BaseEstimator): Trained estimator.
+
+    Returns:
+        pd.DataFrame: Reordered features if the estimator exposes feature
+        names; otherwise returns X unchanged.
+    """
+    feature_names = getattr(estimator, "feature_names_in_", None) or getattr(
+        estimator, "feature_names_", None
+    )
+    return X[feature_names] if feature_names is not None else X
 
 
 def _compute_ensemble_shap(
@@ -86,25 +98,26 @@ def _compute_ensemble_shap(
     Raises:
         ValueError: If no valid models found in ensemble.
     """
-    weights = _get_ensemble_weights(model)
+    fitted_estimators = model.fitted_estimators_
+    n_estimators = len(fitted_estimators)
 
     max_ensemble_size = 50
-    if len(getattr(model, "fitted_estimators_", [])) > max_ensemble_size:
+    if n_estimators > max_ensemble_size:
         raise ValueError(
-            f"Ensemble too large ({len(model.fitted_estimators_)} estimators). "
+            f"Ensemble too large ({n_estimators} estimators). "
             f"Maximum supported: {max_ensemble_size} for SHAP computation."
         )
 
-    valid_indices = []
+    weights = _get_ensemble_weights(model)
     shap_values_list = []
+    valid_indices = []
 
     try:
-        for idx, estimator in enumerate(model.fitted_estimators_):
+        for idx, estimator in enumerate(fitted_estimators):
             try:
-                if hasattr(estimator, "fitted_estimators_") and getattr(
-                    estimator, "fitted_estimators_", None
-                ):
-                    if len(estimator.fitted_estimators_) > 10:
+                nested_estimators = getattr(estimator, "fitted_estimators_", None)
+                if nested_estimators:
+                    if len(nested_estimators) > 10:
                         continue
                     shap_val = _compute_ensemble_shap(estimator, X, feature_names)
                 else:
@@ -112,10 +125,9 @@ def _compute_ensemble_shap(
 
                 shap_values_list.append(shap_val)
                 valid_indices.append(idx)
-
                 gc.collect()
 
-            except (ValueError, MemoryError) as e:
+            except (ValueError, MemoryError):
                 continue
 
         if not shap_values_list:
@@ -128,7 +140,6 @@ def _compute_ensemble_shap(
             if len(weights) > len(valid_indices)
             else weights[: len(shap_values_list)]
         )
-
         valid_weights = valid_weights / valid_weights.sum()
 
         first_shap = shap_values_list[0]
@@ -136,20 +147,8 @@ def _compute_ensemble_shap(
         base_values_weighted = np.zeros_like(first_shap.base_values, dtype=np.float64)
 
         for weight, shap_val in zip(valid_weights, shap_values_list):
-            try:
-                np.add(
-                    shap_values_weighted,
-                    weight * shap_val.values,
-                    out=shap_values_weighted,
-                )
-                np.add(
-                    base_values_weighted,
-                    weight * shap_val.base_values,
-                    out=base_values_weighted,
-                )
-            except Exception as e:
-                shap_values_weighted += weight * shap_val.values
-                base_values_weighted += weight * shap_val.base_values
+            shap_values_weighted += weight * shap_val.values
+            base_values_weighted += weight * shap_val.base_values
 
         return shap.Explanation(
             values=shap_values_weighted,
@@ -175,19 +174,20 @@ def _get_ensemble_weights(model: object) -> np.ndarray:
     Raises:
         ValueError: If no valid estimators found.
     """
-    if hasattr(model, "weights") and getattr(model, "weights", None) is not None:
-        weights = np.array(model.weights, dtype=np.float64)
-    elif getattr(model, "fitted_estimators_", None) and hasattr(
-        model.fitted_estimators_[0], "weights"
-    ):
-        weights = np.array(model.fitted_estimators_[0].weights, dtype=np.float64)
-    else:
-        n_est = len(getattr(model, "fitted_estimators_", []) or [])
-        if n_est == 0:
+    weights = getattr(model, "weights", None)
+
+    if weights is None:
+        fitted_estimators = getattr(model, "fitted_estimators_", None)
+        if fitted_estimators:
+            weights = getattr(fitted_estimators[0], "weights", None)
+            if weights is None:
+                weights = np.ones(len(fitted_estimators), dtype=np.float64)
+        else:
             raise ValueError(
                 "Ensemble-like model has no fitted_estimators_ to compute SHAP values."
             )
-        weights = np.ones(n_est, dtype=np.float64)
+    else:
+        weights = np.asarray(weights, dtype=np.float64)
 
     if len(weights) == 0:
         raise ValueError("No weights available for ensemble.")
@@ -279,31 +279,6 @@ if __name__ == "__main__":
 
     # 4. CrossValidationTrainer with EnsembleModel (classification)
     print("\n[4] CrossValidationTrainer with EnsembleModel (classification)")
-    X_clf2, y_clf2 = make_classification(
-        n_samples=300,
-        n_features=9,
-        n_informative=6,
-        n_redundant=1,
-        n_classes=2,
-        random_state=21,
-    )
-    feature_names_clf2 = [f"ec{i}" for i in range(X_clf2.shape[1])]
-    X_clf2_df = pd.DataFrame(X_clf2, columns=feature_names_clf2)
-    Xc2_train, Xc2_test, yc2_train, yc2_test = train_test_split(
-        X_clf2_df, y_clf2, test_size=0.3, random_state=29
-    )
-    base1 = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=5)
-    base2 = ExtraTreesClassifier(n_estimators=120, max_depth=6, random_state=6)
-    nested_ensemble = EnsembleModel([base1, base2], problem_type="classification")
-    cv_trainer_cls = CrossValidationTrainer(
-        metric_name="Accuracy", problem_type="classification", verbose=False
-    )
-    cv_trainer_cls.fit(nested_ensemble, Xc2_train, pd.Series(yc2_train))
-    shap_exp_cv_ens = compute_shap_values(cv_trainer_cls, Xc2_test.head(12))
-    print(
-        "SHAP values shape (CV with ensemble classifier):",
-        shap_exp_cv_ens.values.shape,
-    )
     X_clf2, y_clf2 = make_classification(
         n_samples=300,
         n_features=9,
