@@ -10,8 +10,38 @@ permissions:
   contents: read
 
 jobs:
+  verify-files-presence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify presence of essential files
+        run: |
+            essential_files=("requirements.txt" "README.md" "pyproject.toml")
+            missing_files=()
+
+            for file in "${essential_files[@]}"; do
+                if [ ! -f "$file" ]; then
+                    missing_files+=("$file")
+                fi
+            done
+
+            if [ ! -d "tests" ]; then
+                missing_files+=("tests (directory)")
+            fi
+
+            if [ ${#missing_files[@]} -ne 0 ]; then
+                echo "❌ The following essential files or directories are missing:"
+                for file in "${missing_files[@]}"; do
+                    echo "- $file"
+                done
+                exit 1
+            else
+                echo "✅ All essential files and directories are present."
+            fi
+
   black-format:
     runs-on: ubuntu-latest
+    needs: verify-files-presence
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -29,6 +59,7 @@ jobs:
 
   pylint:
     runs-on: ubuntu-latest
+    needs: verify-files-presence
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -43,10 +74,14 @@ jobs:
       - name: Run pylint
         run: |
             python_files=$(find . -type f -name "*.py" -not -path "./.venv/*")
-            python -m pylint $python_files --disable=all --enable=unused-import,wrong-import-order,unused-variable,import-outside-toplevel,missing-function-docstring,invalid-name
+            python -m pylint $python_files \
+              --disable=all \
+              --enable=unused-import,wrong-import-order,unused-variable,import-outside-toplevel,missing-function-docstring,invalid-name \
+              --good-names=X,X_train,X_test,X_valid
 
   requirements-check:
     runs-on: ubuntu-latest
+    needs: verify-files-presence
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
