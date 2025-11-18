@@ -1,0 +1,13 @@
+/*
+__pycache__/
+*.py[cod]
+
+!/.github
+!.gitignore
+!/kvbiii_ml
+!/tests
+!install_package.sh
+!pyproject.toml
+!README.md
+!requirements.txt
+!*.ipynb
