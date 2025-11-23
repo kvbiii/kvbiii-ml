@@ -18,6 +18,7 @@ from sklearn.metrics import (
     root_mean_squared_error,
     root_mean_squared_log_error,
     r2_score,
+    log_loss,
 )
 
 
@@ -31,8 +32,30 @@ METRICS_NAMES: dict[str, callable] = {
         y_true, y_pred, average="weighted"
     ),
     "Recall": recall_score,
+    "Recall (Micro)": lambda y_true, y_pred: recall_score(
+        y_true, y_pred, average="micro"
+    ),
+    "Recall (Macro)": lambda y_true, y_pred: recall_score(
+        y_true, y_pred, average="macro"
+    ),
+    "Recall (Weighted)": lambda y_true, y_pred: recall_score(
+        y_true, y_pred, average="weighted"
+    ),
     "Precision": precision_score,
+    "Precision (Micro)": lambda y_true, y_pred: precision_score(
+        y_true, y_pred, average="micro"
+    ),
+    "Precision (Macro)": lambda y_true, y_pred: precision_score(
+        y_true, y_pred, average="macro"
+    ),
+    "Precision (Weighted)": lambda y_true, y_pred: precision_score(
+        y_true, y_pred, average="weighted"
+    ),
     "Roc AUC": roc_auc_score,
+    "Roc AUC (Multi-class)": lambda y_true, y_proba: roc_auc_score(
+        y_true, y_proba, multi_class="ovr", average="macro"
+    ),
+    "Log Loss": log_loss,
     "MAE": mean_absolute_error,
     "MAPE": mean_absolute_percentage_error,
     "MSE": mean_squared_error,
@@ -44,8 +67,16 @@ METRICS_NAMES: dict[str, callable] = {
 METRICS: dict[str, list] = {
     key: [
         eval_func,
-        "preds" if key not in ["Roc AUC", "Mean Average Precision"] else "probs",
-        "minimize" if key in ["MAE", "MAPE", "MSE", "RMSE", "RMSLE"] else "maximize",
+        (
+            "probs"
+            if key in ["Roc AUC", "Mean Average Precision", "Log Loss"]
+            else "preds"
+        ),
+        (
+            "minimize"
+            if key in ["MAE", "MAPE", "MSE", "RMSE", "RMSLE", "Log Loss"]
+            else "maximize"
+        ),
     ]
     for key, eval_func in METRICS_NAMES.items()
 }
@@ -126,11 +157,11 @@ if __name__ == "__main__":
     classification_metrics = []
     regression_metrics = []
 
-    for metric_name in list_available_metrics():
-        if metric_name in ["MAE", "MAPE", "MSE", "RMSE", "RMSLE", "R2"]:
-            regression_metrics.append(metric_name)
+    for metric in list_available_metrics():
+        if metric in ["MAE", "MAPE", "MSE", "RMSE", "RMSLE", "R2"]:
+            regression_metrics.append(metric)
         else:
-            classification_metrics.append(metric_name)
+            classification_metrics.append(metric)
 
     print("\n🎯 Classification Metrics:")
     for metric in classification_metrics:
@@ -158,3 +189,22 @@ if __name__ == "__main__":
     f1_func = get_metric_function("F1")
     f1_score_result = f1_func(y_true, y_pred)
     print(f"F1 score: {f1_score_result:.4f}")
+
+    # Example for Log Loss (binary)
+    y_prob = np.array([0.1, 0.9, 0.2, 0.3, 0.8])
+    logloss_func = get_metric_function("Log Loss")
+    logloss_score = logloss_func(y_true, y_prob)
+    print(f"Log Loss (binary): {logloss_score:.4f}")
+
+    # Example for Log Loss (multiclass)
+    y_true_mc = np.array([0, 2, 1, 2])
+    y_prob_mc = np.array(
+        [
+            [0.7, 0.2, 0.1],
+            [0.1, 0.2, 0.7],
+            [0.2, 0.6, 0.2],
+            [0.1, 0.3, 0.6],
+        ]
+    )
+    logloss_score_mc = logloss_func(y_true_mc, y_prob_mc)
+    print(f"Log Loss (multiclass): {logloss_score_mc:.4f}")
