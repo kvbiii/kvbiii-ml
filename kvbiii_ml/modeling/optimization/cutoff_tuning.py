@@ -1,12 +1,10 @@
-import numpy as np
-import optuna
 import warnings
+import numpy as np
 import pandas as pd
+import optuna
 from sklearn.base import BaseEstimator
 from sklearn.model_selection import KFold
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
-
-import warnings
 
 warnings.filterwarnings(
     "ignore", category=optuna.exceptions.ExperimentalWarning, module="optuna"
@@ -68,6 +66,7 @@ class CutoffTunerCV:
                 [study.best_params[f"cutoff_{i}"] for i in range(n_classes)],
                 dtype=float,
             )
+            self.best_cutoffs = self.best_cutoffs / self.best_cutoffs.sum()
         return study
 
     def _create_study(self) -> optuna.study.Study:
