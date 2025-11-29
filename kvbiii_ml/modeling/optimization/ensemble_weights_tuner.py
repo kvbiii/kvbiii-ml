@@ -1,7 +1,7 @@
-import numpy as np
-import optuna
 import warnings
+import numpy as np
 import pandas as pd
+import optuna
 from sklearn.base import BaseEstimator
 from sklearn.model_selection import KFold
 
@@ -287,8 +287,6 @@ class EnsembleWeightTunerCV:
 
 
 if __name__ == "__main__":
-    import pandas as pd
-    import numpy as np
     from sklearn.datasets import make_classification
     from sklearn.linear_model import LogisticRegression
 
@@ -298,7 +296,7 @@ if __name__ == "__main__":
     X_df = pd.DataFrame(X_arr)
     y_ser = pd.Series(y_arr)
 
-    estimators = [
+    clf_estimators = [
         LogisticRegression(max_iter=1000, solver="liblinear", random_state=17),
         LogisticRegression(C=0.5, max_iter=1000, solver="liblinear", random_state=17),
         LogisticRegression(C=2.0, max_iter=1000, solver="liblinear", random_state=17),
@@ -309,7 +307,7 @@ if __name__ == "__main__":
         LogisticRegression(C=0.001, max_iter=1000, solver="liblinear", random_state=17),
     ]
 
-    cross_validator = CrossValidationTrainer(
+    cv_trainer = CrossValidationTrainer(
         metric_name="Roc AUC",
         problem_type="classification",
         cv=KFold(n_splits=5, shuffle=True, random_state=17),
@@ -318,14 +316,14 @@ if __name__ == "__main__":
     )
 
     tuner = EnsembleWeightTunerCV(
-        estimators=estimators,
-        cross_validator=cross_validator,
+        estimators=clf_estimators,
+        cross_validator=cv_trainer,
         n_trials=100,
         seed=17,
         allow_negative_weights=True,
     )
-    study = tuner.tune(X_df, y_ser)
-    print("Best trial value:", study.best_value)
+    clf_study = tuner.tune(X_df, y_ser)
+    print("Best trial value:", clf_study.best_value)
     print("Best weights:", tuner.best_weights)
 
     from sklearn.datasets import make_regression
