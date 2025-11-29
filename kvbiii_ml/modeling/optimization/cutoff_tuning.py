@@ -40,6 +40,8 @@ class CutoffTunerCV:
         self.seed = seed
         self.metric_fn = self.cross_validator.metric_fn
         self.metric_direction = self.cross_validator.metric_direction
+        self.fitted_estimators_: list = []
+        self.best_cutoffs: np.ndarray | None = None
 
     def tune(self, X: pd.DataFrame, y: pd.Series) -> optuna.study.Study:
         """Run Optuna to find cutoffs that maximize the chosen metric.
@@ -193,10 +195,9 @@ if __name__ == "__main__":
 
     tuner = CutoffTunerCV(
         estimator=clf,
-        metric_name="Roc AUC",
         cross_validator=cross_validation_trainer,
         n_trials=100,
     )
-    study = tuner.tune(X_df, y_ser)
-    print("Best trial value:", study.best_value)
+    cutoff_study = tuner.tune(X_df, y_ser)
+    print("Best trial value:", cutoff_study.best_value)
     print("Best cutoffs:", tuner.best_cutoffs)
