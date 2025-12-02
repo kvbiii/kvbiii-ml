@@ -3,6 +3,7 @@
 import gc
 from itertools import combinations
 
+import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
@@ -16,6 +17,7 @@ class CrossFeatureGenerator:
         degree: int = 2,
         separator: str = "_",
         batch_size: int = 10,
+        chunk_size: int = 50000,
     ):
         """
         Initialize the CrossFeatureGenerator.
@@ -29,11 +31,14 @@ class CrossFeatureGenerator:
                 Defaults to '_':
             batch_size (int, optional): Number of combinations to process at once.
                 Smaller values use less memory. Defaults to 10.
+            chunk_size (int, optional): Number of rows to process at once during
+                transform. Defaults to 50000.
         """
         self.features_names = features_names if features_names is not None else []
         self.degree = degree
         self.separator = separator
         self.batch_size = batch_size
+        self.chunk_size = chunk_size
         self.feature_combinations_ = []
         self.encoding_maps_ = {}
         self.numerical_combos_ = set()
@@ -73,6 +78,29 @@ class CrossFeatureGenerator:
         """
         return all(pd.api.types.is_numeric_dtype(df[col]) for col in columns)
 
+    def _create_combined_string(
+        self, df: pd.DataFrame, columns: list[str]
+    ) -> np.ndarray:
+        """
+        Create combined string efficiently using numpy operations.
+
+        Args:
+            df (pd.DataFrame): DataFrame containing the columns.
+            columns (list[str]): List of column names to combine.
+
+        Returns:
+            np.ndarray: Array of combined strings.
+        """
+        arrays = [df[col].astype(str).values for col in columns]
+
+        if len(arrays) == 2:
+            return np.char.add(np.char.add(arrays[0], self.separator), arrays[1])
+
+        result = arrays[0].copy()
+        for arr in arrays[1:]:
+            result = np.char.add(np.char.add(result, self.separator), arr)
+        return result
+
     def fit(self, df: pd.DataFrame) -> "CrossFeatureGenerator":
         """
         Fit the CrossFeatureGenerator by computing encoding maps.
@@ -110,16 +138,48 @@ class CrossFeatureGenerator:
             if is_numerical:
                 self.numerical_combos_.add(combo_name)
             else:
-                unique_combos = df[combo_list].drop_duplicates()
-                encoding_map = {
-                    self.separator.join([str(value) for value in row]): idx
-                    for idx, row in enumerate(unique_combos.itertuples(index=False))
+                combined = self._create_combined_string(df, combo_list)
+                unique_vals = np.unique(combined)
+                self.encoding_maps_[combo_name] = {
+                    val: idx for idx, val in enumerate(unique_vals)
                 }
-                self.encoding_maps_[combo_name] = encoding_map
-                del unique_combos
+                del combined, unique_vals
+
+            if len(self.encoding_maps_) % 10 == 0:
+                gc.collect()
 
         gc.collect()
         return self
+
+    def _transform_chunk(
+        self, chunk: pd.DataFrame, combo: tuple[str, ...]
+    ) -> pd.Series:
+        """
+        Transform a single chunk for a given combination.
+
+        Args:
+            chunk (pd.DataFrame): DataFrame chunk to transform.
+            combo (tuple[str, ...]): Feature combination tuple.
+
+        Returns:
+            pd.Series: Transformed values for the chunk.
+        """
+        combo_name = "-".join(combo)
+        combo_list = list(combo)
+
+        if combo_name in self.numerical_combos_:
+            result = chunk[combo_list].prod(axis=1).astype("float32")
+        else:
+            encoding_map = self.encoding_maps_[combo_name]
+            combined = self._create_combined_string(chunk, combo_list)
+            result = pd.Series(
+                [encoding_map.get(val, -1) for val in combined],
+                index=chunk.index,
+                dtype="int32",
+            )
+            del combined
+
+        return result
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -141,42 +201,55 @@ class CrossFeatureGenerator:
         ):
             raise ValueError("CrossFeatureGenerator must be fitted before transform.")
 
-        new_columns = {}
+        n_rows = len(df)
+        n_chunks = (n_rows + self.chunk_size - 1) // self.chunk_size
+
+        new_columns_dict = {
+            "-".join(combo): np.empty(
+                n_rows,
+                dtype=(
+                    np.float32
+                    if "-".join(combo) in self.numerical_combos_
+                    else np.int32
+                ),
+            )
+            for combo in self.feature_combinations_
+        }
+
         total_combos = len(self.feature_combinations_)
+        pbar_combos = tqdm(
+            total=total_combos, desc=f"Transforming {self.degree}-way combinations"
+        )
 
-        for i in tqdm(
-            range(0, total_combos, self.batch_size),
-            desc=f"Transforming {self.degree}-way combinations",
-        ):
-            batch_combos = self.feature_combinations_[i : i + self.batch_size]
+        for combo_idx in range(0, total_combos, self.batch_size):
+            batch_combos = self.feature_combinations_[
+                combo_idx : combo_idx + self.batch_size
+            ]
 
-            for combo in batch_combos:
-                combo_name = "-".join(combo)
-                combo_list = list(combo)
+            for chunk_idx in range(n_chunks):
+                start_idx = chunk_idx * self.chunk_size
+                end_idx = min((chunk_idx + 1) * self.chunk_size, n_rows)
+                chunk = df.iloc[start_idx:end_idx]
 
-                if combo_name in self.numerical_combos_:
-                    new_columns[combo_name] = (
-                        df[combo_list].prod(axis=1).astype("float32")
-                    )
-                else:
-                    encoding_map = self.encoding_maps_[combo_name]
-                    df_subset = df[combo_list]
-                    combined = df_subset.astype(str).agg(
-                        self.separator.join, axis=1
-                    )
-                    new_columns[combo_name] = (
-                        combined.map(encoding_map).fillna(-1).astype("int32")
-                    )
-                    del df_subset, combined
+                for combo in batch_combos:
+                    combo_name = "-".join(combo)
+                    result = self._transform_chunk(chunk, combo)
+                    new_columns_dict[combo_name][start_idx:end_idx] = result.values
+                    del result
 
-            if i % (self.batch_size * 5) == 0:
+                del chunk
                 gc.collect()
 
-        result_df = pd.concat(
-            [df, pd.DataFrame(new_columns, index=df.index)], axis=1
-        )
-        del new_columns
+            pbar_combos.update(len(batch_combos))
+
+        pbar_combos.close()
+
+        new_df = pd.DataFrame(new_columns_dict, index=df.index)
+        result_df = pd.concat([df, new_df], axis=1)
+
+        del new_columns_dict, new_df
         gc.collect()
+
         return result_df
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
