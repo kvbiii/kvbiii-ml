@@ -2,6 +2,7 @@
 
 import gc
 
+import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
@@ -14,6 +15,7 @@ class CountEncodingFeatureGenerator:
         features_names: list[str] | None = None,
         fill_value: int = 0,
         batch_size: int = 20,
+        chunk_size: int = 50000,
     ):
         """
         Initialize the CountEncodingFeatureGenerator.
@@ -25,10 +27,13 @@ class CountEncodingFeatureGenerator:
                 Defaults to 0.
             batch_size (int, optional): Number of features to process at once.
                 Defaults to 20.
+            chunk_size (int, optional): Number of rows to process at once during
+                transform. Defaults to 50000.
         """
         self.features_names = features_names if features_names is not None else []
         self.fill_value = fill_value
         self.batch_size = batch_size
+        self.chunk_size = chunk_size
         self.count_maps_: dict[str, dict] = {}
         self._validate_init_params()
 
@@ -45,6 +50,10 @@ class CountEncodingFeatureGenerator:
             raise ValueError("features_names must be a list of strings.")
         if not isinstance(self.fill_value, (int, float)):
             raise ValueError("fill_value must be a numeric value.")
+        if not isinstance(self.batch_size, int) or self.batch_size < 1:
+            raise ValueError("batch_size must be a positive integer.")
+        if not isinstance(self.chunk_size, int) or self.chunk_size < 1:
+            raise ValueError("chunk_size must be a positive integer.")
 
     def fit(self, df: pd.DataFrame) -> "CountEncodingFeatureGenerator":
         """
@@ -68,16 +77,44 @@ class CountEncodingFeatureGenerator:
                     f"Feature '{feature_name}' not found in DataFrame columns."
                 )
 
-        self.count_maps_ = {
-            feature_name: df[feature_name].value_counts().to_dict()
-            for feature_name in tqdm(
-                features_to_process,
-                desc="Computing count encoding maps",
-            )
-        }
+        self.count_maps_ = {}
+        for feature_name in tqdm(
+            features_to_process,
+            desc="Computing count encoding maps",
+        ):
+            counts = df[feature_name].value_counts()
+            self.count_maps_[feature_name] = counts.to_dict()
+            del counts
+
+            if len(self.count_maps_) % 10 == 0:
+                gc.collect()
 
         gc.collect()
         return self
+
+    def _transform_feature_chunk(
+        self,
+        chunk: pd.DataFrame,
+        feature_name: str,
+    ) -> np.ndarray:
+        """
+        Transform a single chunk for a given feature.
+
+        Args:
+            chunk (pd.DataFrame): DataFrame chunk to transform.
+            feature_name (str): Name of the feature to encode.
+
+        Returns:
+            np.ndarray: Array of count-encoded values.
+        """
+        count_map = self.count_maps_[feature_name]
+        values = chunk[feature_name].values
+
+        result = np.array(
+            [count_map.get(val, self.fill_value) for val in values],
+            dtype=np.int32,
+        )
+        return result
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -97,30 +134,46 @@ class CountEncodingFeatureGenerator:
                 "CountEncodingFeatureGenerator must be fitted before transform."
             )
 
-        new_columns = {}
+        n_rows = len(df)
+        n_chunks = (n_rows + self.chunk_size - 1) // self.chunk_size
+
+        new_columns_dict = {
+            f"CE_{feature_name}": np.empty(n_rows, dtype=np.int32)
+            for feature_name in self.features_names
+        }
+
         total_features = len(self.features_names)
-
-        for i in tqdm(
-            range(0, total_features, self.batch_size),
+        pbar = tqdm(
+            total=total_features,
             desc="Transforming with count encoding",
-        ):
-            batch_features = self.features_names[i : i + self.batch_size]
+        )
 
-            for feature_name in batch_features:
-                count_map = self.count_maps_[feature_name]
-                new_columns[f"CE_{feature_name}"] = (
-                    df[feature_name]
-                    .map(count_map)
-                    .fillna(self.fill_value)
-                    .astype("int32")
-                )
+        for feat_idx in range(0, total_features, self.batch_size):
+            batch_features = self.features_names[feat_idx : feat_idx + self.batch_size]
 
-            if i % (self.batch_size * 3) == 0:
+            for chunk_idx in range(n_chunks):
+                start_idx = chunk_idx * self.chunk_size
+                end_idx = min((chunk_idx + 1) * self.chunk_size, n_rows)
+                chunk = df.iloc[start_idx:end_idx]
+
+                for feature_name in batch_features:
+                    result = self._transform_feature_chunk(chunk, feature_name)
+                    new_columns_dict[f"CE_{feature_name}"][start_idx:end_idx] = result
+                    del result
+
+                del chunk
                 gc.collect()
 
-        result_df = pd.concat([df, pd.DataFrame(new_columns, index=df.index)], axis=1)
-        del new_columns
+            pbar.update(len(batch_features))
+
+        pbar.close()
+
+        new_df = pd.DataFrame(new_columns_dict, index=df.index)
+        result_df = pd.concat([df, new_df], axis=1)
+
+        del new_columns_dict, new_df
         gc.collect()
+
         return result_df
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -154,12 +207,10 @@ class CountEncodingFeatureGenerator:
         return self.count_maps_.copy()
 
 
-# Backward compatible alias expected by some tests
-CountEncoder = CountEncodingFeatureGenerator  # pragma: no cover - alias
+CountEncoder = CountEncodingFeatureGenerator
 
 
 if __name__ == "__main__":
-    # Example usage
     data = {
         "A": ["a", "b", "a", "c"],
         "B": ["x", "y", "x", "z"],
