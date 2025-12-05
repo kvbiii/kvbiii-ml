@@ -19,6 +19,7 @@ from sklearn.metrics import (
     root_mean_squared_log_error,
     r2_score,
     log_loss,
+    brier_score_loss,
 )
 
 
@@ -56,6 +57,7 @@ METRICS_NAMES: dict[str, callable] = {
         y_true, y_proba, multi_class="ovr", average="macro"
     ),
     "Log Loss": log_loss,
+    "Brier Score": brier_score_loss,
     "MAE": mean_absolute_error,
     "MAPE": mean_absolute_percentage_error,
     "MSE": mean_squared_error,
@@ -69,12 +71,12 @@ METRICS: dict[str, list] = {
         eval_func,
         (
             "probs"
-            if key in ["Roc AUC", "Mean Average Precision", "Log Loss"]
+            if key in ["Roc AUC", "Mean Average Precision", "Log Loss", "Brier Score"]
             else "preds"
         ),
         (
             "minimize"
-            if key in ["MAE", "MAPE", "MSE", "RMSE", "RMSLE", "Log Loss"]
+            if key in ["MAE", "MAPE", "MSE", "RMSE", "RMSLE", "Log Loss", "Brier Score"]
             else "maximize"
         ),
     ]
