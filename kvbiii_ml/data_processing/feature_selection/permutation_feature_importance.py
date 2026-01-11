@@ -261,103 +261,128 @@ class PermutationRecursiveFeatureElimination:
         return float(np.mean(valid_scores)), float(np.std(valid_scores))
 
     def _cross_val_permutation_importance(
-        self, X: pd.DataFrame, y: pd.Series, current_features: list[str]
+        self, x_data: pd.DataFrame, y_data: pd.Series, current_features: list[str]
     ) -> tuple[dict[str, float], float, float]:
         """
-        Compute permutation importance with caching of permutation indices only.
-
-        Recalculates importance scores each time while reusing permutation patterns
-        for consistency. Implementation follows scikit-learn's permutation_importance.
-        Preserves categorical feature types during permutation.
+        Compute permutation feature importance across cross-validation folds.
 
         Args:
-            X (pd.DataFrame): Feature matrix.
-            y (pd.Series): Target values.
+            x_data (pd.DataFrame): Feature matrix.
+            y_data (pd.Series): Target values.
             current_features (list[str]): Features to evaluate.
 
         Returns:
-            tuple[dict[str, float], float, float]: Importance scores, mean and std
-                of baseline metric across folds.
+            tuple[dict[str, float], float, float]: Average importance per feature,
+                mean validation metric, std of validation metric.
         """
         _, valid_scores, _ = self.cross_validator.fit(
-            self.estimator, X[current_features], y
+            self.estimator, x_data[current_features], y_data
         )
-        fitted_estimators = getattr(self.cross_validator, "fitted_estimators_", [])
+        fitted_estimators = self.cross_validator.fitted_estimators_
 
         if not hasattr(self, "_permutation_cache"):
             self._permutation_cache = {}
 
-        categorical_info = {
-            f: (
-                (X[f].dtype.categories, X[f].dtype.ordered)
-                if hasattr(X[f].dtype, "categories")
-                else None
-            )
-            for f in current_features
+        feature_to_col = {feature: idx for idx, feature in enumerate(current_features)}
+
+        categorical_features: dict[str, tuple[pd.Index, bool]] = {}
+        for feature in current_features:
+            dtype = x_data[feature].dtype
+            if hasattr(dtype, "categories"):
+                categorical_features[feature] = (
+                    dtype.categories,
+                    dtype.ordered,
+                )
+
+        fold_importance_scores: dict[str, list[float]] = {
+            feature: [] for feature in current_features
         }
 
-        fold_importance_scores = {f: [] for f in current_features}
-
         for fold_idx, ((_, valid_idx), fitted) in enumerate(
-            zip(
-                self.cross_validator.cv.split(X[current_features], y), fitted_estimators
-            )
+            zip(self.cross_validator.cv.split(x_data, y_data), fitted_estimators)
         ):
-            X_valid = X.iloc[valid_idx][current_features].copy()
-            y_valid = y.iloc[valid_idx]
+            x_valid = x_data.iloc[valid_idx][current_features].copy()
+            y_valid = y_data.iloc[valid_idx]
 
-            baseline_pred = self._predict(fitted, X_valid)
+            x_values = x_valid.to_numpy()
+
+            cat_code_buffers: dict[str, np.ndarray] = {}
+            for feature, (cats, _) in categorical_features.items():
+                col = feature_to_col[feature]
+                codes = x_valid.iloc[:, col].cat.codes.to_numpy()
+                x_values[:, col] = codes
+                cat_code_buffers[feature] = codes.copy()
+
+            baseline_pred = self._predict(fitted, x_valid)
             baseline_score = self.metric_fn(y_valid, baseline_pred)
-
-            show_tqdm = fold_idx not in self._permutation_cache
-            feature_iterator = enumerate(current_features)
-            if show_tqdm and self.verbose:
-                feature_iterator = tqdm(
-                    feature_iterator,
-                    total=len(current_features),
-                    desc=f"Fold {fold_idx + 1} - Permuting features",
-                    disable=False,
-                    leave=True,
-                )
 
             if fold_idx not in self._permutation_cache:
                 self._permutation_cache[fold_idx] = {}
+                show_tqdm = True
+            else:
+                show_tqdm = False
+
+            feature_iterator = (
+                tqdm(
+                    enumerate(current_features),
+                    total=len(current_features),
+                    desc=f"Fold {fold_idx + 1} - Permuting features",
+                    disable=not show_tqdm,
+                    leave=True,
+                )
+                if show_tqdm
+                else enumerate(current_features)
+            )
 
             for _, feature in feature_iterator:
+                col = feature_to_col[feature]
                 if feature not in self._permutation_cache[fold_idx]:
                     self._permutation_cache[fold_idx][feature] = [
-                        self._rng.permutation(len(X_valid))
+                        self._rng.permutation(len(x_valid))
                         for _ in range(self.n_repeats)
                     ]
 
-                permutation_indices = self._permutation_cache[fold_idx][feature]
-                original_values = X_valid[feature].to_numpy()
-                cat_info = categorical_info[feature]
+                perm_indices = self._permutation_cache[fold_idx][feature]
 
-                permutation_scores = [
-                    self._compute_permuted_score(
-                        fitted,
-                        X_valid,
-                        y_valid,
-                        feature,
-                        original_values,
-                        permuted_idx,
-                        cat_info,
+                original_col = x_values[:, col].copy()
+
+                scores: list[float] = []
+                for perm in perm_indices:
+                    x_values[:, col] = original_col[perm]
+
+                    if feature in categorical_features:
+                        cats, ordered = categorical_features[feature]
+                        x_valid.iloc[:, col] = pd.Categorical.from_codes(
+                            x_values[:, col].astype(int),
+                            categories=cats,
+                            ordered=ordered,
+                        )
+                    else:
+                        x_valid.iloc[:, col] = x_values[:, col]
+
+                    pred = self._predict(fitted, x_valid)
+                    scores.append(self.metric_fn(y_valid, pred))
+
+                x_values[:, col] = original_col
+                if feature in categorical_features:
+                    cats, ordered = categorical_features[feature]
+                    x_valid.iloc[:, col] = pd.Categorical.from_codes(
+                        original_col.astype(int),
+                        categories=cats,
+                        ordered=ordered,
                     )
-                    for permuted_idx in permutation_indices
-                ]
+                else:
+                    x_valid.iloc[:, col] = original_col
 
-                self._restore_feature(X_valid, feature, original_values, cat_info)
-
-                importance = (
-                    baseline_score - np.mean(permutation_scores)
-                    if self.metric_direction == "maximize"
-                    else np.mean(permutation_scores) - baseline_score
-                )
-                fold_importance_scores[feature].append(float(importance))
+                if self.metric_direction == "maximize":
+                    importance = baseline_score - float(np.mean(scores))
+                else:
+                    importance = float(np.mean(scores)) - baseline_score
+                fold_importance_scores[feature].append(importance)
 
         avg_importance = {
-            f: float(np.mean(scores)) for f, scores in fold_importance_scores.items()
+            feature: float(np.mean(scores))
+            for feature, scores in fold_importance_scores.items()
         }
 
         return (
@@ -365,65 +390,6 @@ class PermutationRecursiveFeatureElimination:
             float(np.mean(valid_scores)),
             float(np.std(valid_scores)),
         )
-
-    def _restore_feature(
-        self,
-        X_valid: pd.DataFrame,
-        feature: str,
-        original_values: np.ndarray,
-        cat_info: tuple[pd.Index, bool] | None,
-    ) -> None:
-        """
-        Restore feature to its original values and dtype.
-
-        Args:
-            X_valid (pd.DataFrame): Validation feature matrix.
-            feature (str): Feature name to restore.
-            original_values (np.ndarray): Original feature values.
-            cat_info (tuple[pd.Index, bool] | None): Categorical info
-                (categories, ordered) or None.
-        """
-        X_valid[feature] = original_values
-        if cat_info is not None:
-            categories, ordered = cat_info
-            X_valid[feature] = pd.Categorical(
-                X_valid[feature], categories=categories, ordered=ordered
-            )
-
-    def _compute_permuted_score(
-        self,
-        fitted: Any,
-        X_valid: pd.DataFrame,
-        y_valid: pd.Series,
-        feature: str,
-        original_values: np.ndarray,
-        permuted_idx: np.ndarray,
-        cat_info: tuple[pd.Index, bool] | None,
-    ) -> float:
-        """
-        Compute metric score with permuted feature.
-
-        Args:
-            fitted (Any): Fitted estimator.
-            X_valid (pd.DataFrame): Validation feature matrix.
-            y_valid (pd.Series): Validation target values.
-            feature (str): Feature to permute.
-            original_values (np.ndarray): Original feature values.
-            permuted_idx (np.ndarray): Permutation indices.
-            cat_info (tuple[pd.Index, bool] | None): Categorical info
-                (categories, ordered) or None.
-
-        Returns:
-            float: Metric score with permuted feature.
-        """
-        X_valid[feature] = original_values[permuted_idx]
-        if cat_info is not None:
-            categories, ordered = cat_info
-            X_valid[feature] = pd.Categorical(
-                X_valid[feature], categories=categories, ordered=ordered
-            )
-        permuted_pred = self._predict(fitted, X_valid)
-        return self.metric_fn(y_valid, permuted_pred)
 
     def _predict(self, estimator, X: pd.DataFrame) -> np.ndarray:
         """
