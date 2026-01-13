@@ -456,8 +456,6 @@ if __name__ == "__main__":
     from sklearn.datasets import load_iris
     from sklearn.linear_model import LogisticRegression
     from sklearn.model_selection import train_test_split
-    from sklearn.metrics import accuracy_score
-    from kvbiii_ml.evaluation.custom_metrics_handler import f_beta_selection_score
 
     # Test with standard metric
     iris_X, iris_y = load_iris(return_X_y=True, as_frame=True)
