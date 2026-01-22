@@ -22,6 +22,8 @@ class TargetEncodingFeatureGenerator:
         n_bins: int = 10,
         chunk_size: int = 50000,
         batch_size: int = 10,
+        is_continuous_target: bool = False,
+        target_bins: int = 4,
     ) -> None:
         """
         Initialize the TargetEncodingFeatureGenerator.
@@ -39,6 +41,10 @@ class TargetEncodingFeatureGenerator:
                 transform. Defaults to 50000.
             batch_size (int, optional): Number of features to process at once.
                 Defaults to 10.
+            is_continuous_target (bool, optional): Whether target is continuous and
+                should be binned into quantiles. Defaults to False.
+            target_bins (int, optional): Number of quantile bins to divide continuous
+                target into. Defaults to 4.
         """
         self.features_names = features_names
         self.aggregation = aggregation
@@ -47,9 +53,12 @@ class TargetEncodingFeatureGenerator:
         self.n_bins = n_bins
         self.chunk_size = chunk_size
         self.batch_size = batch_size
+        self.is_continuous_target = is_continuous_target
+        self.target_bins = target_bins
         self.bin_edges_: dict[str, np.ndarray] = {}
         self.group_stats_: dict[str, pd.Series] = {}
         self.global_stat: float = 0.0
+        self.target_bin_edges_: np.ndarray | None = None
         self._fitted_index: pd.Index | None = None
         self._fitted_te_df: pd.DataFrame | None = None
         self._validate_init_params()
@@ -80,6 +89,45 @@ class TargetEncodingFeatureGenerator:
             raise ValueError("chunk_size must be a positive integer.")
         if not isinstance(self.batch_size, int) or self.batch_size < 1:
             raise ValueError("batch_size must be a positive integer.")
+        if not isinstance(self.is_continuous_target, bool):
+            raise ValueError("is_continuous_target must be a boolean.")
+        if not isinstance(self.target_bins, int) or self.target_bins < 2:
+            raise ValueError("target_bins must be an integer >= 2.")
+
+    def _bin_continuous_target(self, y: pd.Series) -> pd.Series:
+        """
+        Bin a continuous target into quantile-based discrete categories.
+
+        Args:
+            y (pd.Series): Continuous target series.
+
+        Returns:
+            pd.Series: Binned target as a Series of integers.
+        """
+        if self.target_bin_edges_ is None:
+            self.target_bin_edges_ = np.quantile(
+                y, np.linspace(0, 1, self.target_bins + 1)
+            )
+            self.target_bin_edges_[-1] *= 1.001
+
+        labels = list(range(self.target_bins))
+        return pd.cut(
+            y, bins=self.target_bin_edges_, labels=labels, include_lowest=True
+        ).astype(int)
+
+    def _prepare_target(self, y: pd.Series) -> pd.Series:
+        """
+        Prepare target for encoding by binning if continuous.
+
+        Args:
+            y (pd.Series): Target series.
+
+        Returns:
+            pd.Series: Prepared target series (binned if continuous).
+        """
+        if self.is_continuous_target:
+            return self._bin_continuous_target(y)
+        return y
 
     def _is_float_feature(self, X: pd.DataFrame, feature_name: str) -> bool:
         """
@@ -133,6 +181,8 @@ class TargetEncodingFeatureGenerator:
         Returns:
             pd.DataFrame: DataFrame with computed statistics.
         """
+        prepared_target = self._prepare_target(y)
+
         feature_values = (
             self._bin_float_feature(X, feature_name)
             if self._is_float_feature(X, feature_name)
@@ -140,7 +190,9 @@ class TargetEncodingFeatureGenerator:
         )
 
         group_stats = (
-            y.groupby(feature_values.rename(feature_name), sort=False, observed=True)
+            prepared_target.groupby(
+                feature_values.rename(feature_name), sort=False, observed=True
+            )
             .agg([self.aggregation, "count"])
             .reset_index()
         )
@@ -196,7 +248,8 @@ class TargetEncodingFeatureGenerator:
             self.features_names = list(X.columns)
         self._validate_fit_inputs(X, y)
 
-        self.global_stat = float(getattr(y, self.aggregation)())
+        prepared_target = self._prepare_target(y)
+        self.global_stat = float(getattr(prepared_target, self.aggregation)())
         self.group_stats_ = {}
         self.bin_edges_ = {}
 
@@ -400,3 +453,29 @@ if __name__ == "__main__":
     for feature in te_generator.features_names:
         print(f"\nGroup stats for {feature}:")
         print(te_generator.group_stats_[feature])
+
+    print("\n--- Testing continuous target ---")
+    data_continuous = {
+        "feature1": ["A", "B", "A", "C", "B", "A", "C", "B"],
+        "feature2": ["X", "Y", "X", "Z", "Y", "Y", "X", "Z"],
+        "num_feature": [10, 20, 10, 30, 20, 15, 25, 18],
+        "target": [1.5, 2.3, 1.8, 4.5, 3.1, 2.0, 4.2, 3.8],
+    }
+    df_continuous = pd.DataFrame(data_continuous)
+
+    te_generator_continuous = TargetEncodingFeatureGenerator(
+        features_names=["feature1", "feature2", "num_feature"],
+        aggregation="mean",
+        smooth=5,
+        cv=None,
+        is_continuous_target=True,
+        target_bins=4,
+    )
+
+    transformed_df_continuous = te_generator_continuous.fit_transform(
+        df_continuous[["feature1", "feature2", "num_feature"]], df_continuous["target"]
+    )
+    print(transformed_df_continuous)
+    for feature in te_generator_continuous.features_names:
+        print(f"\nGroup stats for {feature}:")
+        print(te_generator_continuous.group_stats_[feature])
