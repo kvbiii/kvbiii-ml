@@ -301,6 +301,43 @@ class EnsembleModel(BaseTrainer, BaseEstimator, ClassifierMixin):
             return X[estimator.feature_names_]
         return X
 
+    @property
+    def feature_importances_(self) -> np.ndarray:
+        """
+        Compute weighted average of feature importances from base estimators.
+
+        Returns:
+            np.ndarray: Aggregated feature importances across all estimators
+            that support this attribute.
+
+        Raises:
+            RuntimeError: If called before fitting or if no estimators support
+                feature importances.
+        """
+        if not hasattr(self, "fitted_estimators_") or len(self.fitted_estimators_) == 0:
+            raise RuntimeError(
+                "EnsembleModel must be fitted before accessing feature_importances_."
+            )
+
+        importances = []
+        successful_indices = []
+
+        for idx, estimator in enumerate(self.fitted_estimators_):
+            if hasattr(estimator, "feature_importances_"):
+                importances.append(estimator.feature_importances_)
+                successful_indices.append(idx)
+
+        if not importances:
+            raise RuntimeError(
+                "None of the fitted estimators support feature_importances_.",
+            )
+
+        importances = np.array(importances)
+        active_weights = self.weights[successful_indices]
+        active_weights = active_weights / active_weights.sum()
+
+        return np.average(importances, axis=0, weights=active_weights)
+
 
 if __name__ == "__main__":
     import numpy as _np
@@ -321,3 +358,5 @@ if __name__ == "__main__":
     print("probabilities shape:", y_proba.shape)
     confidence = ensemble.predict_with_confidence(X_demo)
     print("Confidence:", confidence)
+    feature_importances = ensemble.feature_importances_
+    print("Feature importances:", feature_importances)
