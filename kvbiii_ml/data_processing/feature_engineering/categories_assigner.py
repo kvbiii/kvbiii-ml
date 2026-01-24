@@ -63,7 +63,11 @@ class CategoriesAssigner(BaseEstimator, TransformerMixin):
                 not_na = s.notna()
                 categories_str = [str(c) for c in categories]
                 mask_unknown = not_na & ~s.isin(categories_str)
-                if mask_unknown.any() and mode_val is not None and not pd.isna(mode_val):
+                if (
+                    mask_unknown.any()
+                    and mode_val is not None
+                    and not pd.isna(mode_val)
+                ):
                     s.loc[mask_unknown] = str(mode_val)
                 X[feature] = pd.Categorical(s, categories=categories_str)
         return X
