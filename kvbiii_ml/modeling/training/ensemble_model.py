@@ -8,6 +8,8 @@ from kvbiii_ml.modeling.training.base_trainer import BaseTrainer
 
 
 class EnsembleModel(BaseTrainer, BaseEstimator, ClassifierMixin):
+    """Ensemble model combining multiple base estimators."""
+
     def __init__(
         self,
         estimators: list,
@@ -90,40 +92,41 @@ class EnsembleModel(BaseTrainer, BaseEstimator, ClassifierMixin):
             X_valid, y_valid = eval_set[0]
         else:
             X_valid, y_valid = None, None
-
+        self.fitted_estimators_ = []
+        self._X_train = X_train
         for base_estimator in self.estimators:
             try:
                 estimator = clone(base_estimator)
-            except Exception:
+            except TypeError:
                 estimator = base_estimator
-            estimator = self._set_categorical_params(estimator, X_train)
+            estimator = self._set_categorical_params(estimator)
             fitted = BaseTrainer.fit_estimator(
                 estimator, X_train, y_train, X_valid, y_valid, sample_weight
             )
             self.fitted_estimators_.append(fitted)
+        self._X_train = None
 
         if self.problem_type == "classification":
             self.classes_ = np.unique(y_train)
         return self
 
-    def _set_categorical_params(
-        self, estimator: BaseEstimator, X_train: pd.DataFrame
-    ) -> BaseEstimator:
-        """Assign categorical feature parameters for supported estimators.
+    def _set_categorical_params(self, estimator: BaseEstimator) -> BaseEstimator:
+        """
+        Assign categorical feature parameters for supported estimators.
 
         Args:
             estimator (BaseEstimator): Estimator to configure.
-            X_train (pd.DataFrame): Training features to detect categorical cols.
 
         Returns:
-            BaseEstimator: Estimator with categorical parameters set when
-            applicable.
+            BaseEstimator: Estimator with categorical parameters set when applicable.
         """
+        if not hasattr(self, "_X_train") or self._X_train is None:
+            return estimator
         try:
-            categorical_features = X_train.select_dtypes(
+            categorical_features = self._X_train.select_dtypes(
                 include="category"
             ).columns.tolist()
-        except Exception:
+        except (ValueError, TypeError, AttributeError):
             categorical_features = []
         if not categorical_features:
             return estimator
@@ -135,14 +138,14 @@ class EnsembleModel(BaseTrainer, BaseEstimator, ClassifierMixin):
         return estimator
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
-        """Predict using the ensemble.
+        """
+        Predict using the ensemble.
 
         Args:
             X (pd.DataFrame): Features to score.
 
         Returns:
-            np.ndarray: Predicted labels for classification or predictions for
-            regression.
+            np.ndarray: Predicted labels for classification or predictions for regression.
 
         Raises:
             RuntimeError: If called before fitting.
@@ -162,7 +165,7 @@ class EnsembleModel(BaseTrainer, BaseEstimator, ClassifierMixin):
                         estimator_predictions = estimator.predict(X_ordered)
                     predictions.append(estimator_predictions)
                     successful_indices.append(idx)
-                except Exception as e:
+                except (ValueError, AttributeError, TypeError):
                     continue
 
             if not predictions:
@@ -175,8 +178,7 @@ class EnsembleModel(BaseTrainer, BaseEstimator, ClassifierMixin):
             predictions = np.average(predictions, axis=0, weights=active_weights)
             if self.problem_type == "classification":
                 return np.argmax(predictions, axis=1)
-            else:
-                return predictions
+            return predictions
         finally:
             if "predictions" in locals() and isinstance(predictions, list):
                 del predictions
@@ -206,13 +208,12 @@ class EnsembleModel(BaseTrainer, BaseEstimator, ClassifierMixin):
                     estimator_predictions = estimator.predict_proba(X_ordered)
                     predictions.append(estimator_predictions)
                     successful_indices.append(idx)
-                except Exception as e:
+                except (ValueError, AttributeError, TypeError) as e:
                     print(f"Estimator {idx} failed during predict_proba: {e}")
                     continue
 
             if not predictions:
                 raise RuntimeError("All estimators failed during prediction.")
-
             predictions = np.array(predictions)
             active_weights = self.weights[successful_indices]
             active_weights = active_weights / active_weights.sum()
@@ -221,7 +222,6 @@ class EnsembleModel(BaseTrainer, BaseEstimator, ClassifierMixin):
         finally:
             if "predictions" in locals() and isinstance(predictions, list):
                 del predictions
-            import gc
 
             gc.collect()
 
@@ -324,7 +324,18 @@ class EnsembleModel(BaseTrainer, BaseEstimator, ClassifierMixin):
 
         for idx, estimator in enumerate(self.fitted_estimators_):
             if hasattr(estimator, "feature_importances_"):
-                importances.append(estimator.feature_importances_)
+                feature_importance = np.asarray(
+                    estimator.feature_importances_, dtype=float
+                )
+                min_importance = feature_importance.min()
+                max_importance = feature_importance.max()
+                if max_importance > min_importance:
+                    normalized_importance = (feature_importance - min_importance) / (
+                        max_importance - min_importance
+                    )
+                else:
+                    normalized_importance = np.zeros_like(feature_importance)
+                importances.append(normalized_importance)
                 successful_indices.append(idx)
 
         if not importances:
@@ -340,16 +351,14 @@ class EnsembleModel(BaseTrainer, BaseEstimator, ClassifierMixin):
 
 
 if __name__ == "__main__":
-    import numpy as _np
-    import pandas as _pd
-    from sklearn.linear_model import LogisticRegression as _LogReg
-    from sklearn.naive_bayes import GaussianNB as _GNB
+    from sklearn.ensemble import RandomForestClassifier as _RF
+    from xgboost import XGBClassifier as _XGB
 
-    X_demo = _pd.DataFrame(_np.random.randn(50, 4), columns=["f1", "f2", "f3", "f4"])
-    y_demo = _pd.Series((_np.random.rand(50) > 0.5).astype(int))
+    X_demo = pd.DataFrame(np.random.randn(50, 4), columns=["f1", "f2", "f3", "f4"])
+    y_demo = pd.Series((np.random.rand(50) > 0.5).astype(int))
 
-    est1 = _LogReg(max_iter=200)
-    est2 = _GNB()
+    est1 = _RF(n_estimators=10, random_state=42)
+    est2 = _XGB(use_label_encoder=False, eval_metric="logloss", random_state=42)
     ensemble = EnsembleModel([est1, est2], problem_type="classification")
     ensemble.fit(X_demo, y_demo)
     y_pred = ensemble.predict(X_demo)
