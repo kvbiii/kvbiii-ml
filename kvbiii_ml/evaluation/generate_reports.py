@@ -1,29 +1,123 @@
-import pandas as pd
+"""
+Evaluation report generation for regression and classification models.
+
+This module provides functions to generate styled performance metric reports
+for machine learning models, including comprehensive metrics and visualizations.
+"""
+
 import numpy as np
+import pandas as pd
+from pandas.io.formats.style import Styler
 from sklearn.metrics import (
-    mean_absolute_error,
-    median_absolute_error,
-    mean_squared_error,
-    root_mean_squared_error,
-    mean_absolute_percentage_error,
-    r2_score,
     accuracy_score,
-    precision_score,
-    recall_score,
-    f1_score,
-    roc_auc_score,
-)
-from sklearn.metrics import (
-    classification_report,
-    confusion_matrix,
     explained_variance_score,
+    f1_score,
+    log_loss,
+    mean_absolute_error,
+    mean_absolute_percentage_error,
+    mean_squared_error,
+    median_absolute_error,
+    precision_score,
+    r2_score,
+    recall_score,
+    roc_auc_score,
+    root_mean_squared_error,
 )
 
-try:  # Optional dependency for plotting
-    import matplotlib.pyplot as plt  # type: ignore
-except Exception:  # pragma: no cover - allow running without matplotlib
-    plt = None  # type: ignore
-from sklearn.metrics import roc_curve, auc
+
+def _apply_fancy_styling(
+    styled_df: Styler,
+    caption: str,
+    gradient_cols: dict[tuple[str, ...], tuple[str, float | None, float | None]],
+) -> Styler:
+    """
+    Apply consistent fancy styling to DataFrame.
+
+    Args:
+        styled_df (Styler): Styled DataFrame to modify.
+        caption (str): Caption for the table.
+        gradient_cols (dict[tuple[str, ...], tuple[str, float | None, float | None]]):
+            Column gradient configs with cmap, vmin, vmax.
+
+    Returns:
+        Styler: Enhanced styled DataFrame.
+    """
+    for cols, (cmap, vmin, vmax) in gradient_cols.items():
+        styled_df = styled_df.background_gradient(
+            subset=list(cols),
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+        )
+
+    return (
+        styled_df.set_caption(caption)
+        .set_properties(
+            **{
+                "text-align": "center",
+                "font-family": "Segoe UI, Arial, sans-serif",
+                "font-size": "1.1em",
+                "background-color": "#ffffff",
+                "border": "2px solid #e0e0e0",
+                "color": "#2c3e50",
+                "padding": "12px",
+            }
+        )
+        .set_table_styles(
+            [
+                {
+                    "selector": "th",
+                    "props": [
+                        ("font-weight", "700"),
+                        ("border", "2px solid #bdc3c7"),
+                        (
+                            "background",
+                            "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                        ),
+                        ("color", "#ffffff"),
+                        ("text-align", "center"),
+                        ("font-size", "1.15em"),
+                        ("padding", "14px"),
+                        ("text-transform", "uppercase"),
+                        ("letter-spacing", "1px"),
+                    ],
+                },
+                {
+                    "selector": "caption",
+                    "props": [
+                        ("font-size", "1.8em"),
+                        ("font-weight", "800"),
+                        (
+                            "background",
+                            "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+                        ),
+                        ("-webkit-background-clip", "text"),
+                        ("-webkit-text-fill-color", "transparent"),
+                        ("margin-bottom", "20px"),
+                        ("letter-spacing", "1.5px"),
+                    ],
+                },
+                {
+                    "selector": "tbody tr:hover",
+                    "props": [
+                        ("background-color", "#f8f9fa"),
+                        ("transform", "scale(1.01)"),
+                        ("transition", "all 0.2s ease"),
+                    ],
+                },
+                {
+                    "selector": "",
+                    "props": [
+                        ("border-collapse", "separate"),
+                        ("border-spacing", "0"),
+                        ("box-shadow", "0 4px 6px rgba(0,0,0,0.1)"),
+                        ("border-radius", "8px"),
+                        ("overflow", "hidden"),
+                    ],
+                },
+            ]
+        )
+    )
 
 
 def regression_results(
@@ -31,9 +125,9 @@ def regression_results(
     y_train_pred: np.ndarray,
     y_test_true: pd.Series | np.ndarray,
     y_test_pred: np.ndarray,
-) -> pd.DataFrame:
+) -> Styler:
     """
-    Generates a comprehensive styled DataFrame with regression evaluation metrics.
+    Generate comprehensive styled DataFrame with regression evaluation metrics.
 
     Args:
         y_train_true (pd.Series | np.ndarray): True training target values.
@@ -42,99 +136,40 @@ def regression_results(
         y_test_pred (np.ndarray): Predicted testing target values.
 
     Returns:
-        pd.DataFrame: A styled DataFrame with comprehensive regression metrics.
+        Styler: Styled DataFrame with regression metrics.
     """
-
-    def safe_mape(y_true, y_pred):
-        """Calculate MAPE safely, handling zero values."""
-        try:
-            return mean_absolute_percentage_error(y_true, y_pred)
-        except ValueError:
-            return np.nan
+    metric_funcs = {
+        "MAE": mean_absolute_error,
+        "MedAE": median_absolute_error,
+        "MSE": mean_squared_error,
+        "RMSE": root_mean_squared_error,
+        "MAPE": lambda y_t, y_p: (
+            mean_absolute_percentage_error(y_t, y_p) if not np.any(y_t == 0) else np.nan
+        ),
+        "R²": r2_score,
+        "Explained Var": explained_variance_score,
+    }
 
     metrics = {
-        "MAE": [
-            mean_absolute_error(y_train_true, y_train_pred),
-            mean_absolute_error(y_test_true, y_test_pred),
-        ],
-        "MedAE": [
-            median_absolute_error(y_train_true, y_train_pred),
-            median_absolute_error(y_test_true, y_test_pred),
-        ],
-        "MSE": [
-            mean_squared_error(y_train_true, y_train_pred),
-            mean_squared_error(y_test_true, y_test_pred),
-        ],
-        "RMSE": [
-            root_mean_squared_error(y_train_true, y_train_pred),
-            root_mean_squared_error(y_test_true, y_test_pred),
-        ],
-        "MAPE": [
-            safe_mape(y_train_true, y_train_pred),
-            safe_mape(y_test_true, y_test_pred),
-        ],
-        "R²": [
-            r2_score(y_train_true, y_train_pred),
-            r2_score(y_test_true, y_test_pred),
-        ],
+        name: [func(y_train_true, y_train_pred), func(y_test_true, y_test_pred)]
+        for name, func in metric_funcs.items()
     }
 
     df = pd.DataFrame(metrics, index=["Train", "Test"])
 
-    styled_df = (
-        df.style.set_caption("📊 Regression Performance Metrics")
-        .format(
-            {
-                "MAE": "{:.4f}",
-                "MedAE": "{:.4f}",
-                "MSE": "{:.4f}",
-                "RMSE": "{:.4f}",
-                "MAPE": "{:.2%}",
-                "R²": "{:.4f}",
-            }
-        )
-        # Color coding
-        .background_gradient(subset=["R²"], cmap="RdYlGn", vmin=0, vmax=1)
-        .background_gradient(subset=["MAE", "MedAE", "MSE", "RMSE"], cmap="RdYlGn_r")
-        # Table-wide font and styling
-        .set_properties(
-            **{
-                "text-align": "left",
-                "font-family": "Times New Roman",
-                "font-size": "1.5em",
-                "background-color": "#f9f9f9",
-                "border": "3px solid #ddd",
-                "color": "#333",
-            }
-        )
-        # Table and caption styles
-        .set_table_styles(
-            [
-                {
-                    "selector": "th",
-                    "props": [
-                        ("font-weight", "bold"),
-                        ("border", "3px solid #ddd"),
-                        ("background-color", "#4a90e2"),
-                        ("color", "white"),
-                        ("text-align", "center"),
-                        ("font-size", "1.4em"),  # Bigger header font
-                        ("padding", "10px"),
-                    ],
-                },
-                {
-                    "selector": "caption",
-                    "props": [
-                        ("font-size", "1.6em"),  # Bigger caption font
-                        ("font-weight", "bold"),
-                        ("color", "#4a90e2"),
-                        ("margin-bottom", "15px"),
-                    ],
-                },
-            ]
-        )
+    format_dict = {col: "{:.4f}" for col in df.columns}
+    format_dict["MAPE"] = "{:.2%}"
+
+    styled_df = df.style.format(format_dict)
+
+    gradient_config = {
+        ("R²", "Explained Var"): ("RdYlGn", 0.0, 1.0),
+        ("MAE", "MedAE", "MSE", "RMSE"): ("RdYlGn_r", None, None),
+    }
+
+    return _apply_fancy_styling(
+        styled_df, "📊 Regression Performance Metrics", gradient_config
     )
-    return styled_df
 
 
 def classification_results(
@@ -145,147 +180,129 @@ def classification_results(
     y_train_proba: np.ndarray | None = None,
     y_test_proba: np.ndarray | None = None,
     average: str = "weighted",
-    id2label: dict[int, str] | None = None,
     cutoff: float | list[float] | None = None,
-) -> pd.DataFrame:
+) -> Styler:
     """
-    Generates a comprehensive styled DataFrame with classification evaluation metrics.
+    Generate comprehensive styled DataFrame with classification evaluation metrics.
 
     Args:
-        cutoff (float | list[float] | None): Custom threshold(s) for classification.
-            - For binary: single float (e.g., 0.7)
-            - For multi-class: list of floats, one per class (e.g., [0.3, 0.4, 0.3])
-            If None, uses the original predictions.
+        y_train_true (pd.Series | np.ndarray): True training target values.
+        y_train_pred (np.ndarray): Predicted training target values.
+        y_test_true (pd.Series | np.ndarray): True testing target values.
+        y_test_pred (np.ndarray): Predicted testing target values.
+        y_train_proba (np.ndarray | None, optional): Predicted probabilities for train.
+            Defaults to None.
+        y_test_proba (np.ndarray | None, optional): Predicted probabilities for test.
+            Defaults to None.
+        average (str, optional): Averaging method for multi-class. Defaults to "weighted".
+        cutoff (float | list[float] | None, optional): Custom threshold(s). For binary:
+            single float. For multi-class: list per class. Defaults to None.
+
+    Returns:
+        Styler: Styled DataFrame with classification metrics.
+
+    Raises:
+        ValueError: If probabilities required for cutoff but not provided.
+        ValueError: If cutoff length doesn't match number of classes.
     """
 
-    def apply_cutoff(
-        y_proba: np.ndarray, cutoff_value: float | list[float]
+    def _apply_cutoff(
+        y_proba: np.ndarray, cutoff_val: float | list[float]
     ) -> np.ndarray:
-        """Apply cutoff threshold(s) to probabilities to get predictions."""
         if y_proba is None:
-            raise ValueError("Probabilities must be provided when using cutoff")
+            raise ValueError("Probabilities required when using cutoff")
 
-        if isinstance(cutoff_value, (int, float)):
-            if y_proba.ndim == 1:
-                return (y_proba >= cutoff_value).astype(int)
-            else:
-                return (y_proba[:, 1] >= cutoff_value).astype(int)
-        else:
-            cutoff_array = np.array(cutoff_value)
-            if y_proba.shape[1] != len(cutoff_array):
-                raise ValueError(
-                    f"Number of cutoffs ({len(cutoff_array)}) must match number of classes ({y_proba.shape[1]})"
-                )
-            normalized = y_proba / cutoff_array
-            return np.argmax(normalized, axis=1)
+        if isinstance(cutoff_val, (int, float)):
+            return (
+                (y_proba >= cutoff_val).astype(int)
+                if y_proba.ndim == 1
+                else (y_proba[:, 1] >= cutoff_val).astype(int)
+            )
+
+        cutoff_array = np.array(cutoff_val)
+        if y_proba.shape[1] != len(cutoff_array):
+            raise ValueError(
+                f"Cutoff count ({len(cutoff_array)}) must match classes "
+                f"({y_proba.shape[1]})"
+            )
+        return np.argmax(y_proba / cutoff_array, axis=1)
 
     if cutoff is not None:
         if y_train_proba is None or y_test_proba is None:
-            raise ValueError(
-                "Probabilities (y_train_proba and y_test_proba) must be provided when using cutoff"
-            )
-        y_train_pred = apply_cutoff(y_train_proba, cutoff)
-        y_test_pred = apply_cutoff(y_test_proba, cutoff)
+            raise ValueError("Probabilities required for cutoff")
+        y_train_pred = _apply_cutoff(y_train_proba, cutoff)
+        y_test_pred = _apply_cutoff(y_test_proba, cutoff)
 
-    def safe_roc_auc(
-        y_true: pd.Series | np.ndarray, y_proba: np.ndarray, multi_class: str = "ovr"
+    def _safe_roc_auc(
+        y_true: pd.Series | np.ndarray, y_proba: np.ndarray | None
     ) -> float:
         if y_proba is None:
             return np.nan
         try:
-            if len(np.unique(y_true)) == 2:
-                return roc_auc_score(
-                    y_true, y_proba[:, 1] if y_proba.ndim > 1 else y_proba
-                )
-            else:
-                return roc_auc_score(
-                    y_true, y_proba, multi_class=multi_class, average=average
-                )
+            return (
+                roc_auc_score(y_true, y_proba[:, 1] if y_proba.ndim > 1 else y_proba)
+                if len(np.unique(y_true)) == 2
+                else roc_auc_score(y_true, y_proba, multi_class="ovr", average=average)
+            )
         except (ValueError, IndexError):
             return np.nan
 
+    def _safe_log_loss(
+        y_true: pd.Series | np.ndarray, y_proba: np.ndarray | None
+    ) -> float:
+        if y_proba is None:
+            return np.nan
+        try:
+            return log_loss(y_true, y_proba)
+        except (ValueError, IndexError):
+            return np.nan
+
+    metric_configs = [
+        ("Accuracy", accuracy_score, {}),
+        ("Precision", precision_score, {"average": average, "zero_division": 0}),
+        ("Recall", recall_score, {"average": average, "zero_division": 0}),
+        ("F1 (weighted)", f1_score, {"average": average, "zero_division": 0}),
+        ("F1 (macro)", f1_score, {"average": "macro", "zero_division": 0}),
+    ]
+
     metrics = {
-        "Accuracy": [
-            accuracy_score(y_train_true, y_train_pred),
-            accuracy_score(y_test_true, y_test_pred),
-        ],
-        "Precision": [
-            precision_score(
-                y_train_true, y_train_pred, average=average, zero_division=0
-            ),
-            precision_score(y_test_true, y_test_pred, average=average, zero_division=0),
-        ],
-        "Recall": [
-            recall_score(y_train_true, y_train_pred, average=average, zero_division=0),
-            recall_score(y_test_true, y_test_pred, average=average, zero_division=0),
-        ],
-        "F1-Score (weighted)": [
-            f1_score(y_train_true, y_train_pred, average=average, zero_division=0),
-            f1_score(y_test_true, y_test_pred, average=average, zero_division=0),
-        ],
-        "F1-Score (macro)": [
-            f1_score(y_train_true, y_train_pred, average="macro", zero_division=0),
-            f1_score(y_test_true, y_test_pred, average="macro", zero_division=0),
-        ],
-        "ROC-AUC": [
-            safe_roc_auc(y_train_true, y_train_proba),
-            safe_roc_auc(y_test_true, y_test_proba),
-        ],
+        name: [
+            func(y_train_true, y_train_pred, **kwargs),
+            func(y_test_true, y_test_pred, **kwargs),
+        ]
+        for name, func, kwargs in metric_configs
     }
+
+    metrics["ROC-AUC"] = [
+        _safe_roc_auc(y_train_true, y_train_proba),
+        _safe_roc_auc(y_test_true, y_test_proba),
+    ]
+    metrics["Log Loss"] = [
+        _safe_log_loss(y_train_true, y_train_proba),
+        _safe_log_loss(y_test_true, y_test_proba),
+    ]
 
     df = pd.DataFrame(metrics, index=["Train", "Test"])
 
-    styled_df = (
-        df.style.set_caption("🎯 Classification Performance Metrics")
-        .format({col: "{:.4f}" for col in df.columns})
-        .background_gradient(cmap="YlGnBu", vmin=0, vmax=1)
-        .set_properties(
-            **{
-                "text-align": "left",
-                "font-family": "Times New Roman",
-                "font-size": "1.5em",
-                "background-color": "#f9f9f9",
-                "border": "3px solid #ddd",
-                "color": "#333",
-            }
-        )
-        .set_table_styles(
-            [
-                {
-                    "selector": "th",
-                    "props": [
-                        ("font-weight", "bold"),
-                        ("border", "3px solid #ddd"),
-                        ("background-color", "#4a90e2"),
-                        ("color", "white"),
-                        ("text-align", "center"),
-                        ("font-size", "1.4em"),  # Bigger header font
-                        ("padding", "10px"),
-                    ],
-                },
-                {
-                    "selector": "caption",
-                    "props": [
-                        ("font-size", "1.6em"),  # Bigger caption font
-                        ("font-weight", "bold"),
-                        ("color", "#4a90e2"),
-                        ("margin-bottom", "15px"),
-                    ],
-                },
-            ]
-        )
+    styled_df = df.style.format({col: "{:.4f}" for col in df.columns})
+
+    gradient_config = {
+        tuple(col for col in df.columns if col != "Log Loss"): ("YlGnBu", 0.0, 1.0),
+        ("Log Loss",): ("YlOrRd_r", None, None),
+    }
+
+    return _apply_fancy_styling(
+        styled_df, "🎯 Classification Performance Metrics", gradient_config
     )
-    return styled_df
 
 
 if __name__ == "__main__":
-    from sklearn.datasets import make_regression, make_classification
-    from sklearn.model_selection import train_test_split
-    from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+    from sklearn.datasets import make_classification, make_regression
+    from sklearn.ensemble import RandomForestRegressor
     from sklearn.linear_model import LogisticRegression
+    from sklearn.model_selection import train_test_split
 
-    print("🔍 Testing Regression Results Function:")
-    print("=" * 50)
+    print("🔍 Testing Regression Results:\n" + "=" * 50)
 
     X_reg, y_reg = make_regression(
         n_samples=1000, n_features=10, noise=0.1, random_state=42
@@ -297,16 +314,16 @@ if __name__ == "__main__":
     reg_model = RandomForestRegressor(n_estimators=100, random_state=42)
     reg_model.fit(X_train_reg, y_train_reg)
 
-    y_train_pred_reg = reg_model.predict(X_train_reg)
-    y_test_pred_reg = reg_model.predict(X_test_reg)
-
-    regression_report = regression_results(
-        y_train_reg, y_train_pred_reg, y_test_reg, y_test_pred_reg
+    print(
+        regression_results(
+            y_train_reg,
+            reg_model.predict(X_train_reg),
+            y_test_reg,
+            reg_model.predict(X_test_reg),
+        ).to_string()
     )
-    print(regression_report.to_string())
 
-    print("\n🎯 Testing Classification Results Function:")
-    print("=" * 50)
+    print("\n🎯 Testing Classification Results:\n" + "=" * 50)
 
     X_clf, y_clf = make_classification(
         n_samples=1000, n_features=10, n_classes=3, n_informative=8, random_state=42
@@ -318,18 +335,13 @@ if __name__ == "__main__":
     clf_model = LogisticRegression(random_state=42, max_iter=1000)
     clf_model.fit(X_train_clf, y_train_clf)
 
-    y_train_pred_clf = clf_model.predict(X_train_clf)
-    y_test_pred_clf = clf_model.predict(X_test_clf)
-
-    y_train_proba_clf = clf_model.predict_proba(X_train_clf)
-    y_test_proba_clf = clf_model.predict_proba(X_test_clf)
-
-    classification_report = classification_results(
-        y_train_clf,
-        y_train_pred_clf,
-        y_test_clf,
-        y_test_pred_clf,
-        y_train_proba_clf,
-        y_test_proba_clf,
+    print(
+        classification_results(
+            y_train_clf,
+            clf_model.predict(X_train_clf),
+            y_test_clf,
+            clf_model.predict(X_test_clf),
+            clf_model.predict_proba(X_train_clf),
+            clf_model.predict_proba(X_test_clf),
+        ).to_string()
     )
-    print(classification_report.to_string())
