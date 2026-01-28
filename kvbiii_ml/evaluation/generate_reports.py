@@ -87,14 +87,10 @@ def _apply_fancy_styling(
                     "props": [
                         ("font-size", "1.8em"),
                         ("font-weight", "800"),
-                        (
-                            "background",
-                            "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
-                        ),
-                        ("-webkit-background-clip", "text"),
-                        ("-webkit-text-fill-color", "transparent"),
+                        ("color", "#764ba2"),
                         ("margin-bottom", "20px"),
                         ("letter-spacing", "1.5px"),
+                        ("text-shadow", "2px 2px 4px rgba(0,0,0,0.1)"),
                     ],
                 },
                 {
