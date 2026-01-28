@@ -1,15 +1,25 @@
 import gc
+
 import numpy as np
 import pandas as pd
+from joblib import Parallel, delayed
 from sklearn.base import BaseEstimator
-from sklearn.inspection import permutation_importance
-from sklearn.metrics._scorer import _BaseScorer
+import sys
+from pathlib import Path
+from tqdm import tqdm
 
+sys.path.append(str(Path(__file__).resolve().parents[3]))
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
 
 class PermutationRecursiveFeatureElimination:
-    """Recursive feature elimination using Permutation Feature Importance."""
+    """
+    Recursive feature elimination using Permutation Feature Importance.
+
+    This strategy iteratively evaluates the impact of shuffling each feature
+    on model performance across validation folds, then removes the least
+    important features according to a target metric until a stopping schedule is met.
+    """
 
     def __init__(
         self,
@@ -20,8 +30,8 @@ class PermutationRecursiveFeatureElimination:
         n_repeats: int = 5,
         verbose: bool = True,
         protected_features: list[str] | None = None,
-        scorer: _BaseScorer | None = None,
-        random_state: int | None = 17,
+        random_state: int = 17,
+        n_jobs: int = -1,
     ) -> None:
         """
         Initialize the Permutation Feature Importance RFE selector.
@@ -33,9 +43,11 @@ class PermutationRecursiveFeatureElimination:
             alpha (float, optional): Weight for the final selection score mix. Defaults to 0.95.
             n_repeats (int, optional): Number of times to permute each feature. Defaults to 5.
             verbose (bool, optional): Whether to print progress messages. Defaults to True.
-            protected_features (list[str], optional): Features that should never be removed.
-            scorer (_BaseScorer | None, optional): Scoring function to evaluate the estimator. Defaults to None.
-            random_state (int | None, optional): Random state for reproducibility. Defaults to 17.
+            protected_features (list[str] | None, optional): Features that should never be
+                removed. Defaults to None.
+            random_state (int, optional): Random state for reproducibility. Defaults to 17.
+            n_jobs (int, optional): Number of parallel jobs for fold processing.
+                -1 means using all processors. Defaults to -1.
         """
         self.estimator = estimator
         self.cross_validator = cross_validator
@@ -44,13 +56,17 @@ class PermutationRecursiveFeatureElimination:
         self.n_repeats = n_repeats
         self.verbose = verbose
         self.protected_features = protected_features or []
-        self.scorer = scorer
+        self.random_state = random_state
+        self.n_jobs = n_jobs
+        self._rng = np.random.RandomState(random_state)
+
         self.metric_fn = self.cross_validator.metric_fn
         self.metric_type = self.cross_validator.metric_type
         self.metric_direction = self.cross_validator.metric_direction
-        self.random_state = random_state
+
         self._permutation_cache: dict[int, dict[str, list[np.ndarray]]] = {}
         self._metric_cache: dict[int, dict[str, list[float]]] = {}
+
         self.history_schema = {
             "step": int,
             "n_features_removed": int,
@@ -78,8 +94,9 @@ class PermutationRecursiveFeatureElimination:
                 - history (pd.DataFrame): Step-wise metrics and removals.
 
         Raises:
-            ValueError: If protected features are missing from the dataset.
+            ValueError: When protected features are not found in the dataset.
         """
+        X = self._convert_categorical_to_codes(X)
         current_features = sorted(list(X.columns))
         missing_protected = set(self.protected_features) - set(current_features)
         if missing_protected:
@@ -87,7 +104,6 @@ class PermutationRecursiveFeatureElimination:
                 f"Protected features not found in dataset: {missing_protected}"
             )
         self._permutation_cache = {}
-        self._metric_cache = {}
 
         summary_df = {
             "selected_features": [],
@@ -124,15 +140,11 @@ class PermutationRecursiveFeatureElimination:
         removal_schedule = self.compute_removal_schedule(len(removable_features))
         if self.verbose:
             print(
-                f"🔍 Starting Permutation Feature Importance RFE with {len(current_features)} "
-                f"features, target metric: {self.cross_validator.metric_name} "
-                f"({self.metric_direction}), steps: {self.steps}.\n"
-                f"📅 The number of features to remove every step: {removal_schedule}"
+                f"🔍 Starting Permutation Feature Importance RFE with {len(current_features)} features, target metric: {self.cross_validator.metric_name} ({self.metric_direction}), steps: {self.steps}.\n📅 The number of features to remove every step: {removal_schedule}"
             )
             print(f"🛡️  Protected features: {self.protected_features}")
             print(
-                f"📊 Initial {self.cross_validator.metric_name}: {avg_base_metric:.6f} | "
-                f"Features: {len(current_features)}"
+                f"📊 Initial {self.cross_validator.metric_name}: {avg_base_metric:.6f} | Features: {len(current_features)}"
             )
 
         for step_idx, n_features_to_remove in enumerate(removal_schedule, start=1):
@@ -145,8 +157,7 @@ class PermutationRecursiveFeatureElimination:
                 )
                 print(f"\n🔬 Features remaining: {current_features}\n")
                 print(
-                    f"📊 Average {self.cross_validator.metric_name}: "
-                    f"{fold_base_metric:.6f} ± {fold_base_metric_std:.6f}"
+                    f"📊 Average {self.cross_validator.metric_name}: {fold_base_metric:.6f} ± {fold_base_metric_std:.6f}"
                 )
 
             removable_scores = {
@@ -169,10 +180,10 @@ class PermutationRecursiveFeatureElimination:
             ].tolist()
 
             if self.verbose:
-                print("Most important features:")
+                print(f"Top 5 most important features:")
                 for feat in reversed(importance_df.tail(5)["feature"].tolist()):
                     print(f"  • {feat}: {importance_scores[feat]:.6f}")
-                print("\nLeast important features (candidates for removal):")
+                print("\nTop 5 least important features (candidates for removal):")
                 for feat in features_to_remove[:5]:
                     print(f"  • {feat}: {importance_scores[feat]:.6f}")
 
@@ -207,9 +218,7 @@ class PermutationRecursiveFeatureElimination:
                 else np.nan
             )
             print(
-                f"📈 Final {self.cross_validator.metric_name} score (approximated): "
-                f"{metric_selected:.6f} | Base: {base_val:.6f} | "
-                f"Δ: {metric_selected - base_val:.6f} ({diff_pct:+.2f}%)"
+                f"📈 Final {self.cross_validator.metric_name} score (approximated): {metric_selected:.6f} | Base: {base_val:.6f} | Δ: {metric_selected - base_val:.6f} ({diff_pct:+.2f}%)"
             )
             n_features_initial = summary_df["history"].iloc[0]["n_features_remaining"]
             n_features_selected = len(summary_df["selected_features"])
@@ -218,11 +227,27 @@ class PermutationRecursiveFeatureElimination:
                 100 * n_removed / n_features_initial if n_features_initial else 0.0
             )
             print(
-                f"🗑️ Features removed: {n_removed} of {n_features_initial} "
-                f"({pct_removed:.2f}%)"
+                f"🗑️ Features removed: {n_removed} of {n_features_initial} ({pct_removed:.2f}%)"
             )
         gc.collect()
         return summary_df
+
+    def _convert_categorical_to_codes(self, X: pd.DataFrame) -> pd.DataFrame:
+        """
+        Convert categorical/object columns in X to integer codes.
+
+        Args:
+            X (pd.DataFrame): Input dataframe.
+
+        Returns:
+            pd.DataFrame: Dataframe with categorical/object columns converted to codes.
+        """
+        X_converted = X.copy()
+        for col in X_converted.select_dtypes(include=["category"]).columns:
+            X_converted[col] = (
+                X_converted[col].cat.codes.astype("object").astype("category")
+            )
+        return X_converted
 
     def _cross_val_base_metric(
         self, X: pd.DataFrame, y: pd.Series, current_features: list[str]
@@ -244,53 +269,165 @@ class PermutationRecursiveFeatureElimination:
         gc.collect()
         return float(np.mean(valid_scores)), float(np.std(valid_scores))
 
-    def _cross_val_permutation_importance(
-        self, x_data: pd.DataFrame, y_data: pd.Series, current_features: list[str]
-    ) -> tuple[dict[str, float], float, float]:
+    def _process_fold_importance(
+        self,
+        fold_idx: int,
+        train_idx: np.ndarray,
+        valid_idx: np.ndarray,
+        fitted: BaseEstimator,
+        X: pd.DataFrame,
+        y: pd.Series,
+        current_features: list[str],
+    ) -> tuple[dict[str, float], dict[str, list[float]]]:
         """
-        Compute permutation feature importance using sklearn's permutation_importance.
+        Process permutation importance for a single fold.
 
         Args:
-            x_data (pd.DataFrame): The input feature DataFrame.
-            y_data (pd.Series): The target series.
-            current_features (list[str]): The list of features to use.
+            fold_idx (int): Index of the current fold.
+            train_idx (np.ndarray): Training indices for this fold.
+            valid_idx (np.ndarray): Validation indices for this fold.
+            fitted (BaseEstimator): Fitted estimator for this fold.
+            X (pd.DataFrame): Full feature matrix.
+            y (pd.Series): Full target values.
+            current_features (list[str]): Features to evaluate.
 
         Returns:
-            tuple[dict[str, float], float, float]: A tuple containing:
-                - A dictionary of average importance scores for each feature.
-                - The mean baseline validation score across folds.
-                - The standard deviation of the baseline validation score.
+            tuple[dict[str, float], dict[str, list[float]]]: Tuple containing:
+                - importance scores for each feature in this fold
+                - metric cache for this fold (feature -> list of permutation scores)
+        """
+        X_valid = X.iloc[valid_idx][current_features].copy()
+        y_valid = y.iloc[valid_idx]
+
+        baseline_pred = self._predict(
+            fitted, pd.DataFrame(X_valid, columns=current_features)
+        )
+        baseline_score = self.metric_fn(y_valid, baseline_pred)
+
+        fold_metric_cache = self._metric_cache.get(fold_idx, {})
+        is_first_computation = fold_idx not in self._metric_cache
+
+        if is_first_computation:
+            feature_iterator = tqdm(
+                current_features,
+                desc=f"Fold {fold_idx + 1}/{self.cross_validator.cv.get_n_splits()}",
+                disable=not self.verbose,
+                leave=True,
+            )
+        else:
+            feature_iterator = current_features
+
+        fold_importance = {}
+
+        for feature in feature_iterator:
+            if feature in fold_metric_cache:
+                permutation_scores = fold_metric_cache[feature]
+            else:
+                original_values = X_valid.loc[:, feature].to_numpy().copy()
+                permutation_scores = []
+
+                for repeat_idx in range(self.n_repeats):
+                    if fold_idx not in self._permutation_cache:
+                        self._permutation_cache[fold_idx] = {}
+                    if feature not in self._permutation_cache[fold_idx]:
+                        self._permutation_cache[fold_idx][feature] = []
+                    if len(self._permutation_cache[fold_idx][feature]) <= repeat_idx:
+                        permuted_indices = self._rng.permutation(len(original_values))
+                        self._permutation_cache[fold_idx][feature].append(
+                            permuted_indices
+                        )
+                    permuted_indices = self._permutation_cache[fold_idx][feature][
+                        repeat_idx
+                    ]
+
+                    X_valid.loc[:, feature] = original_values[permuted_indices]
+                    permuted_pred = self._predict(fitted, X_valid)
+                    permutation_scores.append(self.metric_fn(y_valid, permuted_pred))
+                    X_valid.loc[:, feature] = original_values
+
+                fold_metric_cache[feature] = permutation_scores
+
+            if self.metric_direction == "maximize":
+                importance = baseline_score - np.mean(permutation_scores)
+            else:
+                importance = np.mean(permutation_scores) - baseline_score
+            fold_importance[feature] = float(importance)
+
+        return fold_importance, fold_metric_cache
+
+    def _cross_val_permutation_importance(
+        self, X: pd.DataFrame, y: pd.Series, current_features: list[str]
+    ) -> tuple[dict[str, float], float, float]:
+        """
+        Compute permutation importance with caching and parallel fold processing.
+
+        Args:
+            X (pd.DataFrame): Feature matrix.
+            y (pd.Series): Target values.
+            current_features (list[str]): Features to evaluate.
+
+        Returns:
+            tuple[dict[str, float], float, float]: Tuple containing:
+                - dict mapping feature names to average importance scores
+                - average base metric across folds
+                - standard deviation of base metric across folds
+        """
+        _, valid_scores, _ = self.cross_validator.fit(
+            self.estimator, X[current_features], y
+        )
+        fitted_estimators = getattr(self.cross_validator, "fitted_estimators_", [])
+
+        fold_splits = list(self.cross_validator.cv.split(X[current_features], y))
+
+        fold_results = Parallel(n_jobs=self.n_jobs, verbose=0)(
+            delayed(self._process_fold_importance)(
+                fold_idx, train_idx, valid_idx, fitted, X, y, current_features
+            )
+            for fold_idx, ((train_idx, valid_idx), fitted) in enumerate(
+                zip(fold_splits, fitted_estimators)
+            )
+        )
+
+        fold_importance_scores = {f: [] for f in current_features}
+        for fold_idx, (fold_importance, fold_cache) in enumerate(fold_results):
+            self._metric_cache[fold_idx] = fold_cache
+            for feature, importance in fold_importance.items():
+                fold_importance_scores[feature].append(importance)
+
+        avg_importance = {
+            f: float(np.mean(scores)) if scores else 0.0
+            for f, scores in fold_importance_scores.items()
+        }
+
+        return avg_importance, float(np.mean(valid_scores)), float(np.std(valid_scores))
+
+    def _predict(self, estimator, X: pd.DataFrame) -> np.ndarray:
+        """
+        Make predictions using the estimator.
+
+        Supports both regular estimators and EnsembleModel instances.
+
+        Args:
+            estimator: Fitted estimator or EnsembleModel.
+            X (pd.DataFrame): Feature matrix.
+
+        Returns:
+            np.ndarray: Predictions.
 
         Raises:
-            ValueError: If permutation_importance fails.
+            ValueError: When estimator does not have predict or predict_proba method.
         """
-
-        try:
-            _, valid_scores, _ = self.cross_validator.fit(
-                self.estimator, x_data[current_features], y_data
+        if hasattr(estimator, "predict_proba") and self.metric_type == "probs":
+            preds = estimator.predict_proba(X)
+            if preds.ndim == 2 and preds.shape[1] == 2:
+                return preds[:, 1]
+            return preds
+        elif hasattr(estimator, "predict"):
+            return estimator.predict(X)
+        else:
+            raise ValueError(
+                f"Estimator {type(estimator).__name__} does not have predict or predict_proba method"
             )
-            estimator_ = self.cross_validator.fitted_estimators_[0]
-
-            result = permutation_importance(
-                estimator_,
-                x_data[current_features],
-                y_data,
-                scoring=self.scorer,
-                n_repeats=self.n_repeats,
-                random_state=self.random_state,
-                n_jobs=-1,
-            )
-            avg_importance = {
-                feature: float(imp)
-                for feature, imp in zip(current_features, result.importances_mean)
-            }
-            return (
-                avg_importance,
-                float(np.mean(valid_scores)),
-                float(np.std(valid_scores)),
-            )
-        except Exception as exc:
-            raise ValueError(f"Permutation importance failed: {exc}") from exc
 
     def compute_removal_schedule(self, total_removable_features: int) -> list[int]:
         """
@@ -315,6 +452,7 @@ class PermutationRecursiveFeatureElimination:
         removal_counts = removal_counts.tolist()
         while removal_counts and removal_counts[-1] == 0:
             removal_counts.pop()
+
         return removal_counts
 
     def _log_step(
@@ -373,11 +511,14 @@ class PermutationRecursiveFeatureElimination:
         Select features by maximizing a weighted metric/features score.
 
         Args:
-            history (pd.DataFrame): Step-wise elimination history.
-            alpha (float | None, optional): Weight for metric vs. features. Defaults to self.alpha.
+            history (pd.DataFrame): History dataframe containing step-wise metrics.
+            alpha (float | None, optional): Weight for metric vs feature count balance.
+                If None, uses self.alpha. Defaults to None.
 
         Returns:
-            tuple[list[str], float | None]: Selected features and their metric value.
+            tuple[list[str], float | None]: Tuple containing:
+                - list of selected feature names
+                - metric value at the selected step (or None if history is empty)
         """
         if history.empty:
             return [], None
