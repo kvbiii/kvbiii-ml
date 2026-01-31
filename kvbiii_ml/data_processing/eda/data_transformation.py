@@ -1,65 +1,17 @@
 import pandas as pd
 
+from kvbiii_ml.data_processing.feature_engineering.categorical_aligner import (
+    CategoricalAligner,
+)
+from kvbiii_ml.data_processing.feature_engineering.numerical_downcaster import (
+    NumericalDowncaster,
+)
+
 
 class DataTransformer:
     """
     Class for transforming data types in a DataFrame to optimize memory usage and prepare data for modeling.
     """
-
-    @staticmethod
-    def reduce_numerical_dtypes(df: pd.DataFrame, verbose: bool = True) -> pd.DataFrame:
-        """Downcasts numerical features to more efficient types where possible.
-
-        Args:
-            df (pd.DataFrame): Input DataFrame with numerical features.
-            verbose (bool, optional): Whether to print memory usage before and after
-                reduction. Defaults to True.
-
-        Returns:
-            pd.DataFrame: DataFrame with reduced numerical dtypes.
-        """
-        df = df.copy()
-        start_mem = df.memory_usage(deep=True).sum() / 1024**2
-        for col in df.select_dtypes(include=["int", "float"]).columns:
-            col_type = df[col].dtype
-            if pd.api.types.is_integer_dtype(col_type):
-                df[col] = pd.to_numeric(df[col], downcast="integer")
-            elif pd.api.types.is_float_dtype(col_type):
-                df[col] = pd.to_numeric(df[col], downcast="float")
-        end_mem = df.memory_usage(deep=True).sum() / 1024**2
-        if verbose:
-            print(
-                f"Numerical dtypes reduced: {start_mem:.2f} MB → {end_mem:.2f} MB ({100*(start_mem-end_mem)/start_mem:.1f}% reduction)"
-            )
-        return df
-
-    @staticmethod
-    def convert_to_category(
-        df: pd.DataFrame, categorical_features: list[str], verbose: bool = True
-    ) -> pd.DataFrame:
-        """Converts specified features to category dtype.
-
-        Args:
-            df (pd.DataFrame): Input DataFrame.
-            categorical_features (list[str]): List of features to convert to category dtype.
-            verbose (bool, optional): Whether to print memory usage before and after
-                conversion. Defaults to True.
-
-        Returns:
-            pd.DataFrame: DataFrame with specified features converted to category dtype.
-        """
-        df = df.copy()
-        start_mem = df.memory_usage(deep=True).sum() / 1024**2
-        for col in categorical_features:
-            if col in df.columns:
-                df[col] = df[col].astype(str)
-                df[col] = df[col].astype("category")
-        end_mem = df.memory_usage(deep=True).sum() / 1024**2
-        if verbose:
-            print(
-                f"Categorical dtypes converted: {start_mem:.2f} MB → {end_mem:.2f} MB ({100*(start_mem-end_mem)/start_mem:.1f}% reduction)"
-            )
-        return df
 
     @staticmethod
     def optimize_memory(
@@ -77,10 +29,32 @@ class DataTransformer:
         """
         df = df.copy()
         start_mem = df.memory_usage(deep=True).sum() / 1024**2
-        df = DataTransformer.reduce_numerical_dtypes(df, verbose=verbose)
-        df = DataTransformer.convert_to_category(
-            df, categorical_features, verbose=verbose
-        )
+
+        numerical_cols = df.select_dtypes(include=["int", "float"]).columns.tolist()
+        if numerical_cols:
+            if verbose:
+                num_start_mem = df.memory_usage(deep=True).sum() / 1024**2
+            downcaster = NumericalDowncaster(columns=numerical_cols)
+            df = downcaster.fit_transform(df)
+            if verbose:
+                num_end_mem = df.memory_usage(deep=True).sum() / 1024**2
+                print(
+                    f"Numerical dtypes reduced: {num_start_mem:.2f} MB → {num_end_mem:.2f} MB ({100*(num_start_mem-num_end_mem)/num_start_mem:.1f}% reduction)"
+                )
+
+        if categorical_features:
+            if verbose:
+                cat_start_mem = df.memory_usage(deep=True).sum() / 1024**2
+            aligner = CategoricalAligner(
+                categorical_features=categorical_features, warn_on_unknown=False
+            )
+            df = aligner.fit_transform(df)
+            if verbose:
+                cat_end_mem = df.memory_usage(deep=True).sum() / 1024**2
+                print(
+                    f"Categorical dtypes converted: {cat_start_mem:.2f} MB → {cat_end_mem:.2f} MB ({100*(cat_start_mem-cat_end_mem)/cat_start_mem:.1f}% reduction)"
+                )
+
         end_mem = df.memory_usage(deep=True).sum() / 1024**2
         if verbose:
             print(
@@ -141,16 +115,8 @@ if __name__ == "__main__":
 
     transformer = DataTransformer()
 
-    # 1) Reduce numerical dtypes
-    reduced_df = transformer.reduce_numerical_dtypes(sample_data)
-
-    # 2) Convert selected features to category
-    cat_feats = ["categorical_feature"]
-    cat_df = transformer.convert_to_category(reduced_df, cat_feats)
-
-    # 3) Full optimization (reduce + convert)
     optimized_df = transformer.optimize_memory(
-        sample_data, categorical_features=cat_feats
+        sample_data, categorical_features=["categorical_feature"]
     )
 
     print(
