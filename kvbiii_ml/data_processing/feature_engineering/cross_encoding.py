@@ -1,5 +1,3 @@
-"""Module for cross-feature encoding through feature combinations."""
-
 import gc
 from itertools import combinations
 
