@@ -11,7 +11,7 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
 
     def __init__(
         self,
-        categorical_features: list[str],
+        categorical_features: list[str] | None = None,
         fill_values: dict[str, str] | None = None,
         warn_on_unknown: bool = True,
     ):
@@ -19,7 +19,8 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
         Initialize the CategoricalAligner.
 
         Args:
-            categorical_features (list[str]): List of categorical features names.
+            categorical_features (list[str] | None, optional): List of categorical features names.
+                If None, will auto-detect object and category dtype columns during fit. Defaults to None.
             fill_values (dict[str, str] | None, optional): Dictionary mapping feature names to custom fill values for unknown categories. Defaults to None.
             warn_on_unknown (bool, optional): Whether to raise warnings when unknown categories are found. Defaults to True.
         """
@@ -71,12 +72,16 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
             CategoricalAligner: Fitted transformer.
         """
         X = X.copy()
+        if self.categorical_features is None:
+            self.categorical_features = X.select_dtypes(
+                include=["object", "category"]
+            ).columns.tolist()
         for feature in self.categorical_features:
             if feature not in X.columns:
                 continue
             mode_series = X[feature].mode(dropna=True)
             self.modes_[feature] = (
-                str(mode_series[0]) if not mode_series.empty else "Brak"
+                str(mode_series[0]) if not mode_series.empty else "Unknown"
             )
             fill_value = self._get_fill_value(feature)
             X[feature] = X[feature].fillna(fill_value).astype("str").astype("category")
