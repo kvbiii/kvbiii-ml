@@ -1,5 +1,3 @@
-"""Module for count encoding feature generation."""
-
 import gc
 
 import numpy as np
