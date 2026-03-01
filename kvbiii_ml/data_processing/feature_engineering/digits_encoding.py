@@ -21,7 +21,7 @@ class DigitsEncodingFeatureGenerator:
 
     def __init__(
         self,
-        features_names: list[str] | None = None,
+        features_names: list[str] = [],
         fill_value: int = -1,
         dtype: str = "int8",
         min_digits: int = 2,
@@ -32,8 +32,7 @@ class DigitsEncodingFeatureGenerator:
 
         Args:
             features_names (list[str] | None, optional): List of feature names to
-                extract digits from. If None, all numeric columns will be used.
-                Defaults to None.
+                extract digits from. If None or empty, all numeric features will be used. Defaults to [].
             fill_value (int, optional): Value to use for NaN entries. Defaults to -1.
             dtype (str, optional): Data type for output columns. Defaults to "int8".
             min_digits (int, optional): Minimum number of digit positions to extract
@@ -168,10 +167,15 @@ class DigitsEncodingFeatureGenerator:
             KeyError: If specified features are missing from X.
         """
         self._validate_fit_inputs(X)
-
-        if self.features_names is None:
+        if not self.features_names:
             self.features_names = [
                 col for col in X.columns if pd.api.types.is_numeric_dtype(X[col])
+            ]
+        else:
+            self.features_names = [
+                col
+                for col in self.features_names
+                if pd.api.types.is_numeric_dtype(X[col])
             ]
 
         self.feature_configs_ = {}
@@ -317,6 +321,7 @@ if __name__ == "__main__":
     data = {
         "annual_income": [45000.50, 75000.00, 32000.75, 120000.25],
         "interest_rate": [3.75, 4.25, 5.50, 2.99],
+        "string_feature": ["A", "B", "C", "D"],
     }
     df = pd.DataFrame(data)
 
@@ -324,7 +329,7 @@ if __name__ == "__main__":
     print(df)
     print()
 
-    digits_generator = DigitsEncodingFeatureGenerator(fill_value=-1, dtype="int8")
+    digits_generator = DigitsEncodingFeatureGenerator(fill_value=-1)
 
     transformed_df = digits_generator.fit_transform(df)
     print("Transformed DataFrame:")
