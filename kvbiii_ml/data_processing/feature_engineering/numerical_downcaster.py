@@ -1,72 +1,137 @@
+from typing import Any
+import warnings
 import pandas as pd
+import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 
 
 class NumericalDowncaster(BaseEstimator, TransformerMixin):
-    """Downcast numerical features to more efficient dtypes.
-
-    For each feature in numerical_features, the transformer applies pandas
-    to_numeric with downcast='integer' for integer types and downcast='float'
-    for float types, reducing memory usage while preserving values.
+    """
+    Transformer to downcast numerical columns to smaller dtypes to reduce memory usage.
     """
 
-    def __init__(self, numerical_features: list[str]):
-        """Initialize the downcaster.
-
-        Args:
-            numerical_features (list[str]): List of column names to downcast.
+    def __init__(
+        self,
+        columns: list[str] | None = None,
+        int_downcast: bool = True,
+        float_downcast: bool = True,
+    ):
         """
-        self.numerical_features = numerical_features
-
-    def fit(self, X: pd.DataFrame, y: object | None = None) -> "NumericalDowncaster":
-        """Store input feature names.
+        Initialize the NumericalDowncaster.
 
         Args:
-            X (pd.DataFrame): Input DataFrame.
-            y (object | None, optional): Ignored. Present for compatibility.
+            columns (list[str] | None, optional): List of column names to downcast.
+                If None, all numeric columns will be downcasted. Defaults to None.
+            int_downcast (bool, optional): Whether to downcast integer types. Defaults to True.
+            float_downcast (bool, optional): Whether to downcast float types to float32. Defaults to True.
+        """
+        self.columns = columns
+        self.int_downcast = int_downcast
+        self.float_downcast = float_downcast
+        self.dtype_map_ = None
+
+    def fit(self, X: pd.DataFrame, y: pd.Series | None = None) -> "NumericalDowncaster":
+        """
+        Fit method that determines optimal dtypes for numerical columns.
+
+        Args:
+            X (pd.DataFrame): Training data.
+            y (pd.Series | None, optional): Target (unused). Defaults to None.
 
         Returns:
             NumericalDowncaster: Fitted transformer.
         """
-        self.input_features_ = X.columns
+        columns_to_process = self.columns if self.columns is not None else X.columns
+        self.dtype_map_ = {
+            col: self._get_optimal_dtype(X[col])
+            for col in columns_to_process
+            if col in X.columns and pd.api.types.is_numeric_dtype(X[col])
+        }
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        """Downcast specified numerical features to smaller dtypes.
+        """
+        Transform data by downcasting numerical columns to smaller dtypes.
 
         Args:
-            X (pd.DataFrame): Input DataFrame.
+            X (pd.DataFrame): Data to transform.
 
         Returns:
-            pd.DataFrame: Transformed DataFrame with downcasted numerical features.
+            pd.DataFrame: Transformed data with downcasted dtypes.
         """
         X = X.copy()
-        for col in self.numerical_features:
-            if col in X.columns:
-                col_type = X[col].dtype
-                if pd.api.types.is_integer_dtype(col_type):
-                    X[col] = pd.to_numeric(X[col], downcast="integer")
-                elif pd.api.types.is_float_dtype(col_type):
-                    X[col] = pd.to_numeric(X[col], downcast="float")
+        for column, target_dtype in self.dtype_map_.items():
+            if column in X.columns:
+                try:
+                    X[column] = X[column].astype(target_dtype)
+                except (ValueError, TypeError) as e:
+                    warnings.warn(
+                        f"Failed to downcast column '{column}' to {target_dtype}: {e}",
+                        UserWarning,
+                        stacklevel=2,
+                    )
         return X
 
-    def get_feature_names_out(
-        self, input_features: list[str] | None = None
-    ) -> pd.Index:
-        """Return feature names seen during fit.
+    def _get_optimal_dtype(self, series: pd.Series) -> Any:
+        """
+        Determine optimal dtype for a numerical series with downcasting.
 
         Args:
-            input_features (list[str] | None, optional): Unused; for API symmetry.
+            series (pd.Series): Series to analyze.
 
         Returns:
-            pd.Index: Original feature names.
+            Any: Optimal dtype for the series.
         """
-        return self.input_features_
+        dtype = series.dtype
+
+        if pd.api.types.is_integer_dtype(dtype) and self.int_downcast:
+            return self._downcast_integer(series)
+        elif pd.api.types.is_float_dtype(dtype) and self.float_downcast:
+            return self._downcast_float(series)
+        return dtype
+
+    def _downcast_integer(self, series: pd.Series) -> Any:
+        """
+        Downcast integer series to smallest possible signed integer type.
+
+        Args:
+            series (pd.Series): Integer series to downcast.
+
+        Returns:
+            Any: Optimal signed integer dtype.
+        """
+        if series.isna().any():
+            return np.float32
+
+        min_val, max_val = series.min(), series.max()
+
+        return next(
+            (
+                dtype
+                for dtype, info in [
+                    (np.int8, np.iinfo(np.int8)),
+                    (np.int16, np.iinfo(np.int16)),
+                    (np.int32, np.iinfo(np.int32)),
+                ]
+                if info.min <= min_val and max_val <= info.max
+            ),
+            np.int64,
+        )
+
+    def _downcast_float(self, series: pd.Series) -> Any:
+        """
+        Downcast float series to float32.
+
+        Args:
+            series (pd.Series): Float series to downcast.
+
+        Returns:
+            Any: float32 dtype.
+        """
+        return np.float32
 
 
 if __name__ == "__main__":
-    import numpy as np
-
     # Create sample DataFrame with various numerical types
     df_train = pd.DataFrame(
         {
