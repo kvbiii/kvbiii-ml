@@ -24,6 +24,7 @@ class TargetEncodingFeatureGenerator:
         batch_size: int = 10,
         is_continuous_target: bool = False,
         target_bins: int = 4,
+        random_state: int | None = 17,
     ) -> None:
         """
         Initialize the TargetEncodingFeatureGenerator.
@@ -45,6 +46,8 @@ class TargetEncodingFeatureGenerator:
                 should be binned into quantiles. Defaults to False.
             target_bins (int, optional): Number of quantile bins to divide continuous
                 target into. Defaults to 4.
+            random_state (int | None, optional): Random seed for reproducibility.
+                Defaults to 17.
         """
         self.features_names = features_names
         self.aggregation = aggregation
@@ -55,6 +58,7 @@ class TargetEncodingFeatureGenerator:
         self.batch_size = batch_size
         self.is_continuous_target = is_continuous_target
         self.target_bins = target_bins
+        self.random_state = random_state
         self.bin_edges_: dict[str, np.ndarray] = {}
         self.group_stats_: dict[str, pd.Series] = {}
         self.global_stat: float = 0.0
@@ -62,6 +66,9 @@ class TargetEncodingFeatureGenerator:
         self._fitted_index: pd.Index | None = None
         self._fitted_te_df: pd.DataFrame | None = None
         self._validate_init_params()
+
+        if self.random_state is not None:
+            np.random.seed(self.random_state)
 
     def _validate_init_params(self) -> None:
         """
@@ -93,6 +100,8 @@ class TargetEncodingFeatureGenerator:
             raise ValueError("is_continuous_target must be a boolean.")
         if not isinstance(self.target_bins, int) or self.target_bins < 2:
             raise ValueError("target_bins must be an integer >= 2.")
+        if self.random_state is not None and not isinstance(self.random_state, int):
+            raise ValueError("random_state must be None or an integer.")
 
     def _bin_continuous_target(self, y: pd.Series) -> pd.Series:
         """
@@ -105,10 +114,10 @@ class TargetEncodingFeatureGenerator:
             pd.Series: Binned target as a Series of integers.
         """
         if self.target_bin_edges_ is None:
-            self.target_bin_edges_ = np.quantile(
-                y, np.linspace(0, 1, self.target_bins + 1)
-            )
-            self.target_bin_edges_[-1] *= 1.001
+            quantiles = np.linspace(0, 1, self.target_bins + 1)
+            self.target_bin_edges_ = np.quantile(y, quantiles)
+            self.target_bin_edges_ = np.round(self.target_bin_edges_, decimals=10)
+            self.target_bin_edges_[-1] = self.target_bin_edges_[-1] * 1.001
 
         labels = list(range(self.target_bins))
         return pd.cut(
@@ -156,10 +165,14 @@ class TargetEncodingFeatureGenerator:
         if feature_name in self.bin_edges_:
             bin_edges = self.bin_edges_[feature_name]
         else:
-            bin_edges = np.linspace(
-                X[feature_name].min(), X[feature_name].max(), self.n_bins + 1
-            )
-            bin_edges[-1] *= 1.001
+            min_val = X[feature_name].min()
+            max_val = X[feature_name].max()
+            if min_val == max_val:
+                bin_edges = np.array([min_val - 0.001, max_val + 0.001])
+            else:
+                bin_edges = np.linspace(min_val, max_val, self.n_bins + 1)
+                bin_edges = np.round(bin_edges, decimals=10)
+                bin_edges[-1] = bin_edges[-1] * 1.001
             self.bin_edges_[feature_name] = bin_edges
 
         labels = [f"bin_{i}" for i in range(len(bin_edges) - 1)]
@@ -191,7 +204,7 @@ class TargetEncodingFeatureGenerator:
 
         group_stats = (
             prepared_target.groupby(
-                feature_values.rename(feature_name), sort=False, observed=True
+                feature_values.rename(feature_name), sort=True, observed=True
             )
             .agg([self.aggregation, "count"])
             .reset_index()
@@ -449,7 +462,9 @@ if __name__ == "__main__":
     transformed_df = te_generator.fit_transform(
         df[["feature1", "feature2", "num_feature"]], df["target"]
     )
-    print(transformed_df)
+    transformed_df_temp = transformed_df.copy()
+    transformed_df_temp["target"] = df["target"]
+    print(transformed_df_temp)
     for feature in te_generator.features_names:
         print(f"\nGroup stats for {feature}:")
         print(te_generator.group_stats_[feature])
