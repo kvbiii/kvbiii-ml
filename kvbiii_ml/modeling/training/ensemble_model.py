@@ -2,12 +2,12 @@ import gc
 from collections.abc import Iterable
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator, ClassifierMixin, clone
+from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin, clone
 
 from kvbiii_ml.modeling.training.base_trainer import BaseTrainer
 
 
-class EnsembleModel(BaseTrainer, BaseEstimator, ClassifierMixin):
+class EnsembleModel(BaseTrainer, BaseEstimator):
     """Ensemble model combining multiple base estimators."""
 
     def __init__(
@@ -32,11 +32,27 @@ class EnsembleModel(BaseTrainer, BaseEstimator, ClassifierMixin):
                 "problem_type must be either 'classification' or 'regression'."
             )
 
-        self.estimators = list(estimators)
+        self.estimators = estimators
         self.problem_type = problem_type
-        self.weights = self._validate_and_normalize_weights(weights)
+        self.weights = weights
+        self._estimators_list = list(estimators)
+        self._weights_normalized = self._validate_and_normalize_weights(weights)
         self.classes_: np.ndarray | None = None
         self.fitted_estimators_: list[BaseEstimator] = []
+
+        # Dynamically add the appropriate mixin
+        if problem_type == "classification":
+            self.__class__ = type(
+                self.__class__.__name__,
+                (ClassifierMixin, BaseTrainer, BaseEstimator),
+                dict(self.__class__.__dict__),
+            )
+        else:
+            self.__class__ = type(
+                self.__class__.__name__,
+                (RegressorMixin, BaseTrainer, BaseEstimator),
+                dict(self.__class__.__dict__),
+            )
 
     def _validate_and_normalize_weights(self, weights: np.ndarray | None) -> np.ndarray:
         """Validate and normalize estimator weights.
@@ -52,9 +68,11 @@ class EnsembleModel(BaseTrainer, BaseEstimator, ClassifierMixin):
                 non-finite values, or sums to zero.
         """
         if weights is None:
-            return np.ones(len(self.estimators), dtype=float) / len(self.estimators)
+            return np.ones(len(self._estimators_list), dtype=float) / len(
+                self._estimators_list
+            )
         w = np.asarray(weights, dtype=float)
-        if w.shape[0] != len(self.estimators):
+        if w.shape[0] != len(self._estimators_list):
             raise ValueError(
                 "The number of estimators must match the number of weights."
             )
@@ -94,7 +112,7 @@ class EnsembleModel(BaseTrainer, BaseEstimator, ClassifierMixin):
             X_valid, y_valid = None, None
         self.fitted_estimators_ = []
         self._X_train = X_train
-        for base_estimator in self.estimators:
+        for base_estimator in self._estimators_list:
             try:
                 estimator = clone(base_estimator)
             except TypeError:
@@ -172,7 +190,7 @@ class EnsembleModel(BaseTrainer, BaseEstimator, ClassifierMixin):
                 raise RuntimeError("All estimators failed during prediction.")
 
             predictions = np.array(predictions)
-            active_weights = self.weights[successful_indices]
+            active_weights = self._weights_normalized[successful_indices]
             active_weights = active_weights / active_weights.sum()
 
             predictions = np.average(predictions, axis=0, weights=active_weights)
@@ -194,8 +212,13 @@ class EnsembleModel(BaseTrainer, BaseEstimator, ClassifierMixin):
             np.ndarray: Averaged class probabilities.
 
         Raises:
-            RuntimeError: If called before fitting.
+            RuntimeError: If called before fitting or if problem_type is regression.
         """
+        if self.problem_type == "regression":
+            raise AttributeError(
+                "predict_proba is not available for regression problems"
+            )
+
         if not hasattr(self, "fitted_estimators_") or len(self.fitted_estimators_) == 0:
             raise RuntimeError("EnsembleModel must be fitted before calling predict().")
 
@@ -215,7 +238,7 @@ class EnsembleModel(BaseTrainer, BaseEstimator, ClassifierMixin):
             if not predictions:
                 raise RuntimeError("All estimators failed during prediction.")
             predictions = np.array(predictions)
-            active_weights = self.weights[successful_indices]
+            active_weights = self._weights_normalized[successful_indices]
             active_weights = active_weights / active_weights.sum()
 
             return np.average(predictions, axis=0, weights=active_weights)
@@ -253,9 +276,15 @@ class EnsembleModel(BaseTrainer, BaseEstimator, ClassifierMixin):
             predictions.append(estimator_predictions)
         predictions = np.array(predictions)
         if self.problem_type == "regression":
-            mean_pred = np.average(predictions, axis=0, weights=self.weights)
+            mean_pred = np.average(
+                predictions, axis=0, weights=self._weights_normalized
+            )
             std_pred = np.sqrt(
-                np.average((predictions - mean_pred) ** 2, axis=0, weights=self.weights)
+                np.average(
+                    (predictions - mean_pred) ** 2,
+                    axis=0,
+                    weights=self._weights_normalized,
+                )
             )
             ci_lower = mean_pred - 1.96 * std_pred
             ci_upper = mean_pred + 1.96 * std_pred
@@ -268,7 +297,9 @@ class EnsembleModel(BaseTrainer, BaseEstimator, ClassifierMixin):
             }
 
         else:
-            mean_proba = np.average(predictions, axis=0, weights=self.weights)
+            mean_proba = np.average(
+                predictions, axis=0, weights=self._weights_normalized
+            )
             pred_class = np.argmax(mean_proba, axis=1)
             pred_confidence = mean_proba[np.arange(len(pred_class)), pred_class]
             disagreement = predictions[:, np.arange(len(pred_class)), pred_class].std(
@@ -344,7 +375,7 @@ class EnsembleModel(BaseTrainer, BaseEstimator, ClassifierMixin):
             )
 
         importances = np.array(importances)
-        active_weights = self.weights[successful_indices]
+        active_weights = self._weights_normalized[successful_indices]
         active_weights = active_weights / active_weights.sum()
 
         return np.average(importances, axis=0, weights=active_weights)
