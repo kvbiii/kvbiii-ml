@@ -143,8 +143,8 @@ class DigitsEncodingFeatureGenerator:
         """
         column_name = f"{feature_name}_d{position}"
         abs_series = series.abs()
-        extracted = ((abs_series * (10 ** (-position))) % 10).astype(int)
-        extracted = extracted.fillna(self.fill_value)
+        extracted = (abs_series * (10 ** (-position))) % 10
+        extracted = extracted.fillna(self.fill_value).astype(int)
         return extracted.astype(self.dtype).rename(column_name)
 
     def fit(self, X: pd.DataFrame, y=None) -> "DigitsEncodingFeatureGenerator":
