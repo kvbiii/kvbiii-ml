@@ -1,14 +1,19 @@
 import itertools
+
 import numpy as np
 import pandas as pd
+
 try:  # optional dependency
     from kvbiii_plots.eda.multivariate_plots import MultivariatePlots  # type: ignore
 except Exception:  # pragma: no cover
+
     class MultivariatePlots:  # type: ignore
         def __init__(self, *_, **__):
             pass
+
         def heatmap(self, *_, **__):
             return None
+
 
 multivariate_plots = MultivariatePlots()
 
