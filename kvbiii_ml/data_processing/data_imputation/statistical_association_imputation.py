@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+
 try:  # optional interactive display
     from IPython.display import display  # type: ignore
 except Exception:  # pragma: no cover
+
     def display(obj):  # type: ignore
         print(obj)
+
+
 from scipy.stats import chi2_contingency, ks_2samp
 from sklearn.feature_selection import mutual_info_classif
 
@@ -472,8 +476,8 @@ class StatisticalAssociationImputer:
 
 if __name__ == "__main__":
     # Minimal runnable example
-    import pandas as pd
     import numpy as np
+    import pandas as pd
 
     data = pd.DataFrame(
         {
