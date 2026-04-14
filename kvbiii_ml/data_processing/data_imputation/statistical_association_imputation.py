@@ -1,24 +1,28 @@
 from __future__ import annotations
 
+from collections import defaultdict
+from math import log
+
 import numpy as np
 import pandas as pd
-
-try:  # optional interactive display
-    from IPython.display import display  # type: ignore
-except Exception:  # pragma: no cover
-
-    def display(obj):  # type: ignore
-        print(obj)
-
-
 from scipy.stats import chi2_contingency, ks_2samp
 from sklearn.feature_selection import mutual_info_classif
 
+try:  # optional interactive display
+    from IPython.display import display  # type: ignore
+except ImportError:  # pragma: no cover
+
+    def display(obj):  # type: ignore
+        """Fallback display for non-interactive environments."""
+        print(obj)
+
 
 class StatisticalAssociationImputer:
+    """Imputes missing values using association-ranked grouping statistics."""
+
     def __init__(
         self,
-        metrics: list[str] = ["cramers_v", "mutual_info", "theils_u"],
+        metrics: list[str] | None = None,
         top_n: int = 2,
         verbose: bool = False,
     ) -> None:
@@ -26,15 +30,16 @@ class StatisticalAssociationImputer:
         Initialize the imputer.
 
         Args:
-            metrics (list[str]): Association metrics to use for ranking. Defaults to ["cramers_v", "mutual_info", "theils_u"].
+            metrics (list[str]):
+                Association metrics to use for ranking. Defaults to
+                ["cramers_v", "mutual_info", "theils_u"].
             top_n (int): Number of top-ranked columns to use for grouping. Defaults to 2.
             verbose (bool): Whether to print progress information. Defaults to False.
         """
-        self.metrics = metrics
+        self.metrics = metrics or ["cramers_v", "mutual_info", "theils_u"]
         self.top_n = top_n
         self.verbose = verbose
         self.rankings = None
-        self.selected_cols = None
         self.bin_edges = {}
         self.categorical_columns = None
         self.impute_stats = None
@@ -56,16 +61,16 @@ class StatisticalAssociationImputer:
         self.bin_edges = {}
         self.categorical_columns = self._get_categorical_columns(df)
 
-        all_features = [col for col in df.columns]
+        all_features = list(df.columns)
         if self.verbose:
             print(f"Preparing imputation statistics for all features: {all_features}")
         self.impute_stats = {}
         for feature in all_features:
             self.rank_metrics(df, feature)
-            self.select_grouping_columns()
+            selected_cols = self.select_grouping_columns()
             self.impute_stats[feature] = {
-                "stats": self.calculate_stats(df, feature),
-                "selected_cols": self.selected_cols.copy(),
+                "stats": self.calculate_stats(df, feature, selected_cols),
+                "selected_cols": selected_cols.copy(),
                 "rankings": self.rankings.copy(),
             }
 
@@ -123,9 +128,11 @@ class StatisticalAssociationImputer:
                 continue
 
             feature_info = self.impute_stats[feature]
-            self.selected_cols = feature_info["selected_cols"]
+            selected_cols = feature_info["selected_cols"]
 
-            df = self.impute_with_stats(df, feature, feature_info["stats"])
+            df = self.impute_with_stats(
+                df, feature, feature_info["stats"], selected_cols
+            )
 
             if self.verbose:
                 self.ks_test(df, feature)
@@ -163,8 +170,6 @@ class StatisticalAssociationImputer:
         Returns:
             pd.DataFrame: Rankings with metric scores and cumulative ranks.
         """
-        from collections import defaultdict
-
         rankings = defaultdict(dict)
         df_bin = self.bin_dataframe(df, feature_name)
 
@@ -182,10 +187,10 @@ class StatisticalAssociationImputer:
             if len(temp) > 0:
                 temp_codes = temp.apply(lambda s: s.astype("category").cat.codes)
                 y = temp_codes[feature_name].values
-                X_codes = temp_codes.drop(columns=[feature_name])
-                if X_codes.shape[1] > 0:
-                    mi = mutual_info_classif(X_codes.values, y, discrete_features=True)
-                    for i, col in enumerate(X_codes.columns):
+                x_codes = temp_codes.drop(columns=[feature_name])
+                if x_codes.shape[1] > 0:
+                    mi = mutual_info_classif(x_codes.values, y, discrete_features=True)
+                    for i, col in enumerate(x_codes.columns):
                         rankings["mutual_info"][col] = float(mi[i])
 
         if "theils_u" in self.metrics:
@@ -215,8 +220,10 @@ class StatisticalAssociationImputer:
 
         Args:
             df (pd.DataFrame): Input dataframe.
-            feature_name (str): Feature evaluated as the target (excluded from numeric binning set).
-            fit_bins (bool): Whether to compute new bins. If False, reuse stored bins. Defaults to True.
+            feature_name (str):
+                Feature evaluated as the target (excluded from numeric binning set).
+            fit_bins (bool):
+                Whether to compute new bins. If False, reuse stored bins. Defaults to True.
 
         Returns:
             pd.DataFrame: Dataframe with binned numeric features.
@@ -229,7 +236,6 @@ class StatisticalAssociationImputer:
             try:
                 non_na_data = df[col].dropna()
                 if len(non_na_data) > 1:
-                    # Compute bin edges once per numeric column; reuse thereafter to avoid recomputation.
                     if fit_bins and col not in self.bin_edges:
                         _, bin_edges = pd.qcut(
                             non_na_data, q=10, duplicates="drop", retbins=True
@@ -303,30 +309,28 @@ class StatisticalAssociationImputer:
             if temp_df["x"].nunique() <= 1 or temp_df["y"].nunique() <= 1:
                 return 0.0
             s_xy = pd.crosstab(temp_df["x"], temp_df["y"])
-            s_x = s_xy.sum(axis=1)
             s_y = s_xy.sum(axis=0)
             total = s_xy.sum().sum()
             if total == 0:
                 return 0.0
-            from math import log
 
-            H_y = -sum(
+            h_y = -sum(
                 (val / total) * log(val / total + 1e-10) for val in s_y if val > 0
             )
-            if H_y == 0:
+            if h_y == 0:
                 return 0.0
-            H_y_given_x = 0
+            h_y_given_x = 0.0
             for row in s_xy.itertuples(index=False):
                 row_total = sum(row)
                 if row_total == 0:
                     continue
-                H_row = -sum(
+                h_row = -sum(
                     (val / row_total) * log(val / row_total + 1e-10)
                     for val in row
                     if val > 0
                 )
-                H_y_given_x += row_total / total * H_row
-            return (H_y - H_y_given_x) / H_y
+                h_y_given_x += row_total / total * h_row
+            return (h_y - h_y_given_x) / h_y
         except (ValueError, ZeroDivisionError, IndexError):
             return 0.0
 
@@ -342,12 +346,17 @@ class StatisticalAssociationImputer:
         """
         if self.rankings is None:
             raise ValueError("Run rank_metrics first.")
-        self.selected_cols = self.rankings.head(self.top_n).index.tolist()
+        selected_cols = self.rankings.head(self.top_n).index.tolist()
         if self.verbose:
-            print(f"Selected grouping columns: {self.selected_cols}")
-        return self.selected_cols
+            print(f"Selected grouping columns: {selected_cols}")
+        return selected_cols
 
-    def calculate_stats(self, df: pd.DataFrame, feature_name: str) -> dict[str, object]:
+    def calculate_stats(
+        self,
+        df: pd.DataFrame,
+        feature_name: str,
+        selected_cols: list[str],
+    ) -> dict[str, object]:
         """
         Compute group-wise and overall statistics for a feature.
 
@@ -356,20 +365,21 @@ class StatisticalAssociationImputer:
         Args:
             df (pd.DataFrame): Data containing the feature and grouping columns.
             feature_name (str): Feature to compute statistics for.
+            selected_cols (list[str]): Grouping columns chosen from rankings.
 
         Returns:
-            dict[str, object]: Dictionary with keys "group" (mapping from grouped keys to stats)
-            and "overall" (overall fallback statistic).
+            dict[str, object]:
+                Dictionary with keys "group" (mapping from grouped keys to stats)
+                and "overall" (overall fallback statistic).
         """
         is_categorical = feature_name in self.categorical_columns
         df_binned = self.bin_dataframe(df, feature_name, fit_bins=False)
 
         df_for_stats = df_binned.copy()
         df_for_stats[feature_name] = df[feature_name]
-        grouping_cols_binned = []
-        for col in self.selected_cols:
-            if col in df_binned.columns:
-                grouping_cols_binned.append(col)
+        grouping_cols_binned = [
+            col for col in selected_cols if col in df_binned.columns
+        ]
 
         grouped = df_for_stats.groupby(
             grouping_cols_binned, observed=True, dropna=False
@@ -391,19 +401,32 @@ class StatisticalAssociationImputer:
         if len(grouping_cols_binned) == 1:
             group_stats.index = [(val,) for val in group_stats.index]
 
-        stat_dict = {"group": group_stats.to_dict(), "overall": overall_stat}
+        group_stats_dict = group_stats.to_dict()
         if self.verbose:
-            print("Stats by group (using binned grouping):")
-            for group, stat in stat_dict["group"].items():
-                group_str = ", ".join(
-                    f"{col}: {val}" for col, val in zip(self.selected_cols, group)
-                )
-                print(f"{group_str} -> {stat}")
-            print("Overall stat:", stat_dict["overall"])
-        return stat_dict
+            self._print_group_stats(selected_cols, group_stats_dict, overall_stat)
+        return {"group": group_stats_dict, "overall": overall_stat}
+
+    def _print_group_stats(
+        self,
+        selected_cols: list[str],
+        group_stats: dict[tuple[object, ...], object],
+        overall_stat: object,
+    ) -> None:
+        """Prints grouped and overall statistics for verbose diagnostics."""
+        print("Stats by group (using binned grouping):")
+        for group, stat in group_stats.items():
+            group_str = ", ".join(
+                f"{col}: {val}" for col, val in zip(selected_cols, group)
+            )
+            print(f"{group_str} -> {stat}")
+        print("Overall stat:", overall_stat)
 
     def impute_with_stats(
-        self, df: pd.DataFrame, feature_name: str, impute_stats: dict[str, object]
+        self,
+        df: pd.DataFrame,
+        feature_name: str,
+        impute_stats: dict[str, object],
+        selected_cols: list[str],
     ) -> pd.DataFrame:
         """
         Impute missing values using precomputed group-wise statistics.
@@ -412,9 +435,12 @@ class StatisticalAssociationImputer:
             df (pd.DataFrame): Data containing the feature to impute.
             feature_name (str): Feature to impute.
             impute_stats (dict[str, object]): Mapping with "group" and "overall" statistics.
+            selected_cols (list[str]): Grouping columns selected during fitting.
 
         Returns:
-            pd.DataFrame: Dataframe with an additional "imputed" column before assignment to the feature.
+            pd.DataFrame:
+                Dataframe with an additional "imputed" column before assignment
+                to the feature.
         """
         missing_mask = df[feature_name].isna()
         df["imputed"] = df[feature_name]
@@ -428,29 +454,30 @@ class StatisticalAssociationImputer:
         df_binned = self.bin_dataframe(df, feature_name, fit_bins=False)
 
         # Build mapping DataFrame from group stats dict
-        if len(self.selected_cols) == 1:
+        if len(selected_cols) == 1:
             # Keys are singletons like (val,), align with the single column
             mapping_df = pd.DataFrame(
                 [(k[0], v) for k, v in impute_stats["group"].items()],
-                columns=[self.selected_cols[0], "__group_stat__"],
+                columns=[selected_cols[0], "__group_stat__"],
             )
         else:
             mapping_index = pd.MultiIndex.from_tuples(
-                list(impute_stats["group"].keys()), names=self.selected_cols
+                list(impute_stats["group"].keys()), names=selected_cols
             )
             mapping_df = pd.Series(
                 impute_stats["group"], index=mapping_index, name="__group_stat__"
             ).reset_index()
 
-        to_impute = df_binned.loc[missing_mask, self.selected_cols].copy()
-        joined = to_impute.merge(mapping_df, on=self.selected_cols, how="left")
+        to_impute = df_binned.loc[missing_mask, selected_cols].copy()
+        joined = to_impute.merge(mapping_df, on=selected_cols, how="left")
         fill_values = joined["__group_stat__"].fillna(impute_stats["overall"]).values
 
         df.loc[missing_mask, "imputed"] = fill_values
         df.loc[missing_mask, f"{feature_name}_imputed"] = True
         if self.verbose:
             print(
-                f"Imputed {missing_mask.sum()} missing values in '{feature_name}' using group-wise statistics."
+                f"Imputed {missing_mask.sum()} missing values in '{feature_name}' "
+                "using group-wise statistics."
             )
         return df
 
@@ -468,17 +495,17 @@ class StatisticalAssociationImputer:
         original = df[feature_name].dropna()
         imputed = df["imputed"]
         ks_stat, ks_p = ks_2samp(original, imputed)
-        print(
-            f"KS Statistic: {ks_stat:.4f}, p-value: {ks_p:.4f} - {'Distributions are significantly different (reject H0)' if ks_p < 0.05 else 'Distributions are not significantly different (fail to reject H0)'}"
+        conclusion = (
+            "Distributions are significantly different (reject H0)"
+            if ks_p < 0.05
+            else "Distributions are not significantly different (fail to reject H0)"
         )
+        print(f"KS Statistic: {ks_stat:.4f}, p-value: {ks_p:.4f} - {conclusion}")
         return ks_stat, ks_p
 
 
 if __name__ == "__main__":
     # Minimal runnable example
-    import numpy as np
-    import pandas as pd
-
     data = pd.DataFrame(
         {
             "A": ["x", "y", None, "x", "y", None, "x"],
