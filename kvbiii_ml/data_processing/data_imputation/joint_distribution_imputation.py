@@ -3,19 +3,84 @@ import itertools
 import numpy as np
 import pandas as pd
 
-try:  # optional dependency
-    from kvbiii_plots.eda.multivariate_plots import MultivariatePlots  # type: ignore
-except Exception:  # pragma: no cover
+try:
+    from kvbiii_plots.eda.multivariate_plots import MultivariatePlots
+except ImportError:
 
-    class MultivariatePlots:  # type: ignore
-        def __init__(self, *_, **__):
-            pass
+    class MultivariatePlots:
+        """Fallback plotter used when optional plotting dependency is unavailable."""
 
-        def heatmap(self, *_, **__):
+        def __init__(self, *_: object, **__: object) -> None:
+            """Initialize a no-op fallback plotter."""
+
+        def heatmap(self, *_: object, **__: object) -> None:
+            """No-op heatmap method matching the optional dependency interface."""
+            return None
+
+        def show(self, *_: object, **__: object) -> None:
+            """No-op show method matching common plotting interfaces."""
             return None
 
 
 multivariate_plots = MultivariatePlots()
+
+
+def _get_joint_distribution(df: pd.DataFrame, col_impute: str, col_by: str) -> pd.DataFrame:
+    """Builds the contingency table used by the imputation routine."""
+    return df.groupby([col_impute, col_by], observed=False)[col_by].size().unstack().fillna(0)
+
+
+def _get_mapping(
+    joint_distribution: pd.DataFrame,
+    threshold_num_observation: int,
+) -> dict[str, str]:
+    """Builds deterministic by-value to imputed-value mapping."""
+    nonzero_counts = (joint_distribution != 0.0).sum(axis=0)
+    col_sums = joint_distribution.sum(axis=0)
+    eligible_cols = nonzero_counts.eq(1) & col_sums.ge(threshold_num_observation)
+    if not eligible_cols.any():
+        return {}
+
+    mapping: dict[str, str] = {}
+    for by_val in joint_distribution.columns[eligible_cols]:
+        a_vals = joint_distribution.index[joint_distribution[by_val] > 0]
+        if len(a_vals) == 1:
+            mapping[by_val] = a_vals[0]
+    return mapping
+
+
+def _plot_and_apply_mapping(
+    df: pd.DataFrame,
+    col_impute: str,
+    col_by: str,
+    mapping: dict[str, str],
+    joint_distribution: pd.DataFrame,
+) -> None:
+    """Plots imputation heatmap and writes imputed values in-place."""
+    mask = df[col_impute].isna() & df[col_by].isin(mapping)
+    if not mask.any():
+        return
+
+    by_vals_to_fill = df.loc[mask, col_by].unique().tolist()
+    highlights = [(mapping[bv], bv) for bv in by_vals_to_fill if bv in mapping]
+    multivariate_plots.heatmap(
+        data=joint_distribution,
+        xaxis_title=col_impute,
+        yaxis_title=col_by,
+        plot_title=f"Imputation map: {col_impute} by {col_by}",
+        highlights=highlights,
+    )
+
+    df.loc[mask, col_impute] = df.loc[mask, col_by].map(mapping)
+
+    for by_val, impute_val in mapping.items():
+        submask = mask & (df[col_by] == by_val)
+        count = int(submask.sum())
+        if count > 0:
+            print(
+                f"Imputed {count} rows for column {col_impute} with value: {impute_val} "
+                f"based on {col_by} column with value: {by_val}."
+            )
 
 
 def impute_missing_values(
@@ -35,73 +100,25 @@ def impute_missing_values(
         df (pd.DataFrame): Input DataFrame.
         categorical_to_impute (list[str]): Categorical columns with missing values.
         non_missing_categorical (list[str]): Categorical columns with no missing values.
-        threshold_num_observation (int, optional): Minimum observations required per by-category. Defaults to 10.
+        threshold_num_observation (int, optional):
+            Minimum observations required per by-category. Defaults to 10.
 
     Returns:
         pd.DataFrame: A copy of the DataFrame with imputed values.
     """
     df = df.copy()
-    for col_impute, col_by in itertools.product(
-        categorical_to_impute, non_missing_categorical
-    ):
-        # Cross-tab counts excluding NaNs in the column being imputed
-        joint_distribution = (
-            df.groupby([col_impute, col_by], observed=False)[col_by]
-            .size()
-            .unstack()
-            .fillna(0)
-        )
-
-        # Identify by-categories that map to exactly one non-zero category of col_impute
-        nonzero_counts = (joint_distribution != 0.0).sum(axis=0)
-        col_sums = joint_distribution.sum(axis=0)
-        eligible_cols = nonzero_counts.eq(1) & col_sums.ge(threshold_num_observation)
-        if not eligible_cols.any():
-            continue
-
-        # Build mapping: by_value -> impute_value
-        mapping: dict = {}
-        for by_val in joint_distribution.columns[eligible_cols]:
-            a_vals = joint_distribution.index[joint_distribution[by_val] > 0]
-            if len(a_vals) == 1:
-                mapping[by_val] = a_vals[0]
-
-        if not mapping:
-            continue
-
-        # Vectorized imputation for all eligible by-values
-        mask = df[col_impute].isna() & df[col_by].isin(mapping)
-        if mask.any():
-            by_vals_to_fill = df.loc[mask, col_by].unique().tolist()
-            highlights = [(mapping[bv], bv) for bv in by_vals_to_fill if bv in mapping]
-            multivariate_plots.heatmap(
-                data=joint_distribution,
-                xaxis_title=col_impute,
-                yaxis_title=col_by,
-                plot_title=f"Imputation map: {col_impute} by {col_by}",
-                highlights=highlights,
-            )
-
-            filled_values = df.loc[mask, col_by].map(mapping)
-            df.loc[mask, col_impute] = filled_values
-
-            # Per-category logging consistent with original intent
-            for by_val, impute_val in mapping.items():
-                submask = mask & (df[col_by] == by_val)
-                count = int(submask.sum())
-                if count > 0:
-                    print(
-                        f"Imputed {count} rows for column {col_impute} with value: {impute_val} "
-                        f"based on {col_by} column with value: {by_val}."
-                    )
+    for col_impute, col_by in itertools.product(categorical_to_impute, non_missing_categorical):
+        joint_distribution = _get_joint_distribution(df, col_impute, col_by)
+        mapping = _get_mapping(joint_distribution, threshold_num_observation)
+        if mapping:
+            _plot_and_apply_mapping(df, col_impute, col_by, mapping, joint_distribution)
     return df
 
 
-impute_with_joint_distribution = impute_missing_values  # pragma: no cover alias
+impute_with_joint_distribution = impute_missing_values
 
 
 if __name__ == "__main__":
-    # Minimal usage example ensuring deterministic imputation occurs
     rng = np.random.default_rng(17)
 
     n_u, n_v, n_w = 30, 25, 20
@@ -112,7 +129,6 @@ if __name__ == "__main__":
             "C": rng.choice(["m", "n"], size=n_u),
         }
     )
-    # Introduce missing A for some rows with B = 'u'
     miss_idx_u = rng.choice(n_u, size=8, replace=False)
     df_u.loc[miss_idx_u, "A"] = None
 
@@ -123,7 +139,6 @@ if __name__ == "__main__":
             "C": rng.choice(["m", "n"], size=n_v),
         }
     )
-    # Introduce missing A for some rows with B = 'v'
     miss_idx_v = rng.choice(n_v, size=5, replace=False)
     df_v.loc[miss_idx_v, "A"] = None
 
@@ -136,9 +151,7 @@ if __name__ == "__main__":
     )
 
     df_demo = pd.concat([df_u, df_v, df_w], ignore_index=True)
-    # Shuffle rows for realism
     df_demo = df_demo.sample(frac=1.0, random_state=17).reset_index(drop=True)
-    # Cast to category dtype
     for col in ["A", "B", "C"]:
         df_demo[col] = df_demo[col].astype("category")
 
