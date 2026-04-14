@@ -25,9 +25,16 @@ except ImportError:
 multivariate_plots = MultivariatePlots()
 
 
-def _get_joint_distribution(df: pd.DataFrame, col_impute: str, col_by: str) -> pd.DataFrame:
+def _get_joint_distribution(
+    df: pd.DataFrame, col_impute: str, col_by: str
+) -> pd.DataFrame:
     """Builds the contingency table used by the imputation routine."""
-    return df.groupby([col_impute, col_by], observed=False)[col_by].size().unstack().fillna(0)
+    return (
+        df.groupby([col_impute, col_by], observed=False)[col_by]
+        .size()
+        .unstack()
+        .fillna(0)
+    )
 
 
 def _get_mapping(
@@ -107,7 +114,9 @@ def impute_missing_values(
         pd.DataFrame: A copy of the DataFrame with imputed values.
     """
     df = df.copy()
-    for col_impute, col_by in itertools.product(categorical_to_impute, non_missing_categorical):
+    for col_impute, col_by in itertools.product(
+        categorical_to_impute, non_missing_categorical
+    ):
         joint_distribution = _get_joint_distribution(df, col_impute, col_by)
         mapping = _get_mapping(joint_distribution, threshold_num_observation)
         if mapping:
