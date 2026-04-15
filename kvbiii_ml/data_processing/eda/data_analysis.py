@@ -1,4 +1,8 @@
+from ast import literal_eval
+
+import numpy as np
 import pandas as pd
+from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
 
 
 class DataAnalyzer:
@@ -104,12 +108,12 @@ class DataAnalyzer:
             return []
         if isinstance(item_list, str):
             try:
-                item_list = eval(item_list)
-            except Exception:
+                item_list = literal_eval(item_list)
+            except (ValueError, SyntaxError):
                 return []
         if not isinstance(item_list, list):
             return []
-        return list(set([str(feature).strip().lower() for feature in item_list]))
+        return list({str(feature).strip().lower() for feature in item_list})
 
     @staticmethod
     def describe_numerical_feature(data: pd.DataFrame, feature: str) -> pd.DataFrame:
@@ -135,33 +139,33 @@ class DataAnalyzer:
         stats["Missing (%)"] = missing_pct
         stats = stats.rename(
             {
-            "count": "Count",
-            "mean": "Mean",
-            "std": "Std",
-            "min": "Min",
-            "25%": "Q1",
-            "50%": "Median",
-            "75%": "Q3",
-            "max": "Max",
+                "count": "Count",
+                "mean": "Mean",
+                "std": "Std",
+                "min": "Min",
+                "25%": "Q1",
+                "50%": "Median",
+                "75%": "Q3",
+                "max": "Max",
             }
         )
         stats = stats[
             [
-            "Count",
-            "Mean",
-            "Std",
-            "Min",
-            "5%",
-            "Q1",
-            "Median",
-            "Q3",
-            "95%",
-            "Max",
-            "variance",
-            "skewness",
-            "kurtosis",
-            "Missing",
-            "Missing (%)",
+                "Count",
+                "Mean",
+                "Std",
+                "Min",
+                "5%",
+                "Q1",
+                "Median",
+                "Q3",
+                "95%",
+                "Max",
+                "variance",
+                "skewness",
+                "kurtosis",
+                "Missing",
+                "Missing (%)",
             ]
         ]
         stats_df = stats.to_frame().T
@@ -169,44 +173,44 @@ class DataAnalyzer:
         styled_stats = (
             stats_df.style.set_caption(f"📈 {feature} Statistics")
             .format(
-            {
-                "Count": "{:,.0f}",
-                "Mean": "{:,.2f}",
-                "Std": "{:,.2f}",
-                "Min": "{:,.2f}",
-                "5%": "{:,.2f}",
-                "Q1": "{:,.2f}",
-                "Median": "{:,.2f}",
-                "Q3": "{:,.2f}",
-                "95%": "{:,.2f}",
-                "Max": "{:,.2f}",
-                "variance": "{:,.2f}",
-                "skewness": "{:,.2f}",
-                "kurtosis": "{:,.2f}",
-                "Missing": "{:,.0f}",
-                "Missing (%)": "{:.2f}%",
-            }
+                {
+                    "Count": "{:,.0f}",
+                    "Mean": "{:,.2f}",
+                    "Std": "{:,.2f}",
+                    "Min": "{:,.2f}",
+                    "5%": "{:,.2f}",
+                    "Q1": "{:,.2f}",
+                    "Median": "{:,.2f}",
+                    "Q3": "{:,.2f}",
+                    "95%": "{:,.2f}",
+                    "Max": "{:,.2f}",
+                    "variance": "{:,.2f}",
+                    "skewness": "{:,.2f}",
+                    "kurtosis": "{:,.2f}",
+                    "Missing": "{:,.0f}",
+                    "Missing (%)": "{:.2f}%",
+                }
             )
             .set_properties(
-            **{
-                "text-align": "left",
-                "font-family": "Times New Roman",
-                "font-size": "1.25em",
-                "background-color": "#f9f9f9",
-                "border": "1px solid #ddd",
-                "color": "#333",
-            }
+                **{
+                    "text-align": "left",
+                    "font-family": "Times New Roman",
+                    "font-size": "1.25em",
+                    "background-color": "#f9f9f9",
+                    "border": "1px solid #ddd",
+                    "color": "#333",
+                }
             )
             .set_table_styles(
-            [
-                {
-                "selector": "th",
-                "props": [
-                    ("font-weight", "bold"),
-                    ("border", "1px solid #ddd"),
-                ],
-                }
-            ]
+                [
+                    {
+                        "selector": "th",
+                        "props": [
+                            ("font-weight", "bold"),
+                            ("border", "1px solid #ddd"),
+                        ],
+                    }
+                ]
             )
         )
         return styled_stats
@@ -352,6 +356,88 @@ class DataAnalyzer:
             )
         )
         return styled_df
+
+    @staticmethod
+    def _prepare_features_for_mutual_information(
+        X: pd.DataFrame,
+    ) -> tuple[pd.DataFrame, np.ndarray | None]:
+        """Prepare feature matrix for mutual information computation."""
+        if not isinstance(X, pd.DataFrame):
+            raise ValueError("X must be a pandas DataFrame.")
+
+        discrete_columns = X.select_dtypes(
+            include=["category", "object", "bool"]
+        ).columns
+        if len(discrete_columns) == 0:
+            return X, None
+
+        X_prepared = X.copy()
+        for column in discrete_columns:
+            X_prepared[column] = pd.Categorical(X_prepared[column]).codes
+
+        discrete_features_mask = X_prepared.columns.isin(discrete_columns).astype(bool)
+        return X_prepared, discrete_features_mask
+
+    @staticmethod
+    def mutual_information_scores(
+        X: pd.DataFrame,
+        y: pd.Series | np.ndarray,
+        problem_type: str,
+        n_neighbors: int = 3,
+        random_state: int | None = 17,
+    ) -> dict[str, float]:
+        """Compute descending mutual information scores for all features.
+
+        Args:
+            X (pd.DataFrame): Feature matrix.
+            y (pd.Series | np.ndarray): Target variable aligned with X.
+            problem_type (str): Problem type, either "classification" or "regression".
+            n_neighbors (int, optional): Number of neighbors used by MI estimators.
+                Defaults to 3.
+            random_state (int | None, optional): Random state for reproducibility.
+                Defaults to 17.
+
+        Returns:
+            dict[str, float]: Ordered mapping from feature name to MI score sorted
+                from highest to lowest.
+
+        Raises:
+            ValueError: If input types are invalid or problem_type is unsupported.
+
+        Note:
+            Time complexity is dominated by sklearn MI estimation and is approximately
+            O(n_samples * n_features) for fixed n_neighbors; additional sorting is
+            O(n_features * log(n_features)).
+        """
+        if not isinstance(y, (pd.Series, np.ndarray)):
+            raise ValueError("y must be a pandas Series or numpy array.")
+        if problem_type not in {"classification", "regression"}:
+            raise ValueError(
+                "problem_type must be either 'classification' or 'regression'."
+            )
+
+        X_prepared, discrete_features_mask = (
+            DataAnalyzer._prepare_features_for_mutual_information(X)
+        )
+
+        mi_kwargs: dict[str, int | np.ndarray] = {"n_neighbors": n_neighbors}
+        if random_state is not None:
+            mi_kwargs["random_state"] = random_state
+        if discrete_features_mask is not None:
+            mi_kwargs["discrete_features"] = discrete_features_mask
+
+        if problem_type == "classification":
+            mi_scores = mutual_info_classif(X_prepared, y, **mi_kwargs)
+        else:
+            mi_scores = mutual_info_regression(X_prepared, y, **mi_kwargs)
+
+        mi_scores = np.nan_to_num(mi_scores, nan=0.0, posinf=0.0, neginf=0.0)
+        sorted_indices = np.argsort(mi_scores)[::-1]
+
+        return {
+            str(X_prepared.columns[idx]): float(mi_scores[idx])
+            for idx in sorted_indices
+        }
 
 
 if __name__ == "__main__":
