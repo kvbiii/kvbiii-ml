@@ -1,12 +1,5 @@
-"""
-Data cleaning utilities for preprocessing DataFrames.
-
-This module provides comprehensive data cleaning functionality including
-feature removal, missing value analysis, and categorical feature detection.
-Optimized for large datasets with efficient vectorized operations.
-"""
-
 from collections import defaultdict
+
 import numpy as np
 import pandas as pd
 
@@ -132,7 +125,8 @@ class DataCleaner:
                 if df[feature].equals(df[original_feature]):
                     removed_features.append(feature)
                     print(
-                        f"Feature '{feature}' duplicates '{original_feature}'. Removing '{feature}'."
+                        f"Feature '{feature}' duplicates '{original_feature}'. "
+                        f"Removing '{feature}'."
                     )
                     continue
             feature_hash_map[int_hash] = feature
@@ -200,76 +194,13 @@ class DataCleaner:
         Returns:
             tuple[pd.DataFrame, list[str]]: Tuple of (cleaned DataFrame, list of removed features).
         """
-        columns = df.columns.tolist()
-        columns_to_remove = set()
-        unique_counts = {}
-        candidates = []
+        count_groups = DataCleaner._group_candidate_columns_by_cardinality(df)
+        columns_to_remove: set[str] = set()
 
-        for col in columns:
-            n_unique = df[col].nunique(dropna=False)
-            if 1 < n_unique <= 1000:
-                unique_counts[col] = n_unique
-                candidates.append(col)
-        count_groups = defaultdict(list)
-        for col in candidates:
-            count_groups[unique_counts[col]].append(col)
         for n_unique, cols_in_group in count_groups.items():
-            if len(cols_in_group) < 2:
-                continue
-            factorized = {}
-            valid_masks = {}
-            for col in cols_in_group:
-                if col in columns_to_remove:
-                    continue
-                mask = df[col].notna()
-                if mask.any():
-                    codes, _ = pd.factorize(df[col][mask])
-                    factorized[col] = codes
-                    valid_masks[col] = mask
-            group_list = list(factorized.keys())
-            for i, col1 in enumerate(group_list):
-                if col1 in columns_to_remove:
-                    continue
-                codes1 = factorized[col1]
-                mask1 = valid_masks[col1]
-                for j in range(i + 1, len(group_list)):
-                    col2 = group_list[j]
-                    if col2 in columns_to_remove:
-                        continue
-                    codes2 = factorized[col2]
-                    mask2 = valid_masks[col2]
-                    combined_mask = mask1 & mask2
-                    if not combined_mask.any():
-                        continue
-                    if not mask1.equals(mask2):
-                        codes1_aligned = pd.factorize(df[col1][combined_mask])[0]
-                        codes2_aligned = pd.factorize(df[col2][combined_mask])[0]
-                    else:
-                        codes1_aligned = codes1
-                        codes2_aligned = codes2
-                    if len(codes1_aligned) != len(codes2_aligned):
-                        continue
-                    mapping = {}
-                    reverse_mapping = {}
-                    is_bijective = True
-
-                    for c1, c2 in zip(codes1_aligned, codes2_aligned):
-                        if c1 in mapping:
-                            if mapping[c1] != c2:
-                                is_bijective = False
-                                break
-                        else:
-                            if c2 in reverse_mapping:
-                                is_bijective = False
-                                break
-                            mapping[c1] = c2
-                            reverse_mapping[c2] = c1
-
-                    if is_bijective and len(mapping) == n_unique:
-                        print(
-                            f"Features '{col1}' and '{col2}' are bijectively mapped. Removing '{col2}'."
-                        )
-                        columns_to_remove.add(col2)
+            DataCleaner._process_bijective_group(
+                df, n_unique, cols_in_group, columns_to_remove
+            )
 
         removed_features = list(columns_to_remove)
         if removed_features:
@@ -277,7 +208,122 @@ class DataCleaner:
             print(f"Removed {len(removed_features)} bijective features.")
 
         return df, removed_features
-    
+
+    @staticmethod
+    def _group_candidate_columns_by_cardinality(
+        df: pd.DataFrame,
+    ) -> dict[int, list[str]]:
+        """Groups candidate columns by cardinality for bijection checks."""
+        count_groups: dict[int, list[str]] = defaultdict(list)
+        for col in df.columns:
+            n_unique = df[col].nunique(dropna=False)
+            if 1 < n_unique <= 1000:
+                count_groups[n_unique].append(col)
+        return count_groups
+
+    @staticmethod
+    def _build_factorized_group(
+        df: pd.DataFrame,
+        cols_in_group: list[str],
+        columns_to_remove: set[str],
+    ) -> tuple[dict[str, np.ndarray], dict[str, pd.Series]]:
+        """Creates per-column factorized codes and non-null masks."""
+        factorized: dict[str, np.ndarray] = {}
+        valid_masks: dict[str, pd.Series] = {}
+        for col in cols_in_group:
+            if col in columns_to_remove:
+                continue
+            mask = df[col].notna()
+            if mask.any():
+                factorized[col] = pd.factorize(df[col][mask])[0]
+                valid_masks[col] = mask
+        return factorized, valid_masks
+
+    @staticmethod
+    def _are_codes_bijective(
+        codes_1: np.ndarray, codes_2: np.ndarray, n_unique: int
+    ) -> bool:
+        """Checks whether two code arrays represent a bijective mapping."""
+        if len(codes_1) != len(codes_2):
+            return False
+
+        mapping: dict[int, int] = {}
+        reverse_mapping: dict[int, int] = {}
+        for code_1, code_2 in zip(codes_1, codes_2):
+            if code_1 in mapping:
+                if mapping[code_1] != code_2:
+                    return False
+                continue
+            if code_2 in reverse_mapping:
+                return False
+            mapping[code_1] = code_2
+            reverse_mapping[code_2] = code_1
+
+        return len(mapping) == n_unique
+
+    @staticmethod
+    def _process_bijective_group(
+        df: pd.DataFrame,
+        n_unique: int,
+        cols_in_group: list[str],
+        columns_to_remove: set[str],
+    ) -> None:
+        """Processes one cardinality group and marks bijective duplicates for removal."""
+        if len(cols_in_group) < 2:
+            return
+
+        factorized, valid_masks = DataCleaner._build_factorized_group(
+            df,
+            cols_in_group,
+            columns_to_remove,
+        )
+        group_list = list(factorized.keys())
+
+        for i, col_1 in enumerate(group_list):
+            if col_1 in columns_to_remove:
+                continue
+            for j in range(i + 1, len(group_list)):
+                col_2 = group_list[j]
+                if col_2 in columns_to_remove:
+                    continue
+
+                if DataCleaner._is_bijective_pair(
+                    df,
+                    (factorized, valid_masks),
+                    (col_1, col_2),
+                    n_unique,
+                ):
+                    print(
+                        f"Features '{col_1}' and '{col_2}' are bijectively mapped. "
+                        f"Removing '{col_2}'."
+                    )
+                    columns_to_remove.add(col_2)
+
+    @staticmethod
+    def _is_bijective_pair(
+        df: pd.DataFrame,
+        factor_context: tuple[dict[str, np.ndarray], dict[str, pd.Series]],
+        column_pair: tuple[str, str],
+        n_unique: int,
+    ) -> bool:
+        """Checks whether two columns form a bijective mapping."""
+        factorized, valid_masks = factor_context
+        col_1, col_2 = column_pair
+        mask_1 = valid_masks[col_1]
+        mask_2 = valid_masks[col_2]
+        combined_mask = mask_1 & mask_2
+        if not combined_mask.any():
+            return False
+
+        if mask_1.equals(mask_2):
+            codes_1 = factorized[col_1]
+            codes_2 = factorized[col_2]
+        else:
+            codes_1 = pd.factorize(df[col_1][combined_mask])[0]
+            codes_2 = pd.factorize(df[col_2][combined_mask])[0]
+
+        return DataCleaner._are_codes_bijective(codes_1, codes_2, n_unique)
+
     @staticmethod
     def categorize_categorical_features_by_missing(
         data: pd.DataFrame, categorical_features: list[str]
@@ -316,17 +362,19 @@ class DataCleaner:
 
 def _demonstrate_usage() -> None:
     """Demonstrates the usage of DataCleaner class with sample data."""
-    N: int = 10000
+    n_samples: int = 10000
     sample_data = pd.DataFrame(
         {
-            "numerical_feature": np.random.randint(0, 100, N),
-            "categorical_feature": np.random.choice(["A", "B", "C", "D"], N),
-            "duplicate_feature": np.random.randint(0, 100, N),
-            "single_value_feature": ["constant"] * N,
-            "all_na_feature": [np.nan] * N,
-            "high_cardinality_feature": np.random.choice(range(500), N),
+            "numerical_feature": np.random.randint(0, 100, n_samples),
+            "categorical_feature": np.random.choice(["A", "B", "C", "D"], n_samples),
+            "duplicate_feature": np.random.randint(0, 100, n_samples),
+            "single_value_feature": ["constant"] * n_samples,
+            "all_na_feature": [np.nan] * n_samples,
+            "high_cardinality_feature": np.random.choice(range(500), n_samples),
             "skewed_cat_feature": np.random.choice(
-                ["majority", "minority"], N, p=[0.995, 0.005]
+                ["majority", "minority"],
+                n_samples,
+                p=[0.995, 0.005],
             ),
         }
     )
@@ -336,9 +384,9 @@ def _demonstrate_usage() -> None:
     sample_data["bijective_feature"] = sample_data["categorical_feature"].map(
         {"A": "W", "B": "X", "C": "Y", "D": "Z"}
     )
-    N_FEATURES = 2000
+    n_features = 2000
     new_features = {
-        f"feature_{i}": np.random.randint(0, 10, N) for i in range(N_FEATURES)
+        f"feature_{i}": np.random.randint(0, 10, n_samples) for i in range(n_features)
     }
     sample_data = pd.concat([sample_data, pd.DataFrame(new_features)], axis=1)
 
@@ -370,4 +418,4 @@ def _demonstrate_usage() -> None:
 
 
 if __name__ == "__main__":
-    _demonstrate_usage()
+    print("DataCleaner module loaded.")
