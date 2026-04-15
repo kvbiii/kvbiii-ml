@@ -9,20 +9,20 @@ from kvbiii_ml.data_processing.feature_engineering.numerical_downcaster import (
 
 
 class DataTransformer:
-    """
-    Class for transforming data types in a DataFrame to optimize memory usage and prepare data for modeling.
-    """
+    """Transforms DataFrame dtypes to optimize memory and modeling readiness."""
 
     @staticmethod
     def optimize_memory(
         df: pd.DataFrame, categorical_features: list[str], verbose: bool = True
     ) -> pd.DataFrame:
-        """Reduces memory usage by downcasting numerical features and converting specified features to category.
+        """Reduces memory by downcasting numerics and converting selected categories.
 
         Args:
             df (pd.DataFrame): Input DataFrame.
             categorical_features (list[str]): List of features to convert to category dtype.
-            verbose (bool, optional): Whether to print memory usage before and after optimization. Defaults to True.
+            verbose (bool, optional):
+                Whether to print memory usage before and after optimization.
+                Defaults to True.
 
         Returns:
             pd.DataFrame: Optimized DataFrame.
@@ -38,8 +38,10 @@ class DataTransformer:
             df = downcaster.fit_transform(df)
             if verbose:
                 num_end_mem = df.memory_usage(deep=True).sum() / 1024**2
+                reduction = 100 * (num_start_mem - num_end_mem) / num_start_mem
                 print(
-                    f"Numerical dtypes reduced: {num_start_mem:.2f} MB → {num_end_mem:.2f} MB ({100*(num_start_mem-num_end_mem)/num_start_mem:.1f}% reduction)"
+                    f"Numerical dtypes reduced: {num_start_mem:.2f} MB "
+                    f"→ {num_end_mem:.2f} MB ({reduction:.1f}% reduction)"
                 )
 
         if categorical_features:
@@ -51,14 +53,18 @@ class DataTransformer:
             df = aligner.fit_transform(df)
             if verbose:
                 cat_end_mem = df.memory_usage(deep=True).sum() / 1024**2
+                reduction = 100 * (cat_start_mem - cat_end_mem) / cat_start_mem
                 print(
-                    f"Categorical dtypes converted: {cat_start_mem:.2f} MB → {cat_end_mem:.2f} MB ({100*(cat_start_mem-cat_end_mem)/cat_start_mem:.1f}% reduction)"
+                    f"Categorical dtypes converted: {cat_start_mem:.2f} MB "
+                    f"→ {cat_end_mem:.2f} MB ({reduction:.1f}% reduction)"
                 )
 
         end_mem = df.memory_usage(deep=True).sum() / 1024**2
         if verbose:
+            reduction = 100 * (start_mem - end_mem) / start_mem
             print(
-                f"Total memory usage reduced: {start_mem:.2f} MB → {end_mem:.2f} MB ({100*(start_mem-end_mem)/start_mem:.1f}% reduction)"
+                f"Total memory usage reduced: {start_mem:.2f} MB "
+                f"→ {end_mem:.2f} MB ({reduction:.1f}% reduction)"
             )
         return df
 
@@ -98,7 +104,6 @@ class DataTransformer:
 if __name__ == "__main__":
     import numpy as np
 
-    # Create sample data for demonstration
     sample_data = pd.DataFrame(
         {
             "numerical_feature": np.random.randint(0, 1000, 5000),
@@ -124,11 +129,10 @@ if __name__ == "__main__":
         f"{optimized_df.memory_usage(deep=True).sum() / 1024**2:.2f} MB",
     )
 
-    # 4) Process target feature (encode and return id2label mapping)
-    processed_df, id2label = transformer.encode_target_feature(
+    processed_df, target_id2label = transformer.encode_target_feature(
         optimized_df, target_feature="target_feature", verbose=True
     )
 
     print("\nEncoded target head:")
     print(processed_df[["target_feature"]].head())
-    print("id2label:", id2label)
+    print("id2label:", target_id2label)
