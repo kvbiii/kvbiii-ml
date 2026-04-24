@@ -1,4 +1,5 @@
 import warnings
+
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 
@@ -19,10 +20,14 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
         Initialize the CategoricalAligner.
 
         Args:
-            categorical_features (list[str] | None, optional): List of categorical features names.
-                If None, will auto-detect object and category dtype columns during fit. Defaults to None.
-            fill_values (dict[str, str] | None, optional): Dictionary mapping feature names to custom fill values for unknown categories. Defaults to None.
-            warn_on_unknown (bool, optional): Whether to raise warnings when unknown categories are found. Defaults to True.
+            categorical_features (list[str] | None, optional):
+                List of categorical features names. If None, auto-detects object
+                and category columns during fit. Defaults to None.
+            fill_values (dict[str, str] | None, optional):
+                Feature-specific fill values for unknown categories. Defaults to None.
+            warn_on_unknown (bool, optional):
+                Whether to raise warnings when unknown categories are found.
+                Defaults to True.
         """
         self.categorical_features = categorical_features
         self.fill_values = fill_values or {}
@@ -54,75 +59,86 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
             dict[str, str]: Dictionary mapping feature names to fill values.
         """
         custom_fills = custom_fills or {}
+        categorical_features = categorical_features or []
         return {
             feature: custom_fills.get(feature, default_value)
             for feature in categorical_features
             if feature in df.columns
         }
 
-    def fit(self, X: pd.DataFrame, y: pd.Series | None = None) -> "CategoricalAligner":
+    def fit(
+        self, df: pd.DataFrame, _y: pd.Series | None = None
+    ) -> "CategoricalAligner":
         """
         Fit the transformer by learning categories and modes from training data.
 
         Args:
-            X (pd.DataFrame): Training data.
-            y (pd.Series | None, optional): Target (unused). Defaults to None.
+            df (pd.DataFrame): Training data.
+            _y (pd.Series | None, optional): Target (unused). Defaults to None.
 
         Returns:
             CategoricalAligner: Fitted transformer.
         """
-        X = X.copy()
+        df = df.copy()
         if self.categorical_features is None:
-            self.categorical_features = X.select_dtypes(
+            self.categorical_features = df.select_dtypes(
                 include=["object", "category"]
             ).columns.tolist()
         for feature in self.categorical_features:
-            if feature not in X.columns:
+            if feature not in df.columns:
                 continue
-            mode_series = X[feature].mode(dropna=True)
+            mode_series = df[feature].mode(dropna=True)
             self.modes_[feature] = (
                 str(mode_series[0]) if not mode_series.empty else "Unknown"
             )
             fill_value = self._get_fill_value(feature)
-            X[feature] = X[feature].fillna(fill_value).astype("str").astype("category")
-            self.categories_[feature] = X[feature].cat.categories.tolist()
+            df[feature] = (
+                df[feature].fillna(fill_value).astype("str").astype("category")
+            )
+            self.categories_[feature] = df[feature].cat.categories.tolist()
         return self
 
-    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Transform data by aligning categories with fitted training categories.
 
         Args:
-            X (pd.DataFrame): Data to transform.
+            df (pd.DataFrame): Data to transform.
 
         Returns:
             pd.DataFrame: Transformed data with aligned categories.
         """
-        X = X.copy()
+        df = df.copy()
         for feature, categories in self.categories_.items():
-            if feature not in X.columns:
+            if feature not in df.columns:
                 continue
             fill_value = self._get_fill_value(feature)
-            X[feature] = X[feature].fillna(fill_value).astype("str")
-            unknown_mask = ~X[feature].isin(categories)
+            df[feature] = df[feature].fillna(fill_value).astype("str")
+            unknown_mask = ~df[feature].isin(categories)
             unknown_count = unknown_mask.sum()
             if self.warn_on_unknown and unknown_count > 0:
-                unknown_values = X.loc[unknown_mask, feature].unique()
+                unknown_values = df.loc[unknown_mask, feature].unique()
                 n_unique_unknown = len(unknown_values)
+                pct_unknown = unknown_count / len(df) * 100
+                unknown_preview = list(unknown_values[:5])
+                suffix = "..." if n_unique_unknown > 5 else ""
+                category_word = "y" if n_unique_unknown == 1 else "ies"
                 warnings.warn(
                     (
                         f"\n[{self.__class__.__name__}.transform]\n"
                         f"  Feature '{feature}':\n"
-                        f"  Found {unknown_count} rows ({unknown_count/len(X)*100:.2f}%) with {n_unique_unknown} unknown categor{'y' if n_unique_unknown == 1 else 'ies'} not seen during training.\n"
-                        f"  Unknown values: {list(unknown_values[:5])}{'...' if n_unique_unknown > 5 else ''}\n"
+                        f"  Found {unknown_count} rows ({pct_unknown:.2f}%) "
+                        f"with {n_unique_unknown} unknown categor{category_word} "
+                        "not seen during training.\n"
+                        f"  Unknown values: {unknown_preview}{suffix}\n"
                         f"  Replacing with '{fill_value}'."
                     ),
                     UserWarning,
                     stacklevel=0,
                 )
-            X[feature] = X[feature].where(~unknown_mask, fill_value)
-            X[feature] = X[feature].astype("category").cat.set_categories(categories)
-        return X
+            df[feature] = df[feature].where(~unknown_mask, fill_value)
+            df[feature] = df[feature].astype("category").cat.set_categories(categories)
+        return df
 
     def _get_fill_value(self, feature: str) -> str:
         """
@@ -140,7 +156,6 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
 
 
 if __name__ == "__main__":
-    # Minimal example
     df_train = pd.DataFrame(
         {
             "color": pd.Categorical(["red", "blue", "green", "red"]),
@@ -150,8 +165,8 @@ if __name__ == "__main__":
     )
     df_test = pd.DataFrame(
         {
-            "color": ["blue", "purple", "yellow"],  # purple, yellow unseen
-            "fuel": ["diesel", "hydrogen", "petrol"],  # hydrogen unseen
+            "color": ["blue", "purple", "yellow"],
+            "fuel": ["diesel", "hydrogen", "petrol"],
             "mileage": [13000, 17000, 9000],
         }
     )
