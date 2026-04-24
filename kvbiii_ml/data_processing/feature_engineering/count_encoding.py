@@ -140,27 +140,20 @@ class CountEncodingFeatureGenerator:
             for feature_name in self.features_names
         }
 
-        total_features = len(self.features_names)
         pbar = tqdm(
-            total=total_features,
+            total=len(self.features_names),
             desc="Transforming with count encoding",
         )
 
-        for feat_idx in range(0, total_features, self.batch_size):
-            batch_features = self.features_names[feat_idx : feat_idx + self.batch_size]
-
-            for chunk_idx in range(n_chunks):
-                start_idx = chunk_idx * self.chunk_size
-                end_idx = min((chunk_idx + 1) * self.chunk_size, n_rows)
-                chunk = df.iloc[start_idx:end_idx]
-
-                for feature_name in batch_features:
-                    result = self._transform_feature_chunk(chunk, feature_name)
-                    new_columns_dict[f"CE_{feature_name}"][start_idx:end_idx] = result
-                    del result
-
-                del chunk
-                gc.collect()
+        for batch_start in range(0, len(self.features_names), self.batch_size):
+            batch_features = self.features_names[
+                batch_start : batch_start + self.batch_size
+            ]
+            self._transform_batch(
+                df,
+                batch_features,
+                (n_chunks, n_rows, new_columns_dict),
+            )
 
             pbar.update(len(batch_features))
 
@@ -173,6 +166,25 @@ class CountEncodingFeatureGenerator:
         gc.collect()
 
         return result_df
+
+    def _transform_batch(
+        self,
+        df: pd.DataFrame,
+        batch_features: list[str],
+        batch_context: tuple[int, int, dict[str, np.ndarray]],
+    ) -> None:
+        """Transforms one feature batch and writes encoded values in-place."""
+        n_chunks, n_rows, new_columns_dict = batch_context
+        for chunk_idx in range(n_chunks):
+            start_idx = chunk_idx * self.chunk_size
+            end_idx = min((chunk_idx + 1) * self.chunk_size, n_rows)
+            chunk = df.iloc[start_idx:end_idx]
+
+            for feature_name in batch_features:
+                result = self._transform_feature_chunk(chunk, feature_name)
+                new_columns_dict[f"CE_{feature_name}"][start_idx:end_idx] = result
+
+            gc.collect()
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """
