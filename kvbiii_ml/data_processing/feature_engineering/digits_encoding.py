@@ -21,33 +21,42 @@ class DigitsEncodingFeatureGenerator:
 
     def __init__(
         self,
-        features_names: list[str] = [],
+        features_names: list[str] | None = None,
         fill_value: int = -1,
         dtype: str = "int8",
-        min_digits: int = 2,
-        max_digits: int = 6,
+        digit_limits: tuple[int, int] | None = None,
+        **kwargs: int,
     ) -> None:
         """
         Initialize the DigitsFeatureGenerator.
 
         Args:
             features_names (list[str] | None, optional): List of feature names to
-                extract digits from. If None or empty, all numeric features will be used. Defaults to [].
+                extract digits from. If None or empty, all numeric features will
+                be used. Defaults to None.
             fill_value (int, optional): Value to use for NaN entries. Defaults to -1.
             dtype (str, optional): Data type for output columns. Defaults to "int8".
-            min_digits (int, optional): Minimum number of digit positions to extract
-                per feature. Defaults to 2.
-            max_digits (int, optional): Maximum number of digit positions to extract
-                per feature. Defaults to 6.
+            digit_limits (tuple[int, int] | None, optional):
+                `(min_digits, max_digits)` limits for extracted positions.
+            **kwargs (int): Compatibility kwargs "min_digits" and "max_digits".
 
         Raises:
             ValueError: If parameters are invalid.
         """
-        self.features_names = features_names
+        if "min_digits" in kwargs or "max_digits" in kwargs:
+            min_digits = int(kwargs.pop("min_digits", 2))
+            max_digits = int(kwargs.pop("max_digits", 6))
+            digit_limits = (min_digits, max_digits)
+        if kwargs:
+            invalid_args = ", ".join(sorted(kwargs))
+            raise ValueError(f"Unexpected arguments: {invalid_args}")
+
+        min_digits, max_digits = digit_limits if digit_limits is not None else (2, 6)
+        self.features_names = list(features_names) if features_names is not None else []
         self.fill_value = fill_value
         self.dtype = dtype
-        self.min_digits = min_digits
-        self.max_digits = max_digits
+        self.min_digits = int(min_digits)
+        self.max_digits = int(max_digits)
         self.feature_configs_: dict[str, tuple[int, int]] = {}
         self.generated_feature_names_: list[str] = []
         self._validate_init_params()
@@ -147,7 +156,11 @@ class DigitsEncodingFeatureGenerator:
         extracted = extracted.fillna(self.fill_value).astype(int)
         return extracted.astype(self.dtype).rename(column_name)
 
-    def fit(self, X: pd.DataFrame, y=None) -> "DigitsEncodingFeatureGenerator":
+    def fit(
+        self,
+        df: pd.DataFrame,
+        _y: pd.Series | None = None,
+    ) -> "DigitsEncodingFeatureGenerator":
         """
         Fit the digits feature generator.
 
@@ -156,33 +169,33 @@ class DigitsEncodingFeatureGenerator:
         for sklearn compatibility.
 
         Args:
-            X (pd.DataFrame): Feature DataFrame.
-            y (optional): Target variable (ignored). Defaults to None.
+            df (pd.DataFrame): Feature DataFrame.
+            _y (optional): Target variable (ignored). Defaults to None.
 
         Returns:
             DigitsEncodingFeatureGenerator: The fitted generator instance.
 
         Raises:
-            TypeError: If X is not a DataFrame.
-            KeyError: If specified features are missing from X.
+            TypeError: If `df` is not a DataFrame.
+            KeyError: If specified features are missing from `df`.
         """
-        self._validate_fit_inputs(X)
+        self._validate_fit_inputs(df)
         if not self.features_names:
             self.features_names = [
-                col for col in X.columns if pd.api.types.is_numeric_dtype(X[col])
+                col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])
             ]
         else:
             self.features_names = [
                 col
                 for col in self.features_names
-                if pd.api.types.is_numeric_dtype(X[col])
+                if pd.api.types.is_numeric_dtype(df[col])
             ]
 
         self.feature_configs_ = {}
         self.generated_feature_names_ = []
 
         for feature_name in tqdm(self.features_names, desc="Fitting digits encoding"):
-            start_pos, end_pos = self._determine_digit_range(X[feature_name])
+            start_pos, end_pos = self._determine_digit_range(df[feature_name])
             self.feature_configs_[feature_name] = (start_pos, end_pos)
 
             for k in range(start_pos, end_pos):
@@ -190,12 +203,12 @@ class DigitsEncodingFeatureGenerator:
 
         return self
 
-    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Transform the data by extracting digits from configured features.
 
         Args:
-            X (pd.DataFrame): Feature DataFrame to transform.
+            df (pd.DataFrame): Feature DataFrame to transform.
 
         Returns:
             pd.DataFrame: DataFrame with original features and extracted digit
@@ -203,12 +216,12 @@ class DigitsEncodingFeatureGenerator:
 
         Raises:
             ValueError: If the generator has not been fitted yet.
-            KeyError: If configured features are missing from X.
+            KeyError: If configured features are missing from `df`.
         """
         if not self.feature_configs_:
             raise ValueError("DigitsFeatureGenerator must be fitted before transform.")
 
-        self._validate_transform_inputs(X)
+        self._validate_transform_inputs(df)
 
         digit_columns = []
 
@@ -218,29 +231,33 @@ class DigitsEncodingFeatureGenerator:
 
         for feature_name, (start_pos, end_pos) in self.feature_configs_.items():
             for k in range(start_pos, end_pos):
-                digit_series = self._extract_digit(X[feature_name], k, feature_name)
+                digit_series = self._extract_digit(df[feature_name], k, feature_name)
                 digit_columns.append(digit_series)
             pbar.update(1)
 
         pbar.close()
 
         if digit_columns:
-            return pd.concat([X] + digit_columns, axis=1)
-        return X.copy()
+            return pd.concat([df] + digit_columns, axis=1)
+        return df.copy()
 
-    def fit_transform(self, X: pd.DataFrame, y=None) -> pd.DataFrame:
+    def fit_transform(
+        self,
+        df: pd.DataFrame,
+        _y: pd.Series | None = None,
+    ) -> pd.DataFrame:
         """
         Fit the generator and transform the data.
 
         Args:
-            X (pd.DataFrame): Feature DataFrame.
-            y (optional): Target variable (ignored). Defaults to None.
+            df (pd.DataFrame): Feature DataFrame.
+            _y (optional): Target variable (ignored). Defaults to None.
 
         Returns:
             pd.DataFrame: DataFrame with original features and extracted digit
                 features.
         """
-        return self.fit(X, y).transform(X)
+        return self.fit(df, _y).transform(df)
 
     def get_feature_names_out(self) -> list[str]:
         """
@@ -275,46 +292,46 @@ class DigitsEncodingFeatureGenerator:
             )
         return self.feature_configs_.copy()
 
-    def _validate_fit_inputs(self, X: pd.DataFrame) -> None:
+    def _validate_fit_inputs(self, df: pd.DataFrame) -> None:
         """
         Validate inputs for fit and fit_transform.
 
         Args:
-            X (pd.DataFrame): Feature DataFrame.
+            df (pd.DataFrame): Feature DataFrame.
 
         Raises:
-            TypeError: If X is not a DataFrame.
-            KeyError: If specified features are missing from X.
+            TypeError: If `df` is not a DataFrame.
+            KeyError: If specified features are missing from `df`.
         """
-        if not isinstance(X, pd.DataFrame):
-            raise TypeError("X must be a pandas DataFrame.")
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError("df must be a pandas DataFrame.")
 
         if self.features_names is not None:
             missing = [
-                feature for feature in self.features_names if feature not in X.columns
+                feature for feature in self.features_names if feature not in df.columns
             ]
             if missing:
-                raise KeyError(f"Missing features in X: {missing}")
+                raise KeyError(f"Missing features in df: {missing}")
 
-    def _validate_transform_inputs(self, X: pd.DataFrame) -> None:
+    def _validate_transform_inputs(self, df: pd.DataFrame) -> None:
         """
         Validate inputs for transform.
 
         Args:
-            X (pd.DataFrame): Feature DataFrame.
+            df (pd.DataFrame): Feature DataFrame.
 
         Raises:
-            TypeError: If X is not a DataFrame.
-            KeyError: If configured features are missing from X.
+            TypeError: If `df` is not a DataFrame.
+            KeyError: If configured features are missing from `df`.
         """
-        if not isinstance(X, pd.DataFrame):
-            raise TypeError("X must be a pandas DataFrame.")
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError("df must be a pandas DataFrame.")
 
         missing = [
-            feature for feature in self.feature_configs_ if feature not in X.columns
+            feature for feature in self.feature_configs_ if feature not in df.columns
         ]
         if missing:
-            raise KeyError(f"Missing features in X: {missing}")
+            raise KeyError(f"Missing features in df: {missing}")
 
 
 if __name__ == "__main__":
@@ -323,15 +340,15 @@ if __name__ == "__main__":
         "interest_rate": [3.75, 4.25, 5.50, 2.99],
         "string_feature": ["A", "B", "C", "D"],
     }
-    df = pd.DataFrame(data)
+    demo_df = pd.DataFrame(data)
 
     print("Original DataFrame:")
-    print(df)
+    print(demo_df)
     print()
 
     digits_generator = DigitsEncodingFeatureGenerator(fill_value=-1)
 
-    transformed_df = digits_generator.fit_transform(df)
+    transformed_df = digits_generator.fit_transform(demo_df)
     print("Transformed DataFrame:")
     print("\nColumns containing 'annual_income':")
     annual_income_cols = [
