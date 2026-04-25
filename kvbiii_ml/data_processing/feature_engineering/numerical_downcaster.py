@@ -1,7 +1,8 @@
-from typing import Any
 import warnings
-import pandas as pd
+from typing import Any
+
 import numpy as np
+import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 
 
@@ -23,54 +24,57 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
             columns (list[str] | None, optional): List of column names to downcast.
                 If None, all numeric columns will be downcasted. Defaults to None.
             int_downcast (bool, optional): Whether to downcast integer types. Defaults to True.
-            float_downcast (bool, optional): Whether to downcast float types to float32. Defaults to True.
+            float_downcast (bool, optional):
+                Whether to downcast float types to float32. Defaults to True.
         """
         self.columns = columns
         self.int_downcast = int_downcast
         self.float_downcast = float_downcast
         self.dtype_map_ = None
 
-    def fit(self, X: pd.DataFrame, y: pd.Series | None = None) -> "NumericalDowncaster":
+    def fit(
+        self, df: pd.DataFrame, _y: pd.Series | None = None
+    ) -> "NumericalDowncaster":
         """
         Fit method that determines optimal dtypes for numerical columns.
 
         Args:
-            X (pd.DataFrame): Training data.
-            y (pd.Series | None, optional): Target (unused). Defaults to None.
+            df (pd.DataFrame): Training data.
+            _y (pd.Series | None, optional): Target (unused). Defaults to None.
 
         Returns:
             NumericalDowncaster: Fitted transformer.
         """
-        columns_to_process = self.columns if self.columns is not None else X.columns
+        columns_to_process = self.columns if self.columns is not None else df.columns
         self.dtype_map_ = {
-            col: self._get_optimal_dtype(X[col])
+            col: self._get_optimal_dtype(df[col])
             for col in columns_to_process
-            if col in X.columns and pd.api.types.is_numeric_dtype(X[col])
+            if col in df.columns and pd.api.types.is_numeric_dtype(df[col])
         }
         return self
 
-    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Transform data by downcasting numerical columns to smaller dtypes.
 
         Args:
-            X (pd.DataFrame): Data to transform.
+            df (pd.DataFrame): Data to transform.
 
         Returns:
             pd.DataFrame: Transformed data with downcasted dtypes.
         """
-        X = X.copy()
+        df = df.copy()
         for column, target_dtype in self.dtype_map_.items():
-            if column in X.columns:
+            if column in df.columns:
                 try:
-                    X[column] = X[column].astype(target_dtype)
+                    df[column] = df[column].astype(target_dtype)
                 except (ValueError, TypeError) as e:
                     warnings.warn(
                         f"Failed to downcast column '{column}' to {target_dtype}: {e}",
                         UserWarning,
                         stacklevel=2,
                     )
-        return X
+        return df
 
     def _get_optimal_dtype(self, series: pd.Series) -> Any:
         """
@@ -86,7 +90,7 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
 
         if pd.api.types.is_integer_dtype(dtype) and self.int_downcast:
             return self._downcast_integer(series)
-        elif pd.api.types.is_float_dtype(dtype) and self.float_downcast:
+        if pd.api.types.is_float_dtype(dtype) and self.float_downcast:
             return self._downcast_float(series)
         return dtype
 
@@ -118,12 +122,12 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
             np.int64,
         )
 
-    def _downcast_float(self, series: pd.Series) -> Any:
+    def _downcast_float(self, _series: pd.Series) -> Any:
         """
         Downcast float series to float32.
 
         Args:
-            series (pd.Series): Float series to downcast.
+            _series (pd.Series): Float series to downcast.
 
         Returns:
             Any: float32 dtype.
@@ -132,7 +136,6 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
 
 
 if __name__ == "__main__":
-    # Create sample DataFrame with various numerical types
     df_train = pd.DataFrame(
         {
             "price": np.array([10000, 15000, 12000, 18000], dtype=np.int64),
