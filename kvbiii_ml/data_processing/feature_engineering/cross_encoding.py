@@ -14,8 +14,8 @@ class CrossFeatureGenerator:
         features_names: list[str] | None = None,
         degree: int = 2,
         separator: str = "_",
-        batch_size: int = 10,
-        chunk_size: int = 50000,
+        processing: dict[str, int] | None = None,
+        **kwargs: int,
     ):
         """
         Initialize the CrossFeatureGenerator.
@@ -27,20 +27,40 @@ class CrossFeatureGenerator:
             degree (int, optional): Degree of combinations to generate. Defaults to 2.
             separator (str, optional): Separator for combining feature values.
                 Defaults to '_':
-            batch_size (int, optional): Number of combinations to process at once.
-                Smaller values use less memory. Defaults to 10.
-            chunk_size (int, optional): Number of rows to process at once during
-                transform. Defaults to 50000.
+            processing (dict[str, int] | None, optional): Processing configuration
+                with optional keys "batch_size" and "chunk_size".
+            **kwargs (int): Compatibility kwargs "batch_size" and "chunk_size".
         """
+        processing = processing.copy() if processing is not None else {}
+        if "batch_size" in kwargs:
+            processing["batch_size"] = kwargs.pop("batch_size")
+        if "chunk_size" in kwargs:
+            processing["chunk_size"] = kwargs.pop("chunk_size")
+        if kwargs:
+            invalid_args = ", ".join(sorted(kwargs))
+            raise ValueError(f"Unexpected arguments: {invalid_args}")
+
         self.features_names = features_names if features_names is not None else []
         self.degree = degree
         self.separator = separator
-        self.batch_size = batch_size
-        self.chunk_size = chunk_size
+        self.processing = {
+            "batch_size": int(processing.get("batch_size", 10)),
+            "chunk_size": int(processing.get("chunk_size", 50000)),
+        }
         self.feature_combinations_ = []
         self.encoding_maps_ = {}
         self.numerical_combos_ = set()
         self._validate_init_params()
+
+    @property
+    def batch_size(self) -> int:
+        """Returns the number of combinations processed per batch."""
+        return self.processing["batch_size"]
+
+    @property
+    def chunk_size(self) -> int:
+        """Returns the number of rows processed per chunk."""
+        return self.processing["chunk_size"]
 
     def _validate_init_params(self):
         """
@@ -57,6 +77,10 @@ class CrossFeatureGenerator:
             raise ValueError("degree must be an integer >= 2.")
         if not isinstance(self.separator, str):
             raise ValueError("separator must be a string.")
+        if not isinstance(self.batch_size, int) or self.batch_size < 1:
+            raise ValueError("batch_size must be a positive integer.")
+        if not isinstance(self.chunk_size, int) or self.chunk_size < 1:
+            raise ValueError("chunk_size must be a positive integer.")
         if self.features_names and len(self.features_names) < self.degree:
             raise ValueError(
                 f"Number of features ({len(self.features_names)}) must be >= "
@@ -89,7 +113,10 @@ class CrossFeatureGenerator:
         Returns:
             np.ndarray: Array of combined strings.
         """
-        arrays = [df[col].astype(str).values for col in columns]
+        arrays = [
+            df[col].astype("string").fillna("<NA>").to_numpy(dtype=str)
+            for col in columns
+        ]
 
         if len(arrays) == 2:
             return np.char.add(np.char.add(arrays[0], self.separator), arrays[1])
@@ -223,20 +250,11 @@ class CrossFeatureGenerator:
             batch_combos = self.feature_combinations_[
                 combo_idx : combo_idx + self.batch_size
             ]
-
-            for chunk_idx in range(n_chunks):
-                start_idx = chunk_idx * self.chunk_size
-                end_idx = min((chunk_idx + 1) * self.chunk_size, n_rows)
-                chunk = df.iloc[start_idx:end_idx]
-
-                for combo in batch_combos:
-                    combo_name = "X".join(combo)
-                    result = self._transform_chunk(chunk, combo)
-                    new_columns_dict[combo_name][start_idx:end_idx] = result.values
-                    del result
-
-                del chunk
-                gc.collect()
+            self._transform_batch(
+                df,
+                batch_combos,
+                (n_chunks, n_rows, new_columns_dict),
+            )
 
             pbar_combos.update(len(batch_combos))
 
@@ -249,6 +267,26 @@ class CrossFeatureGenerator:
         gc.collect()
 
         return result_df
+
+    def _transform_batch(
+        self,
+        df: pd.DataFrame,
+        batch_combos: list[tuple[str, ...]],
+        batch_context: tuple[int, int, dict[str, np.ndarray]],
+    ) -> None:
+        """Transforms one combination batch and writes encoded columns in-place."""
+        n_chunks, n_rows, new_columns_dict = batch_context
+        for chunk_idx in range(n_chunks):
+            start_idx = chunk_idx * self.chunk_size
+            end_idx = min((chunk_idx + 1) * self.chunk_size, n_rows)
+            chunk = df.iloc[start_idx:end_idx]
+
+            for combo in batch_combos:
+                combo_name = "X".join(combo)
+                result = self._transform_chunk(chunk, combo)
+                new_columns_dict[combo_name][start_idx:end_idx] = result.values
+
+            gc.collect()
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """
