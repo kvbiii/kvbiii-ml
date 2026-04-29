@@ -1,197 +1,310 @@
-name: Upload Python Package
+name: Python CI and Publish
 
 on:
-  push:
+  pull_request:
   workflow_dispatch:
   release:
-    types: [published]
+    types: [ published ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
+env:
+  PYTHON_VERSION: "3.14"
+
 jobs:
   verify-files-presence:
+    name: verify-files-presence
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - name: Verify presence of essential files
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Validate required files and directories
         run: |
-            essential_files=("requirements.txt" "README.md" "pyproject.toml")
-            missing_files=()
-
-            for file in "${essential_files[@]}"; do
-                if [ ! -f "$file" ]; then
-                    missing_files+=("$file")
-                fi
-            done
-
-            if [ ! -d "tests" ]; then
-                missing_files+=("tests (directory)")
-            fi
-
-            if [ ${#missing_files[@]} -ne 0 ]; then
-                echo "❌ The following essential files or directories are missing:"
-                for file in "${missing_files[@]}"; do
-                    echo "- $file"
-                done
-                exit 1
-            else
-                echo "✅ All essential files and directories are present."
-            fi
+          test -f requirements.txt || { echo "Missing requirements.txt"; exit 1; }
+          test -f README.md || { echo "Missing README.md"; exit 1; }
+          test -f pyproject.toml || { echo "Missing pyproject.toml"; exit 1; }
+          test -d tests || { echo "Missing tests/ directory"; exit 1; }
 
   black-format:
+    name: black-format
     runs-on: ubuntu-latest
-    needs: verify-files-presence
+    needs:
+      - verify-files-presence
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          python-version: "3.x"
-
-      - name: Install black formatter
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install Black
         run: |
           python -m pip install --upgrade pip
-          pip install black
-
-      - name: Run black formatter
-        run: |
-          python -m black --check --diff --exclude "examples" .
+          python -m pip install black
+      - name: Check formatting with Black
+        run: python -m black --check --diff --exclude "examples" .
 
   pylint:
+    name: pylint
     runs-on: ubuntu-latest
-    needs: verify-files-presence
+    needs:
+      - verify-files-presence
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          python-version: "3.x"
-
-      - name: Install pylint
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install Pylint
         run: |
           python -m pip install --upgrade pip
-          pip install pylint
-
-      - name: Run pylint
+          python -m pip install pylint
+      - name: Run focused Pylint ruleset
         run: |
-            python_files=$(find . -type f -name "*.py" -not -path "./.venv/*")
-            python -m pylint $python_files \
-              --disable=all \
-              --enable=unused-import,wrong-import-order,unused-variable,import-outside-toplevel,missing-function-docstring,invalid-name \
-              --good-names=X,X_train,X_test,X_valid
+          python_files=$(find . -type f -name "*.py" -not -path "./.venv/*")
+          python -m pylint $python_files \
+          --disable=all \
+          --enable=unused-import,wrong-import-order,unused-variable,import-outside-toplevel,missing-function-docstring,invalid-name,bare-except \
+          --good-names=X,X_train,X_test,X_valid
 
   requirements-check:
+    name: requirements-check
     runs-on: ubuntu-latest
-    needs: verify-files-presence
+    needs:
+      - verify-files-presence
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          python-version: "3.x"
-
-      - name: Install dependency tools
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install requirement validation tools
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pipdeptree
-
-      - name: Extract all dependencies and subdependencies
+          python -m pip install -r requirements.txt
+          python -m pip install pipdeptree pipreqs urllib3==1.26.15
+      - name: Build installed package inventory
         run: |
-          pipdeptree --freeze > dependency_tree.txt
-          awk '{print $1}' dependency_tree.txt | cut -d'=' -f1 | sort -u > all_installed_packages.txt
-          echo "📄 all_installed_packages.txt:"
-          cat all_installed_packages.txt
-
-      - name: Generate requirements from code imports
+          pipdeptree --warn silence --freeze \
+            | cut -d'=' -f1 \
+            | sed 's/-/_/g' \
+            | sed 's/^[ \t]*//;s/├── //;s/└── //' \
+            | tr '[:upper:]' '[:lower:]' \
+            | sort -u > installed_packages.txt
+          echo "Installed packages:"
+          cat installed_packages.txt
+      - name: Infer imports with pipreqs
         run: |
-          pip install pipreqs urllib3==1.26.15
-          pipreqs . --force --encoding=utf-8 --ignore .venv --savepath requirements_from_imports.txt
-
-      - name: Extract package names from requirements files
+          pipreqs . --force --encoding=utf-8 --ignore .venv,tests,examples --savepath requirements_from_imports.txt
+          echo "Inferred imports from source code:"
+          cat requirements_from_imports.txt
+      - name: Compare imports with installed dependencies
         run: |
-          grep -o '^[^=<>]*' all_installed_packages.txt | sed 's/-/_/g' | tr '[:upper:]' '[:lower:]' | sort -u > requirements_clean.txt
-          grep -o '^[^=<>]*' requirements_from_imports.txt | sed 's/-/_/g' | tr '[:upper:]' '[:lower:]' | sort -u > imports_clean.txt
-          echo "📄 requirements_clean.txt:"
-          cat requirements_clean.txt
-          echo "📄 imports_clean.txt:"
-          cat imports_clean.txt
-
-      - name: Check for missing top-level packages
-        run: |
-          comm -23 imports_clean.txt requirements_clean.txt > missing.txt
-          if [ -s missing.txt ]; then
-            echo "❌ The following packages are used in the code but missing from requirements.txt:"
-            cat missing.txt
+          grep -o '^[^=<>]*' requirements_from_imports.txt \
+            | sed 's/-/_/g' \
+            | tr '[:upper:]' '[:lower:]' \
+            | sort -u > imported_packages.txt
+          comm -23 imported_packages.txt installed_packages.txt > missing_packages.txt
+          if [ -s missing_packages.txt ]; then
+            echo "The following imports are not backed by installed dependencies:"
+            cat missing_packages.txt
             exit 1
-          else
-            echo "✅ All used packages are listed in requirements.txt."
           fi
 
-  pytest:
+  pip-audit:
+    name: pip-audit
     runs-on: ubuntu-latest
-    env:
-      SEED: ${{ vars.TEST_SEED }}
+    needs:
+      - verify-files-presence
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install pip-audit
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pip-audit
+      - name: Scan dependencies for known vulnerabilities
+        run: python -m pip_audit -r requirements.txt
+
+  bandit:
+    name: bandit
+    runs-on: ubuntu-latest
+    needs:
+      - verify-files-presence
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install Bandit
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install bandit
+      - name: Run Bandit security scan
+        run: python -m bandit -r . --exclude "./.venv" -l -ii -s B404,B603
+
+  pytest:
+    name: pytest (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
     needs:
       - black-format
       - pylint
       - requirements-check
+      - pip-audit
+      - bandit
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [ "3.10", "3.11", "3.12", "3.13", "3.14" ]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          python-version: "3.x"
-
-      - name: Install pytest
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install project and test dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e .
+          python -m pip install pytest pytest-cov
+      - name: Run test suite with coverage
+        run: python -m pytest -v tests/ --cov --cov-report=xml
+      - name: Upload coverage report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-py${{ matrix.python-version }}
+          path: coverage.xml
+          retention-days: 7
 
-      - name: Run pytest
-        run: |
-          python -m pytest -v tests/
-
-  release-build:
+  verify-version:
+    name: verify-version
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
-    needs: pytest
-
+    needs:
+      - verify-files-presence
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Check pyproject.toml version matches release tag
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG_VERSION=$(grep -Po '(?<=^version = ")[^"]+' pyproject.toml)
+          echo "Git tag version : $TAG"
+          echo "pyproject version: $PKG_VERSION"
+          if [ "$TAG" != "$PKG_VERSION" ]; then
+            echo "Version mismatch: tag=$TAG pyproject=$PKG_VERSION"
+            exit 1
+          fi
 
-      - name: Build release distributions
+  release-build:
+    name: release-build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    needs:
+      - pytest
+      - verify-version
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Build source and wheel distributions
         run: |
           python -m pip install --upgrade pip
-          python -m pip install --verbose build
-          python -m build --verbose
-
-      - name: Upload distributions
-        uses: actions/upload-artifact@v4
+          python -m pip install build twine
+          python -m build
+          python -m twine check dist/*
+      - name: Upload release distributions
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-dists
           path: dist/
+          retention-days: 7
 
-  pypi-publish:
+  verify-wheel:
+    name: verify-wheel
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
     needs:
       - release-build
-    permissions:
-      id-token: write
-
-    environment:
-      name: pypi
-      url: https://pypi.org/p/kvbiii-ml
-
+    timeout-minutes: 10
     steps:
-      - name: Retrieve release distributions
-        uses: actions/download-artifact@v4
+      - name: Download built distributions
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: release-dists
           path: dist/
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install from wheel and smoke test
+        run: |
+          WHL=$(ls dist/*.whl | head -1)
+          python -m pip install "$WHL"
+          python - <<'PY'
+          import kvbiii_ml
+          print(kvbiii_ml.__version__)
+          print("Smoke test passed!")
+          PY
 
-      - name: Publish release distributions to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+  pypi-publish:
+    name: pypi-publish
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    needs:
+      - release-build
+      - verify-wheel
+    permissions:
+      id-token: write
+    environment:
+      name: pypi
+      url: https://pypi.org/p/kvbiii-ml
+    timeout-minutes: 10
+    steps:
+      - name: Retrieve release distributions
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-dists
+          path: dist/
+      - name: Publish distributions to PyPI via trusted publishing
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # release/v1
         with:
           packages-dir: dist/
