@@ -41,6 +41,9 @@ classifiers = [
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
 
+[tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
+
 [project.urls]
 Homepage = "https://github.com/kvbiii/kvbiii-ml"
 Repository = "https://github.com/kvbiii/kvbiii-ml"
