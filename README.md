@@ -20,22 +20,26 @@ It provides reusable components for building robust ML pipelines, including tool
 ┃  ┃  ┃  ┣━ 🐍 data_cleaning.py
 ┃  ┃  ┃  ┗━ 🐍 data_transformation.py
 ┃  ┃  ┣━ 📁 feature_engineering
+┃  ┃  ┃  ┣━ 🐍 categorical_aligner.py
 ┃  ┃  ┃  ┣━ 🐍 categorical_cleaner.py
-┃  ┃  ┃  ┣━ 🐍 categories_assigner.py
 ┃  ┃  ┃  ┣━ 🐍 count_encoding.py
 ┃  ┃  ┃  ┣━ 🐍 cross_encoding.py
-┃  ┃  ┃  ┣━ 🐍 example_feature_generation_pipeline.py
+┃  ┃  ┃  ┣━ 🐍 digits_encoding.py
+┃  ┃  ┃  ┣━ 🐍 dtypes_converter.py
 ┃  ┃  ┃  ┣━ 🐍 feature_generation_pipeline.py
-┃  ┃  ┃  ┣━ 🐍 target_encoding old.py
+┃  ┃  ┃  ┣━ 🐍 numerical_downcaster.py
 ┃  ┃  ┃  ┗━ 🐍 target_encoding.py
 ┃  ┃  ┣━ 📁 feature_selection
-┃  ┃  ┃  ┣━ 🐍 mutual_information_feature_selection.py
+┃  ┃  ┃  ┣━ 🐍 model_importance_filtering.py
+┃  ┃  ┃  ┣━ 🐍 model_importance_rfe.py
 ┃  ┃  ┃  ┣━ 🐍 mutual_information_filtering.py
 ┃  ┃  ┃  ┣━ 🐍 mutual_information_rfe.py
+┃  ┃  ┃  ┣━ 🐍 permutation_feature_importance.py
 ┃  ┃  ┃  ┗━ 🐍 shap_rfe.py
 ┃  ┃  ┗━ 📁 sampling
 ┃  ┃     ┗━ 🐍 samplers_comparision.py
 ┃  ┣━ 📁 evaluation
+┃  ┃  ┣━ 🐍 custom_metrics_handler.py
 ┃  ┃  ┣━ 🐍 error_diagnostics.py
 ┃  ┃  ┣━ 🐍 generate_reports.py
 ┃  ┃  ┣━ 🐍 metrics.py
@@ -44,7 +48,6 @@ It provides reusable components for building robust ML pipelines, including tool
 ┃     ┣━ 📁 optimization
 ┃     ┃  ┣━ 🐍 cutoff_tuning.py
 ┃     ┃  ┣━ 🐍 ensemble_weights_tuner.py
-┃     ┃  ┣━ 🐍 ensemble_weights_tuner_old.py
 ┃     ┃  ┗━ 🐍 hyperparameter_tuning.py
 ┃     ┗━ 📁 training
 ┃        ┣━ 🐍 base_trainer.py
@@ -54,36 +57,51 @@ It provides reusable components for building robust ML pipelines, including tool
 ┣━ 📁 tests
 ┃  ┣━ 📁 data_processing
 ┃  ┃  ┣━ 📁 data_imputation
-┃  ┃  ┃  ┗━ 🐍 test_joint_distribution_imputation.py
+┃  ┃  ┃  ┣━ 🐍 test_joint_distribution_imputation.py
+┃  ┃  ┃  ┗━ 🐍 test_statistical_association_imputation.py
 ┃  ┃  ┣━ 📁 eda
 ┃  ┃  ┃  ┣━ 🐍 test_data_analysis.py
 ┃  ┃  ┃  ┣━ 🐍 test_data_cleaning.py
 ┃  ┃  ┃  ┗━ 🐍 test_data_transformation.py
 ┃  ┃  ┣━ 📁 feature_engineering
-┃  ┃  ┃  ┣━ 🐍 test_categories_assigner.py
+┃  ┃  ┃  ┣━ 🐍 test_categorical_aligner.py
+┃  ┃  ┃  ┣━ 🐍 test_categorical_cleaner.py
+┃  ┃  ┃  ┣━ 🐍 test_count_encoding.py
+┃  ┃  ┃  ┣━ 🐍 test_cross_encoding.py
+┃  ┃  ┃  ┣━ 🐍 test_cross_encoding_extra.py
+┃  ┃  ┃  ┣━ 🐍 test_digits_encoding.py
+┃  ┃  ┃  ┣━ 🐍 test_feature_generation_pipeline.py
 ┃  ┃  ┃  ┗━ 🐍 test_target_encoding.py
 ┃  ┃  ┣━ 📁 feature_selection
-┃  ┃  ┃  ┗━ 🐍 test_mutual_information_filtering.py
+┃  ┃  ┃  ┣━ 🐍 test_mutual_information_feature_selection_empty.py
+┃  ┃  ┃  ┣━ 🐍 test_mutual_information_filtering.py
+┃  ┃  ┃  ┣━ 🐍 test_mutual_information_rfe.py
+┃  ┃  ┃  ┗━ 🐍 test_shap_rfe.py
 ┃  ┃  ┗━ 📁 sampling
-┃  ┃     ┗━ ...
+┃  ┃     ┗━ 🐍 test_samplers_comparision.py
 ┃  ┣━ 📁 evaluation
 ┃  ┃  ┣━ 🐍 test_error_diagnostics.py
-┃  ┃  ┗━ 🐍 test_metrics.py
+┃  ┃  ┣━ 🐍 test_generate_reports.py
+┃  ┃  ┣━ 🐍 test_metrics.py
+┃  ┃  ┣━ 🐍 test_shap_values.py
+┃  ┃  ┗━ 🐍 test_shap_values_additional.py
 ┃  ┣━ 📁 modeling
 ┃  ┃  ┣━ 📁 optimization
-┃  ┃  ┃  ┗━ ...
+┃  ┃  ┃  ┣━ 🐍 test_cutoff_tuning.py
+┃  ┃  ┃  ┣━ 🐍 test_ensemble_weights_tuner.py
+┃  ┃  ┃  ┣━ 🐍 test_ensemble_weights_tuner_cv.py
+┃  ┃  ┃  ┗━ 🐍 test_hyperparameter_tuning.py
 ┃  ┃  ┗━ 📁 training
 ┃  ┃     ┣━ 🐍 test_base_trainer.py
 ┃  ┃     ┣━ 🐍 test_cross_validation.py
 ┃  ┃     ┣━ 🐍 test_ensemble_model.py
 ┃  ┃     ┗━ 🐍 test_oof_model.py
 ┃  ┗━ 🐍 conftest.py
-┣━ 📄 .env
 ┣━ 👻 .gitignore
-┣━ 🐚 install_package.sh
 ┣━ ⚙️ pyproject.toml
 ┣━ 📖 README.md
-┗━ 📃 requirements.txt
+┣━ 📃 requirements.txt
+┗━ 🐚 setup_venv.sh
 ```
 
 ## Files Description
@@ -91,71 +109,92 @@ It provides reusable components for building robust ML pipelines, including tool
     - 📁 `workflows`: CI/CD workflow definitions.
         - 📜 `python-publish.yml`: Publishes the package to PyPI.
 * 📁 `kvbiii_ml`: Main package source code.
-    - 📁 `data_processing`: Data preparation modules.
-        - 📁 `data_imputation`: Missing value handling.
+    - 📁 `data_processing`: Folder with data processing tools.
+        - 📁 `data_imputation`: Folder with scripts for data imputation.
             - 🐍 `joint_distribution_imputation.py`: Impute using joint distributions.
             - 🐍 `statistical_association_imputation.py`: Impute based on statistical associations.
-        - 📁 `eda`: Exploratory data analysis tools.
+        - 📁 `eda`: Folder with scripts for exploratory data analysis.
             - 🐍 `data_analysis.py`: Data profiling and summary.
             - 🐍 `data_cleaning.py`: Data cleaning utilities.
             - 🐍 `data_transformation.py`: Data transformation functions.
-        - 📁 `feature_engineering`: Feature creation and encoding.
+        - 📁 `feature_engineering`: Folder with scripts for feature engineering.
             - 🐍 `categorical_cleaner.py`: Clean categorical features.
             - 🐍 `categories_assigner.py`: Assign categories to features.
             - 🐍 `count_encoding.py`: Count encoding for categorical variables.
             - 🐍 `cross_encoding.py`: Cross-feature encoding.
-            - 🐍 `example_feature_generation_pipeline.py`: Example feature pipeline.
-            - 🐍 `feature_generation_pipeline.py`: Feature generation pipeline.
-            - 🐍 `target_encoding old.py`: Legacy target encoding.
-            - 🐍 `target_encoding.py`: Target encoding implementation.
-        - 📁 `feature_selection`: Feature selection algorithms.
-            - 🐍 `mutual_information_feature_selection.py`: Select features by mutual information.
-            - 🐍 `mutual_information_filtering.py`: Filter features by mutual information.
-            - 🐍 `mutual_information_rfe.py`: Recursive feature elimination using mutual information.
-            - 🐍 `shap_rfe.py`: Feature selection using SHAP values.
-        - 📁 `sampling`: Data sampling strategies.
-            - 🐍 `samplers_comparision.py`: Compare different samplers.
-    - 📁 `evaluation`: Model evaluation and diagnostics.
-        - 🐍 `error_diagnostics.py`: Analyze model errors.
-        - 🐍 `generate_reports.py`: Generate evaluation reports.
-        - 🐍 `metrics.py`: Model metrics calculation.
-        - 🐍 `shap_values.py`: SHAP value computation.
-    - 📁 `modeling`: Model training and optimization.
-        - 📁 `optimization`: Model optimization utilities.
-            - 🐍 `cutoff_tuning.py`: Tune decision cutoffs.
-            - 🐍 `ensemble_weights_tuner.py`: Tune ensemble weights.
-            - 🐍 `ensemble_weights_tuner_old.py`: Legacy ensemble tuner.
-            - 🐍 `hyperparameter_tuning.py`: Hyperparameter optimization.
-        - 📁 `training`: Model training modules.
-            - 🐍 `base_trainer.py`: Base trainer class.
-            - 🐍 `cross_validation.py`: Cross-validation routines.
-            - 🐍 `ensemble_model.py`: Ensemble model implementation.
-            - 🐍 `oof_model.py`: Out-of-fold model training.
-* 📁 `tests`: Unit and integration tests.
-    - 📁 `data_processing`: Tests for data processing.
-        - 📁 `data_imputation`: Imputation tests.
-            - 🐍 `test_joint_distribution_imputation.py`: Test joint distribution imputation.
-        - 📁 `eda`: EDA tests.
-            - 🐍 `test_data_analysis.py`: Test data analysis.
-            - 🐍 `test_data_cleaning.py`: Test data cleaning.
-            - 🐍 `test_data_transformation.py`: Test data transformation.
-        - 📁 `feature_engineering`: Feature engineering tests.
-            - 🐍 `test_categories_assigner.py`: Test categories assigner.
-            - 🐍 `test_target_encoding.py`: Test target encoding.
-        - 📁 `feature_selection`: Feature selection tests.
-            - 🐍 `test_mutual_information_filtering.py`: Test mutual information filtering.
-        - 📁 `sampling`: Sampling tests.
-    - 📁 `evaluation`: Evaluation tests.
-        - 🐍 `test_error_diagnostics.py`: Test error diagnostics.
-        - 🐍 `test_metrics.py`: Test metrics.
-    - 📁 `modeling`: Modeling tests.
-        - 📁 `optimization`: Optimization tests.
-        - 📁 `training`: Training tests.
-            - 🐍 `test_base_trainer.py`: Test base trainer.
-            - 🐍 `test_cross_validation.py`: Test cross-validation.
-            - 🐍 `test_ensemble_model.py`: Test ensemble model.
-            - 🐍 `test_oof_model.py`: Test out-of-fold model.
-    - 🐍 `conftest.py`: Pytest configuration.
+			- 🐍 `digits_encoding.py`: Digits encoding for numerical variables.
+			- 🐍 `dtypes_converter.py`: Convert data types.
+			- 🐍 `feature_generation_pipeline.py`: Pipeline for generating new features.
+			- 🐍 `numerical_downcaster.py`: Downcast numerical variables.
+			- 🐍 `target_encoding.py`: Target encoding for categorical variables.
+		- 📁 `feature_selection`: Folder with scripts for feature selection.
+			- 🐍 `model_importance_filtering.py`: Filter features using model-based importances.
+			- 🐍 `model_importance_rfe.py`: Recursive feature elimination using model importances.
+			- 🐍 `mutual_information_filtering.py`: Filter features by mutual information.
+			- 🐍 `mutual_information_rfe.py`: Recursive feature elimination with mutual information scores.
+			- 🐍 `permutation_feature_importance.py`: Permutation-importance based feature filtering.
+			- 🐍 `shap_rfe.py`: SHAP-driven recursive feature elimination.
+		- 📁 `sampling`: Sampling strategy utilities.
+			- 🐍 `samplers_comparision.py`: Compare sampling strategies.
+	- 📁 `evaluation`: Model evaluation utilities.
+		- 🐍 `custom_metrics_handler.py`: Register and compute custom metrics.
+		- 🐍 `error_diagnostics.py`: Error analysis and diagnostics.
+		- 🐍 `generate_reports.py`: Generate evaluation reports.
+		- 🐍 `metrics.py`: Metric calculation utilities.
+		- 🐍 `shap_values.py`: SHAP value computation helpers.
+	- 📁 `modeling`: Model training and optimization tools.
+		- 📁 `optimization`: Optimization and tuning utilities.
+			- 🐍 `cutoff_tuning.py`: Optimize classification cutoff thresholds.
+			- 🐍 `ensemble_weights_tuner.py`: Tune ensemble weights.
+			- 🐍 `hyperparameter_tuning.py`: Hyperparameter search utilities.
+		- 📁 `training`: Model training workflows.
+			- 🐍 `base_trainer.py`: Base trainer implementation.
+			- 🐍 `cross_validation.py`: Cross-validation utilities.
+			- 🐍 `ensemble_model.py`: Ensemble model training logic.
+			- 🐍 `oof_model.py`: Out-of-fold training and predictions.
+* 📁 `tests`: Test suite for the package.
+	- 📁 `data_processing`: Tests for data processing modules.
+		- 📁 `data_imputation`: Tests for data imputation utilities.
+			- 🐍 `test_joint_distribution_imputation.py`: Tests joint distribution imputation.
+			- 🐍 `test_statistical_association_imputation.py`: Tests statistical association imputation.
+		- 📁 `eda`: Tests for exploratory data analysis utilities.
+			- 🐍 `test_data_analysis.py`: Tests data analysis helpers.
+			- 🐍 `test_data_cleaning.py`: Tests data cleaning utilities.
+			- 🐍 `test_data_transformation.py`: Tests data transformation functions.
+		- 📁 `feature_engineering`: Tests for feature engineering components.
+			- 🐍 `test_categorical_aligner.py`: Tests categorical alignment.
+			- 🐍 `test_categorical_cleaner.py`: Tests categorical cleaning.
+			- 🐍 `test_count_encoding.py`: Tests count encoding.
+			- 🐍 `test_cross_encoding.py`: Tests cross-feature encoding.
+			- 🐍 `test_cross_encoding_extra.py`: Additional cross-encoding tests.
+			- 🐍 `test_digits_encoding.py`: Tests digits encoding.
+			- 🐍 `test_feature_generation_pipeline.py`: Tests feature generation pipeline.
+			- 🐍 `test_target_encoding.py`: Tests target encoding.
+		- 📁 `feature_selection`: Tests for feature selection methods.
+			- 🐍 `test_mutual_information_feature_selection_empty.py`: Tests MI selection on empty inputs.
+			- 🐍 `test_mutual_information_filtering.py`: Tests mutual information filtering.
+			- 🐍 `test_mutual_information_rfe.py`: Tests mutual information RFE.
+			- 🐍 `test_shap_rfe.py`: Tests SHAP-based RFE.
+		- 📁 `sampling`: Tests for sampling utilities.
+			- 🐍 `test_samplers_comparision.py`: Tests sampling comparisons.
+	- 📁 `evaluation`: Tests for evaluation utilities.
+		- 🐍 `test_error_diagnostics.py`: Tests error diagnostics.
+		- 🐍 `test_generate_reports.py`: Tests report generation.
+		- 🐍 `test_metrics.py`: Tests metrics calculations.
+		- 🐍 `test_shap_values.py`: Tests SHAP value helpers.
+		- 🐍 `test_shap_values_additional.py`: Additional SHAP value tests.
+	- 📁 `modeling`: Tests for modeling modules.
+		- 📁 `optimization`: Tests for optimization utilities.
+			- 🐍 `test_cutoff_tuning.py`: Tests cutoff tuning.
+			- 🐍 `test_ensemble_weights_tuner.py`: Tests ensemble weights tuning.
+			- 🐍 `test_ensemble_weights_tuner_cv.py`: Tests ensemble weights tuning with CV.
+			- 🐍 `test_hyperparameter_tuning.py`: Tests hyperparameter tuning.
+		- 📁 `training`: Tests for training workflows.
+			- 🐍 `test_base_trainer.py`: Tests base trainer behavior.
+			- 🐍 `test_cross_validation.py`: Tests cross-validation utilities.
+			- 🐍 `test_ensemble_model.py`: Tests ensemble model training.
+			- 🐍 `test_oof_model.py`: Tests out-of-fold training.
+	- 🐍 `conftest.py`: Pytest fixtures and shared test setup.
 * 📄 `.env`: Environment variable definitions.
 * 👻 `.gitignore`: Files and folders to ignore in git.
 * 🐚 `install_package.sh`: Shell script for installation.
@@ -167,7 +206,7 @@ It provides reusable components for building robust ML pipelines, including tool
 To install the repository, follow these steps:
 1. Clone the repository:
 ```bash
-git clone <repo_url>
+git clone https://github.com/kvbiii/kvbiii-ml.git
 ```
 
 2. Navigate to the repository directory:
@@ -177,14 +216,15 @@ cd kvbiii-ml
 
 3. Create a virtual environment (optional but recommended):
 ```bash
-python -m venv <venv_name>
+bash setup_venv.sh
 ```
 
 4. Activate the virtual environment:
 ```bash
-source <venv_name>/bin/activate
+source kvbiii-ml_venv/bin/activate
 ```
 
+## Usage
 ## Usage
 You can use `kvbiii-ml` to build and evaluate machine learning pipelines. Here are some example usage ideas:
 ### Example: Data Analysis
@@ -272,4 +312,4 @@ print(f"Validation {METRIC_NAME}: {np.mean(valid_scores):.4f} +- {np.std(valid_s
 > ```
 
 -------------------------------------------
-**Last updated on 2025-09-03 21:33:44**
+**Last updated on 2026-04-29 18:40:26**
