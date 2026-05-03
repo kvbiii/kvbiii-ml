@@ -1,12 +1,10 @@
 import gc
+
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator
-from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
-import sys
-from pathlib import Path
 
-sys.path.append(str(Path(__file__).resolve().parents[3]))
+from kvbiii_ml.data_processing.eda.data_analysis import DataAnalyzer
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
 
@@ -216,13 +214,13 @@ class MutualInformationRecursiveFeatureElimination:
         self, X: pd.DataFrame, y: pd.Series | np.ndarray
     ) -> dict[str, float]:
         """Compute mutual information scores for current features."""
-        X, y = self._prepare_X_y_for_mi(X, y)
-        if self.problem_type == "classification":
-            mi = mutual_info_classif(X, y, **self.mi_kwargs)
-        else:
-            mi = mutual_info_regression(X, y, **self.mi_kwargs)
-        mi = np.nan_to_num(mi, nan=0.0)
-        return {feat: float(score) for feat, score in zip(X.columns, mi)}
+        return DataAnalyzer.mutual_information_scores(
+            X=X,
+            y=y,
+            problem_type=self.problem_type,
+            n_neighbors=int(self.mi_kwargs["n_neighbors"]),
+            random_state=self.mi_kwargs.get("random_state"),
+        )
 
     def _prepare_X_y_for_mi(
         self, X: pd.DataFrame, y: pd.Series | np.ndarray
@@ -239,18 +237,19 @@ class MutualInformationRecursiveFeatureElimination:
         Returns:
             tuple[pd.DataFrame, pd.Series | np.ndarray]: Possibly transformed (X, y).
         """
-        if not isinstance(X, pd.DataFrame):
-            raise ValueError("X must be a pandas DataFrame.")
         if not isinstance(y, (pd.Series, np.ndarray)):
             raise ValueError("y must be a pandas Series or numpy array.")
 
-        cat_cols = X.select_dtypes(include=["category"]).columns
+        X_prepared, discrete_features_mask = (
+            DataAnalyzer._prepare_features_for_mutual_information(X)
+        )
 
-        if len(cat_cols) > 0:
-            X = X.copy()
-            X[cat_cols] = X[cat_cols].apply(lambda col: col.cat.codes)
-            self.mi_kwargs["discrete_features"] = X.columns.isin(cat_cols).astype(bool)
-        return X, y
+        if discrete_features_mask is None:
+            self.mi_kwargs.pop("discrete_features", None)
+        else:
+            self.mi_kwargs["discrete_features"] = discrete_features_mask
+
+        return X_prepared, y
 
     def _cross_val_base_metric(
         self, X: pd.DataFrame, y: pd.Series, current_features: list[str]
