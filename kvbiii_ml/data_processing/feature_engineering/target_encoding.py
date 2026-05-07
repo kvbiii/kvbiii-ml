@@ -489,4 +489,20 @@ class TargetEncodingFeatureGenerator:
 
 
 if __name__ == "__main__":
-    print("TargetEncodingFeatureGenerator module loaded.")
+    data = {
+        "feature1": ["A", "B", "A", "C", "B"],
+        "feature2": [1.5, 2.3, 1.8, 3.0, 2.1],
+    }
+    target = [0, 1, 0, 1, 0]
+    df = pd.DataFrame(data)
+    y = pd.Series(target)
+
+    te_generator = TargetEncodingFeatureGenerator(
+        features_names=["feature1", "feature2"],
+        aggregation="mean",
+        cv=KFold(n_splits=2),
+    )
+    te_generator.fit(df, y)
+    transformed_df = te_generator.transform(df)
+    merged_df = pd.concat([transformed_df, y.rename("target")], axis=1)
+    print(merged_df)
