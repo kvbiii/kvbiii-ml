@@ -49,7 +49,7 @@ class FoldwiseSampler:
         Args:
             X (pd.DataFrame): Feature matrix.
             y (pd.Series): Target vector.
-        
+
         Returns:
             tuple[pd.DataFrame, pd.Series]: Resampled feature matrix and target vector.
         """
@@ -69,9 +69,16 @@ class FoldwiseSampler:
         Args:
             X (pd.DataFrame): Feature matrix.
             y (pd.Series): Target vector.
-        
+
         Returns:
             tuple[pd.DataFrame, pd.Series]: Resampled feature matrix and target vector.
         """
         self.fit(X, y)
         return self.fit_resample(X, y)
+
+
+if __name__ == "__main__":
+    import pandas as pd
+
+    sample_df = pd.DataFrame({"target": [0, 1, 0, 1], "x": [1.0, 2.0, 3.0, 4.0]})
+    print(sample_df.head())
