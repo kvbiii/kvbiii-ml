@@ -1,9 +1,10 @@
 import gc
+import sys
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator
-import sys
-from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[3]))
 from kvbiii_ml.evaluation.shap_values import compute_shap_values
@@ -303,7 +304,6 @@ class ShapRecursiveFeatureElimination:
         removal_counts = np.maximum(removal_counts, 0).astype(int)
         return removal_counts.tolist()
 
-
     def _cross_val_feature_metrics(
         self, X: pd.DataFrame, y: pd.Series, current_features: list[str]
     ) -> tuple[dict[str, float], float, float]:
@@ -352,9 +352,9 @@ class ShapRecursiveFeatureElimination:
                 y_valid = y.iloc[valid_idx]
                 try:
                     shap_values = compute_shap_values(fitted, X_valid, current_features)
-                except Exception as e:
+                except (AttributeError, RuntimeError, TypeError, ValueError) as exc:
                     if self.verbose:
-                        print(f"⚠️ SHAP computation failed for fold {fold_idx}: {e}")
+                        print(f"⚠️ SHAP computation failed for fold {fold_idx}: {exc}")
                     continue
                 self._process_shap_fold(
                     shap_values,
@@ -363,9 +363,9 @@ class ShapRecursiveFeatureElimination:
                     fold_features_metric_monitor,
                 )
 
-            except Exception as e:
+            except (AttributeError, RuntimeError, TypeError, ValueError) as exc:
                 if self.verbose:
-                    print(f"⚠️ Error processing fold {fold_idx}: {e}")
+                    print(f"⚠️ Error processing fold {fold_idx}: {exc}")
                 continue
             finally:
                 gc.collect()
@@ -479,15 +479,15 @@ class ShapRecursiveFeatureElimination:
                     metric_without_feature = self.metric_fn(y_valid, final_pred)
                     fold_features_metric_monitor[feature].append(metric_without_feature)
 
-                except Exception as e:
+                except (TypeError, ValueError) as exc:
                     if self.verbose:
-                        print(f"⚠️ Error processing feature {feature}: {e}")
+                        print(f"⚠️ Error processing feature {feature}: {exc}")
                     continue
 
-        except Exception as e:
+        except (FloatingPointError, OverflowError, TypeError, ValueError) as exc:
             if self.verbose:
                 print(
-                    f"⚠️ Vectorized processing failed, falling back to iterative method: {e}"
+                    f"⚠️ Vectorized processing failed, falling back to iterative method: {exc}"
                 )
 
         finally:
@@ -560,14 +560,14 @@ class ShapRecursiveFeatureElimination:
                             final_pred = np.full(n, final_pred.ravel()[0])
                     metric_without_feature = self.metric_fn(y_valid, final_pred)
                     fold_features_metric_monitor[feature].append(metric_without_feature)
-                except Exception as e:
+                except (TypeError, ValueError) as exc:
                     if self.verbose:
-                        print(f"⚠️ Error processing feature {feature}: {e}")
+                        print(f"⚠️ Error processing feature {feature}: {exc}")
                     continue
-        except Exception as e:
+        except (FloatingPointError, OverflowError, TypeError, ValueError) as exc:
             if self.verbose:
                 print(
-                    f"⚠️ Vectorized 3D processing failed, falling back to iterative method: {e}"
+                    f"⚠️ Vectorized 3D processing failed, falling back to iterative method: {exc}"
                 )
             self._process_3d_shap_fallback(
                 vals, base, y_valid, current_features, fold_features_metric_monitor
@@ -666,9 +666,9 @@ class ShapRecursiveFeatureElimination:
 
 if __name__ == "__main__":
     # Minimal runnable example
-    from sklearn.model_selection import KFold
     from sklearn.datasets import load_breast_cancer
     from sklearn.ensemble import RandomForestClassifier
+    from sklearn.model_selection import KFold
 
     X_df, y_ser = load_breast_cancer(return_X_y=True, as_frame=True)
     protected_features = ["mean radius", "mean texture"]
