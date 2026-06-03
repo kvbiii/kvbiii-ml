@@ -82,7 +82,7 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
         df = df.copy()
         if self.categorical_features is None:
             self.categorical_features = df.select_dtypes(
-                include=["object", "category"]
+                include=["object", "string", "category"]
             ).columns.tolist()
         for feature in self.categorical_features:
             if feature not in df.columns:
