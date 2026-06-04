@@ -1,9 +1,12 @@
 from inspect import signature
-from typing import Optional
 
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator
+from lightgbm import log_evaluation
+import logging
+
+logging.getLogger("lightgbm").setLevel(logging.ERROR)
 
 
 class BaseTrainer:
@@ -18,19 +21,34 @@ class BaseTrainer:
         estimator: BaseEstimator,
         X_train: pd.DataFrame,
         y_train: pd.Series,
-        X_valid: Optional[pd.DataFrame] = None,
-        y_valid: Optional[pd.Series] = None,
-        sample_weight: Optional[pd.Series] = None,
+        X_valid: pd.DataFrame | None = None,
+        y_valid: pd.Series | None = None,
+        sample_weight: pd.Series | None = None,
+        verbose: bool | int | None = None,
     ) -> BaseEstimator:
         """Fit the estimator, adding common eval kwargs if supported."""
         sig = signature(estimator.fit)
         fit_params = {}
 
-        if "eval_set" in sig.parameters and X_valid is not None:
-            fit_params["eval_set"] = [(X_valid, y_valid)]
+        if verbose is not None:
+            if "verbose" in sig.parameters:
+                fit_params["verbose"] = verbose
+            elif "verbosity" in sig.parameters:
+                fit_params["verbosity"] = verbose
+            if "callbacks" in sig.parameters:
+                if estimator.__class__.__name__.startswith("LGBM"):
+                    fit_params["callbacks"] = [log_evaluation(verbose)]
 
-        if "verbose" in sig.parameters:
-            fit_params["verbose"] = False
+        if "eval_set" in sig.parameters and X_valid is not None and y_valid is not None:
+            eval_set = [(X_train, y_train), (X_valid, y_valid)]
+
+            if (
+                estimator.__class__.__name__.startswith("CatBoost")
+                and str(estimator.get_params().get("task_type", "")).upper() == "GPU"
+            ):
+                eval_set = eval_set[1:]
+
+            fit_params["eval_set"] = eval_set
 
         if "X_val" in sig.parameters and "y_val" in sig.parameters:
             fit_params["X_val"] = X_valid
@@ -55,6 +73,7 @@ class BaseTrainer:
         y_valid: pd.Series,
         metric_type: str = "preds",
         X_test: pd.DataFrame | None = None,
+        verbose: bool | int | None = False,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, BaseEstimator]:
         """Fit and produce predictions according to metric_type.
 
@@ -66,13 +85,14 @@ class BaseTrainer:
                 y_valid (pd.Series): Validation target.
                 metric_type (str): Prediction mode, either "preds" or "probs". Defaults to "preds".
                 X_test (pd.DataFrame | None): Optional test features to predict. Defaults to None.
+                verbose (bool | int | None): Optional verbosity for fitting. Defaults to False.
 
         Returns:
                 tuple[np.ndarray, np.ndarray, np.ndarray | None, BaseEstimator]:
                         Training predictions, validation predictions, optional test predictions, and the fitted estimator.
         """
         fitted_estimator = BaseTrainer.fit_estimator(
-            estimator, X_train, y_train, X_valid, y_valid
+            estimator, X_train, y_train, X_valid, y_valid, verbose=verbose
         )
 
         if metric_type == "preds":
@@ -131,11 +151,24 @@ class BaseTrainer:
             categorical_features = X_train.select_dtypes(
                 include="category"
             ).columns.tolist()
-        except Exception:
+        except (AttributeError, TypeError, ValueError):
             categorical_features = []
         name = estimator.__class__.__name__
+        is_fitted = False
+        if hasattr(estimator, "is_fitted") and callable(estimator.is_fitted):
+            try:
+                is_fitted = bool(estimator.is_fitted())
+            except Exception:
+                is_fitted = False
+
         if name.startswith("CatBoost"):
+            if is_fitted:
+                estimator = estimator.__class__(**estimator.get_params())
             estimator = estimator.set_params(cat_features=categorical_features)
         elif name.startswith("HistGradientBoosting"):
             estimator = estimator.set_params(categorical_features=categorical_features)
         return estimator
+
+
+if __name__ == "__main__":
+    print("BaseTrainer module loaded successfully.")
