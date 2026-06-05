@@ -1,29 +1,46 @@
-"""Centralized metrics definitions for machine learning evaluation.
+from collections.abc import Callable
 
-This module provides standardized metric functions and configurations that can be
-used across different components of the kvbiii_ml package for consistent evaluation
-of machine learning models.
-"""
-
+import numpy as np
 from sklearn.metrics import (
     accuracy_score,
     balanced_accuracy_score,
+    brier_score_loss,
     f1_score,
-    recall_score,
-    precision_score,
-    roc_auc_score,
+    log_loss,
     mean_absolute_error,
     mean_absolute_percentage_error,
     mean_squared_error,
+    precision_score,
+    r2_score,
+    recall_score,
+    roc_auc_score,
     root_mean_squared_error,
     root_mean_squared_log_error,
-    r2_score,
-    log_loss,
-    brier_score_loss,
 )
 
+MetricFunction = Callable[..., float]
 
-METRICS_NAMES: dict[str, callable] = {
+
+def _root_mean_squared_percentage_error(
+    y_true_values: np.ndarray,
+    y_pred_values: np.ndarray,
+) -> float:
+    """Computes root mean squared percentage error."""
+    y_true_array = np.asarray(y_true_values, dtype=float)
+    y_pred_array = np.asarray(y_pred_values, dtype=float)
+    non_zero_mask = y_true_array != 0
+    filtered_y_true = y_true_array[non_zero_mask]
+    filtered_y_pred = y_pred_array[non_zero_mask]
+    if filtered_y_true.size == 0:
+        raise ValueError("RMSPE is undefined when all true values are equal to zero.")
+    return float(
+        np.sqrt(
+            np.mean(np.square((filtered_y_true - filtered_y_pred) / filtered_y_true))
+        )
+    )
+
+
+METRICS_NAMES: dict[str, MetricFunction] = {
     "Accuracy": accuracy_score,
     "Balanced Accuracy": balanced_accuracy_score,
     "F1": f1_score,
@@ -52,21 +69,32 @@ METRICS_NAMES: dict[str, callable] = {
     "Precision (Weighted)": lambda y_true, y_pred: precision_score(
         y_true, y_pred, average="weighted"
     ),
-    "Roc AUC": roc_auc_score,
+    "Roc AUC": lambda y_true, y_score: roc_auc_score(
+        y_true,
+        y_score[:, 1] if (
+            hasattr(y_score, "ndim") and y_score.ndim == 2 and y_score.shape[1] == 2
+        ) else y_score,
+    ),
     "Roc AUC (Multi-class)": lambda y_true, y_proba: roc_auc_score(
         y_true, y_proba, multi_class="ovr", average="macro"
     ),
     "Log Loss": log_loss,
-    "Brier Score": brier_score_loss,
+    "Brier Score": lambda y_true, y_prob: brier_score_loss(
+        y_true,
+        y_prob[:, 1] if (
+            hasattr(y_prob, "ndim") and y_prob.ndim == 2 and y_prob.shape[1] == 2
+        ) else y_prob,
+    ),
     "MAE": mean_absolute_error,
     "MAPE": mean_absolute_percentage_error,
     "MSE": mean_squared_error,
     "RMSE": root_mean_squared_error,
+    "RMSPE": _root_mean_squared_percentage_error,
     "RMSLE": root_mean_squared_log_error,
     "R2": r2_score,
 }
 
-METRICS: dict[str, list] = {
+METRICS: dict[str, tuple[MetricFunction, str, str]] = {
     key: [
         eval_func,
         (
@@ -76,7 +104,17 @@ METRICS: dict[str, list] = {
         ),
         (
             "minimize"
-            if key in ["MAE", "MAPE", "MSE", "RMSE", "RMSLE", "Log Loss", "Brier Score"]
+            if key
+            in [
+                "MAE",
+                "MAPE",
+                "MSE",
+                "RMSE",
+                "RMSPE",
+                "RMSLE",
+                "Log Loss",
+                "Brier Score",
+            ]
             else "maximize"
         ),
     ]
@@ -84,14 +122,14 @@ METRICS: dict[str, list] = {
 }
 
 
-def get_metric_function(metric_name: str) -> callable:
+def get_metric_function(metric_name: str) -> MetricFunction:
     """Gets the metric function by name.
 
     Args:
         metric_name (str): Name of the metric.
 
     Returns:
-        callable: The metric function.
+        MetricFunction: The metric function.
 
     Raises:
         ValueError: If metric name is not found.
@@ -151,8 +189,6 @@ def list_available_metrics() -> list[str]:
 
 
 if __name__ == "__main__":
-    import numpy as np
-
     print("📊 Available Metrics in kvbiii_ml")
     print("=" * 50)
 
@@ -160,7 +196,7 @@ if __name__ == "__main__":
     regression_metrics = []
 
     for metric in list_available_metrics():
-        if metric in ["MAE", "MAPE", "MSE", "RMSE", "RMSLE", "R2"]:
+        if metric in ["MAE", "MAPE", "MSE", "RMSE", "RMSPE", "RMSLE", "R2"]:
             regression_metrics.append(metric)
         else:
             classification_metrics.append(metric)
