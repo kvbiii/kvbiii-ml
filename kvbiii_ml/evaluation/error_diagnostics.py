@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from IPython.display import display
+
+try:  # optional notebook dependency
+    from IPython.display import display
+except ImportError:  # pragma: no cover
+
+    def display(obj: object) -> None:
+        """Fallback display for non-notebook environments."""
+        print(obj)
 
 
 def get_top_regression_under_over_errors(
