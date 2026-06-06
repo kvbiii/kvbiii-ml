@@ -30,7 +30,7 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
                 Defaults to True.
         """
         self.categorical_features = categorical_features
-        self.fill_values = fill_values or {}
+        self.fill_values = fill_values
         self.warn_on_unknown = warn_on_unknown
         self.categories_ = {}
         self.modes_ = {}
@@ -141,18 +141,18 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
         return df
 
     def _get_fill_value(self, feature: str) -> str:
-        """
-        Get the appropriate fill value for a feature.
+        """Get the fill value for a feature.
 
         Args:
-            feature (str): feature name.
+            feature (str): Feature name.
 
         Returns:
             str: Fill value to use for unknown categories.
         """
-        if feature in self.fill_values:
-            return self.fill_values[feature]
-        return self.modes_[feature]
+        fill_values = self.fill_values or {}
+        if feature in fill_values:
+            return fill_values[feature]
+        return self.modes_.get(feature, "Unknown")
 
 
 if __name__ == "__main__":
