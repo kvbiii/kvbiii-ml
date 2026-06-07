@@ -324,7 +324,7 @@ if __name__ == "__main__":
         problem_type="classification",
         metric_name="Accuracy",
         cv=KFold(n_splits=5, shuffle=True, random_state=17),
-        processors=None,
+        preprocessing_pipeline=None,
         verbose=False,
     )
 
