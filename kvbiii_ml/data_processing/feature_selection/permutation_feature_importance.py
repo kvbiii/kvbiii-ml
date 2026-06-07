@@ -1,24 +1,34 @@
-import gc
+import warnings
+from copy import deepcopy
+from pathlib import Path
+import sys
 
 import numpy as np
 import pandas as pd
-from joblib import Parallel, delayed
-from sklearn.base import BaseEstimator
-import sys
-from pathlib import Path
-from tqdm import tqdm
+from sklearn.base import BaseEstimator, clone
+from sklearn.inspection import permutation_importance
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import FunctionTransformer
 
 sys.path.append(str(Path(__file__).resolve().parents[3]))
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
 
 class PermutationRecursiveFeatureElimination:
-    """
-    Recursive feature elimination using Permutation Feature Importance.
+    """Recursive feature elimination using permutation importance.
 
-    This strategy iteratively evaluates the impact of shuffling each feature
-    on model performance across validation folds, then removes the least
-    important features according to a target metric until a stopping schedule is met.
+    Iteratively fits a model on all folds once (baseline), computes permutation
+    importance on the processed validation sets, then removes the least-important
+    processed features according to a linear-decay schedule.
+
+    When the cross-validator holds a column-expansion pipeline (steps that inherit
+    from ``_FeatureExpansionBase`` and therefore expose a ``_suffix`` attribute),
+    the elimination loop works entirely in *processed* feature space — the
+    post-pipeline column set.  Raw input features are derived from the active
+    processed set at each step and used only as pipeline inputs.
+
+    ``protected_features`` must be specified as *processed* column names and are
+    validated after the baseline CV run when the processed column set is known.
     """
 
     def __init__(
@@ -33,21 +43,24 @@ class PermutationRecursiveFeatureElimination:
         random_state: int = 17,
         n_jobs: int = -1,
     ) -> None:
-        """
-        Initialize the Permutation Feature Importance RFE selector.
+        """Initialize the permutation RFE selector.
 
         Args:
             estimator (BaseEstimator): Estimator to fit within each fold.
-            cross_validator (CrossValidationTrainer): Cross-validation trainer instance.
-            steps (int, optional): Number of elimination iterations. Defaults to 5.
-            alpha (float, optional): Weight for the final selection score mix. Defaults to 0.95.
-            n_repeats (int, optional): Number of times to permute each feature. Defaults to 5.
-            verbose (bool, optional): Whether to print progress messages. Defaults to True.
-            protected_features (list[str] | None, optional): Features that should never be
-                removed. Defaults to None.
-            random_state (int, optional): Random state for reproducibility. Defaults to 17.
-            n_jobs (int, optional): Number of parallel jobs for fold processing.
-                -1 means using all processors. Defaults to -1.
+            cross_validator (CrossValidationTrainer): Cross-validation trainer that
+                already holds the preprocessing pipeline.  The pipeline is re-fitted
+                per fold during the baseline run and then injected as a step-restricted
+                override at each elimination step.
+            steps (int): Number of elimination iterations. Defaults to 5.
+            alpha (float): Weight for metric vs feature-count balance in final
+                selection. Defaults to 0.95.
+            n_repeats (int): Permutation repeats per feature per fold. Defaults to 5.
+            verbose (bool): Print emoji-styled step-by-step progress. Defaults to True.
+            protected_features (list[str] | None): Processed feature names never
+                removed.  Validated after the baseline CV against the actual
+                post-pipeline column set.  Defaults to None.
+            random_state (int): Random seed for reproducibility. Defaults to 17.
+            n_jobs (int): Parallel jobs for permutation importance. Defaults to -1.
         """
         self.estimator = estimator
         self.cross_validator = cross_validator
@@ -58,14 +71,10 @@ class PermutationRecursiveFeatureElimination:
         self.protected_features = protected_features or []
         self.random_state = random_state
         self.n_jobs = n_jobs
-        self._rng = np.random.RandomState(random_state)
 
         self.metric_fn = self.cross_validator.metric_fn
         self.metric_type = self.cross_validator.metric_type
         self.metric_direction = self.cross_validator.metric_direction
-
-        self._permutation_cache: dict[int, dict[str, list[np.ndarray]]] = {}
-        self._metric_cache: dict[int, dict[str, list[float]]] = {}
 
         self.history_schema = {
             "step": int,
@@ -80,32 +89,38 @@ class PermutationRecursiveFeatureElimination:
     def run(
         self, X: pd.DataFrame, y: pd.Series | np.ndarray
     ) -> dict[str, list | pd.DataFrame]:
-        """
-        Run Permutation Feature Importance RFE and return the selection summary.
+        """Run permutation RFE and return the selection summary.
+
+        Algorithm:
+            1. Baseline CV — pipeline applied per fold, fold models and fitted pipelines stored.
+            2. Processed validation sets built from fitted pipelines.
+            3. Processed feature list discovered from post-pipeline columns.
+            4. protected_features validated against processed columns.
+            5. raw_to_derived mapping built from pipeline expansion steps.
+            6. Permutation importance computed once in processed space (fixed baseline).
+            7. Removal schedule built from removable processed feature count.
+            8. Each step: print current state, restrict pipeline, re-run CV, record scores.
+            9. Return step-wise DataFrame for manual elbow inspection.
 
         Args:
-            X (pd.DataFrame): Feature matrix.
-            y (pd.Series | np.ndarray): Target array/series aligned with X.
+            X (pd.DataFrame): Feature matrix (raw columns).
+            y (pd.Series | np.ndarray): Target aligned with X.
 
         Returns:
-            dict[str, list | pd.DataFrame]: Dictionary with keys:
-                - selected_features (list): Final selected features.
-                - selected_features_names (list): Alias of selected_features.
+            dict[str, list | pd.DataFrame]: Keys:
+                - selected_features (list[str]): Final selected processed feature names.
+                - selected_features_names (list[str]): Alias for selected_features.
                 - history (pd.DataFrame): Step-wise metrics and removals.
 
         Raises:
-            ValueError: When protected features are not found in the dataset.
+            ValueError: When protected features are not found in the post-pipeline
+                column set.
         """
-        X = self._convert_categorical_to_codes(X)
-        current_features = sorted(list(X.columns))
-        missing_protected = set(self.protected_features) - set(current_features)
-        if missing_protected:
-            raise ValueError(
-                f"Protected features not found in dataset: {missing_protected}"
-            )
-        self._permutation_cache = {}
+        X = X.reset_index(drop=True)
+        y = pd.Series(y).reset_index(drop=True)
+        all_raw_features: list[str] = sorted(X.columns.tolist())
 
-        summary_df = {
+        summary_df: dict[str, list | pd.DataFrame] = {
             "selected_features": [],
             "selected_features_names": [],
             "history": pd.DataFrame(columns=self.history_schema.keys()).astype(
@@ -113,7 +128,65 @@ class PermutationRecursiveFeatureElimination:
             ),
         }
 
-        avg_base_metric, _ = self._cross_val_base_metric(X, y, current_features)
+        pipeline = self.cross_validator.preprocessing_pipeline
+        post_pipeline_dtypes: pd.Series | None = self._probe_pipeline_dtypes(
+            pipeline, X[all_raw_features], y
+        )
+
+        _baseline_feature_set = (
+            set(post_pipeline_dtypes.index)
+            if post_pipeline_dtypes is not None
+            else set(all_raw_features)
+        )
+        baseline_estimator = self._restrict_catboost_cat_features(
+            self.estimator, _baseline_feature_set, post_pipeline_dtypes
+        )
+        _, valid_scores, _ = self.cross_validator.fit(
+            baseline_estimator, X[all_raw_features], y
+        )
+        baseline_metric = float(np.mean(valid_scores))
+
+        fold_splits = list(self.cross_validator.cv.split(X[all_raw_features], y))
+        fold_data = [
+            (
+                est,
+                CrossValidationTrainer._transform_with_pipeline(
+                    pipe, X[all_raw_features].iloc[val_idx].copy()
+                ),
+                y.iloc[val_idx],
+            )
+            for (_, val_idx), est, pipe in zip(
+                fold_splits,
+                self.cross_validator.fitted_estimators_,
+                self.cross_validator.fitted_pipelines_,
+            )
+        ]
+
+        self.all_processed_features: list[str] = fold_data[0][1].columns.tolist()
+        all_processed_set = set(self.all_processed_features)
+        post_pipeline_dtypes = fold_data[0][1].dtypes
+
+        missing_protected = set(self.protected_features) - all_processed_set
+        if missing_protected:
+            raise ValueError(
+                f"Protected features not found in post-pipeline column set: {missing_protected}. "
+                f"Available processed columns: {sorted(all_processed_set)}"
+            )
+
+        raw_to_derived = self._build_raw_to_derived(
+            all_raw_features, all_processed_set, pipeline
+        )
+        importance_scores = self._compute_fold_importances(fold_data)
+
+        removable_processed = [
+            f for f in self.all_processed_features if f not in self.protected_features
+        ]
+        removal_schedule = self.compute_removal_schedule(len(removable_processed))
+
+        current_processed_features: list[str] = list(self.all_processed_features)
+        current_raw_features: list[str] = list(all_raw_features)
+        current_valid_scores = valid_scores
+
         summary_df["history"] = pd.concat(
             [
                 summary_df["history"],
@@ -122,9 +195,9 @@ class PermutationRecursiveFeatureElimination:
                         {
                             "step": 0,
                             "n_features_removed": 0,
-                            "n_features_remaining": len(current_features),
+                            "n_features_remaining": len(current_processed_features),
                             "removed_feature_name": None,
-                            "metric_value": avg_base_metric,
+                            "metric_value": baseline_metric,
                             "metric_change": 0.0,
                             "importance_score": np.nan,
                         }
@@ -134,75 +207,112 @@ class PermutationRecursiveFeatureElimination:
             ignore_index=True,
         )
 
-        removable_features = [
-            f for f in current_features if f not in self.protected_features
-        ]
-        removal_schedule = self.compute_removal_schedule(len(removable_features))
-        if self.verbose:
-            print(
-                f"🔍 Starting Permutation Feature Importance RFE with {len(current_features)} features, target metric: {self.cross_validator.metric_name} ({self.metric_direction}), steps: {self.steps}.\n📅 The number of features to remove every step: {removal_schedule}"
-            )
-            print(f"🛡️  Protected features: {self.protected_features}")
-            print(
-                f"📊 Initial {self.cross_validator.metric_name}: {avg_base_metric:.6f} | Features: {len(current_features)}"
+        minimize = self.metric_direction == "minimize"
+
+        for step_idx, n_to_remove in enumerate(removal_schedule, start=1):
+            if len(current_processed_features) <= len(self.protected_features):
+                if self.verbose:
+                    print("⏹️  Stopping early — only protected features remain.")
+                break
+
+            current_set = set(current_processed_features)
+            sorted_removable = sorted(
+                (
+                    (k, v)
+                    for k, v in importance_scores.items()
+                    if k not in self.protected_features and k in current_set
+                ),
+                key=lambda x: x[1],
+                reverse=minimize,
             )
 
-        for step_idx, n_features_to_remove in enumerate(removal_schedule, start=1):
-            importance_scores, fold_base_metric, fold_base_metric_std = (
-                self._cross_val_permutation_importance(X, y, current_features)
+            min_keep = max(len(self.protected_features), 1)
+            n_actual = min(
+                n_to_remove,
+                len(sorted_removable),
+                len(current_processed_features) - min_keep,
             )
-            if self.verbose:
-                print(
-                    f"\n🔁 Step {step_idx} | Number of features remaining: {len(current_features)}"
-                )
-                print(f"\n🔬 Features remaining: {current_features}\n")
-                print(
-                    f"📊 Average {self.cross_validator.metric_name}: {fold_base_metric:.6f} ± {fold_base_metric_std:.6f}"
-                )
+            if n_actual <= 0:
+                if self.verbose:
+                    print("⏹️  Stopping — minimum feature count reached.")
+                break
 
-            removable_scores = {
-                k: v
-                for k, v in importance_scores.items()
-                if k not in self.protected_features
-            }
-            importance_df = pd.DataFrame(
-                list(removable_scores.items()),
-                columns=["feature", "importance_score"],
-            )
-
-            importance_df = importance_df.sort_values(
-                by="importance_score", ascending=True
-            )
-
-            n_actually_removable = min(n_features_to_remove, len(importance_df))
-            features_to_remove = importance_df.head(n_actually_removable)[
-                "feature"
-            ].tolist()
+            features_to_remove = [f for f, _ in sorted_removable[:n_actual]]
 
             if self.verbose:
-                print(f"Top 5 most important features:")
-                for feat in reversed(importance_df.tail(5)["feature"].tolist()):
-                    print(f"  • {feat}: {importance_scores[feat]:.6f}")
-                print("\nTop 5 least important features (candidates for removal):")
-                for feat in features_to_remove[:5]:
-                    print(f"  • {feat}: {importance_scores[feat]:.6f}")
+                self._print_step(
+                    step_idx,
+                    current_processed_features,
+                    current_valid_scores,
+                    sorted_removable,
+                    importance_scores,
+                )
 
             self._log_step(
                 summary_df,
                 step_idx,
-                X,
-                current_features,
+                len(self.all_processed_features),
+                current_processed_features,
                 importance_scores,
-                fold_base_metric,
+                float(np.mean(current_valid_scores)),
                 features_to_remove,
             )
 
-            gc.collect()
+            current_processed_features = [
+                f
+                for f in current_processed_features
+                if f not in set(features_to_remove)
+            ]
+            current_raw_features = self._compute_active_raw(
+                all_raw_features, current_processed_features, raw_to_derived
+            )
 
-            if len(current_features) <= len(self.protected_features):
-                if self.verbose:
-                    print("⏹️  Stopping early - only protected features remain")
-                break
+            restricted_pipeline = self._build_restricted_pipeline(
+                pipeline,
+                current_raw_features,
+                current_processed_features,
+                X[current_raw_features],
+            )
+            step_estimator = self._restrict_catboost_cat_features(
+                self.estimator, set(current_processed_features), post_pipeline_dtypes
+            )
+
+            _, current_valid_scores, _ = self.cross_validator.fit(
+                step_estimator,
+                X[current_raw_features],
+                y,
+                preprocessing_pipeline_override=restricted_pipeline,
+            )
+
+        protected_set = set(self.protected_features)
+        logged_set = set(summary_df["history"]["removed_feature_name"].dropna())
+        never_removed = [
+            f
+            for f in self.all_processed_features
+            if f not in protected_set and f not in logged_set
+        ]
+        if never_removed:
+            last_step = int(summary_df["history"]["step"].max())
+            last_n_removed = int(summary_df["history"]["n_features_removed"].max())
+            final_metric = float(np.mean(current_valid_scores))
+            never_removed_sorted = sorted(
+                never_removed, key=lambda f: importance_scores.get(f, 0.0)
+            )
+            rows = [
+                {
+                    "step": last_step + 1,
+                    "n_features_removed": last_n_removed + i + 1,
+                    "n_features_remaining": len(current_processed_features) - i - 1,
+                    "removed_feature_name": feat,
+                    "metric_value": final_metric,
+                    "metric_change": 0.0,
+                    "importance_score": importance_scores.get(feat, 0.0),
+                }
+                for i, feat in enumerate(never_removed_sorted)
+            ]
+            summary_df["history"] = pd.concat(
+                [summary_df["history"], pd.DataFrame(rows)], ignore_index=True
+            )
 
         summary_df["selected_features"], metric_selected = (
             self.select_features_weighted_score(summary_df["history"], self.alpha)
@@ -210,234 +320,267 @@ class PermutationRecursiveFeatureElimination:
         summary_df["selected_features_names"] = summary_df["selected_features"]
 
         if self.verbose:
-            print(f"\n🎯 Selected features: {summary_df['selected_features']}")
-            base_val = summary_df["history"].iloc[0]["metric_value"]
-            diff_pct = (
-                100 * (metric_selected - base_val) / base_val
-                if base_val != 0
-                else np.nan
+            self._print_summary(
+                summary_df["selected_features"],
+                metric_selected,
+                baseline_metric,
+                len(self.all_processed_features),
             )
-            print(
-                f"📈 Final {self.cross_validator.metric_name} score (approximated): {metric_selected:.6f} | Base: {base_val:.6f} | Δ: {metric_selected - base_val:.6f} ({diff_pct:+.2f}%)"
-            )
-            n_features_initial = summary_df["history"].iloc[0]["n_features_remaining"]
-            n_features_selected = len(summary_df["selected_features"])
-            n_removed = n_features_initial - n_features_selected
-            pct_removed = (
-                100 * n_removed / n_features_initial if n_features_initial else 0.0
-            )
-            print(
-                f"🗑️ Features removed: {n_removed} of {n_features_initial} ({pct_removed:.2f}%)"
-            )
-        gc.collect()
+
         return summary_df
 
-    def _convert_categorical_to_codes(self, X: pd.DataFrame) -> pd.DataFrame:
-        """
-        Convert categorical/object columns in X to integer codes.
+    @staticmethod
+    def _select_features(X: pd.DataFrame, features: list[str]) -> pd.DataFrame:
+        """Select specified features from X, silently skipping any absent ones."""
+        return X[[f for f in features if f in X.columns]]
 
-        Args:
-            X (pd.DataFrame): Input dataframe.
-
-        Returns:
-            pd.DataFrame: Dataframe with categorical/object columns converted to codes.
-        """
-        X_converted = X.copy()
-        for col in X_converted.select_dtypes(include=["category"]).columns:
-            X_converted[col] = (
-                X_converted[col].cat.codes.astype("object").astype("category")
-            )
-        return X_converted
-
-    def _cross_val_base_metric(
-        self, X: pd.DataFrame, y: pd.Series, current_features: list[str]
-    ) -> tuple[float, float]:
-        """
-        Compute the base metric across validation folds.
-
-        Args:
-            X (pd.DataFrame): Feature matrix.
-            y (pd.Series): Target values.
-            current_features (list[str]): Features to evaluate.
-
-        Returns:
-            tuple[float, float]: Average metric and its standard deviation.
-        """
-        _, valid_scores, _ = self.cross_validator.fit(
-            self.estimator, X[current_features], y
-        )
-        gc.collect()
-        return float(np.mean(valid_scores)), float(np.std(valid_scores))
-
-    def _process_fold_importance(
-        self,
-        fold_idx: int,
-        train_idx: np.ndarray,
-        valid_idx: np.ndarray,
-        fitted: BaseEstimator,
+    @staticmethod
+    def _probe_pipeline_dtypes(
+        pipeline: Pipeline | None,
         X: pd.DataFrame,
         y: pd.Series,
-        current_features: list[str],
-    ) -> tuple[dict[str, float], dict[str, list[float]]]:
-        """
-        Process permutation importance for a single fold.
+    ) -> pd.Series | None:
+        """Fit-transform the pipeline on a tiny sample to discover output column dtypes.
+
+        Used to detect columns that a pipeline step (e.g. MeanEncoder) converts from
+        categorical strings to numeric, so that CatBoost's cat_features can be filtered
+        before the baseline CV fit.
 
         Args:
-            fold_idx (int): Index of the current fold.
-            train_idx (np.ndarray): Training indices for this fold.
-            valid_idx (np.ndarray): Validation indices for this fold.
-            fitted (BaseEstimator): Fitted estimator for this fold.
-            X (pd.DataFrame): Full feature matrix.
-            y (pd.Series): Full target values.
-            current_features (list[str]): Features to evaluate.
+            pipeline (Pipeline | None): Preprocessing pipeline to probe.
+            X (pd.DataFrame): Raw feature matrix.
+            y (pd.Series): Target vector.
 
         Returns:
-            tuple[dict[str, float], dict[str, list[float]]]: Tuple containing:
-                - importance scores for each feature in this fold
-                - metric cache for this fold (feature -> list of permutation scores)
+            pd.Series | None: Column dtype series of the probed output, or None when
+                pipeline is None or the output is not a DataFrame.
         """
-        X_valid = X.iloc[valid_idx][current_features].copy()
-        y_valid = y.iloc[valid_idx]
+        if pipeline is None:
+            return None
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            X_probe = clone(pipeline).fit_transform(X.head(10), y.head(10))
+        return X_probe.dtypes if isinstance(X_probe, pd.DataFrame) else None
 
-        baseline_pred = self._predict(
-            fitted, pd.DataFrame(X_valid, columns=current_features)
-        )
-        baseline_score = self.metric_fn(y_valid, baseline_pred)
+    @staticmethod
+    def _build_raw_to_derived(
+        all_raw_features: list[str],
+        all_processed_set: set[str],
+        pipeline: Pipeline | None,
+    ) -> dict[str, list[str]]:
+        """Map each raw feature to its derived column names produced by expansion steps.
 
-        fold_metric_cache = self._metric_cache.get(fold_idx, {})
-        is_first_computation = fold_idx not in self._metric_cache
+        Only steps that expose a non-empty ``_suffix`` class attribute (those inheriting
+        from ``_FeatureExpansionBase``) contribute derived columns.  Regular in-place
+        transformers (MeanEncoder, Winsorizer, etc.) do not expand columns and are ignored.
 
-        if is_first_computation:
-            feature_iterator = tqdm(
-                current_features,
-                desc=f"Fold {fold_idx + 1}/{self.cross_validator.cv.get_n_splits()}",
-                disable=not self.verbose,
-                leave=True,
+        Args:
+            all_raw_features (list[str]): Raw input column names.
+            all_processed_set (set[str]): Set of all post-pipeline column names.
+            pipeline (Pipeline | None): Preprocessing pipeline or None.
+
+        Returns:
+            dict[str, list[str]]: raw feature → list of derived column names actually
+                present in the processed output.
+        """
+        raw_to_derived: dict[str, list[str]] = {f: [] for f in all_raw_features}
+        if pipeline is None:
+            return raw_to_derived
+        for _, step in pipeline.steps:
+            if not (hasattr(step, "_suffix") and step._suffix):
+                continue
+            suffix = f"_{step._suffix}"
+            for raw_feat in all_raw_features:
+                derived = f"{raw_feat}{suffix}"
+                if derived in all_processed_set:
+                    raw_to_derived[raw_feat].append(derived)
+        return raw_to_derived
+
+    @staticmethod
+    def _compute_active_raw(
+        all_raw: list[str],
+        current_processed: list[str],
+        raw_to_derived: dict[str, list[str]],
+    ) -> list[str]:
+        """Compute the raw input features still needed given the active processed set.
+
+        A raw feature is needed when either its own name appears in the processed set
+        or at least one of its derived expansion columns does.
+
+        Args:
+            all_raw (list[str]): All raw input column names.
+            current_processed (list[str]): Processed feature names still active.
+            raw_to_derived (dict[str, list[str]]): raw → derived column names mapping.
+
+        Returns:
+            list[str]: Raw features required as pipeline input for the current step.
+        """
+        current_processed_set = set(current_processed)
+        return [
+            f
+            for f in all_raw
+            if f in current_processed_set
+            or any(d in current_processed_set for d in raw_to_derived[f])
+        ]
+
+    def _compute_fold_importances(self, fold_data: list[tuple]) -> dict[str, float]:
+        """Compute mean permutation importance averaged across CV fold models.
+
+        Args:
+            fold_data (list[tuple]): List of (fitted_estimator, X_val_proc, y_val) per fold.
+
+        Returns:
+            dict[str, float]: Processed feature name → mean importance score.
+        """
+        is_classification = self.metric_type == "probs"
+
+        def _scorer(estimator: BaseEstimator, X: pd.DataFrame, y: np.ndarray) -> float:
+            """Sklearn-compatible scorer wrapping the user metric."""
+            pred = (
+                estimator.predict_proba(X)
+                if is_classification
+                else estimator.predict(X)
             )
+            return self.metric_fn(pd.Series(y), pred)
+
+        fold_importances: list[pd.Series] = []
+        for fold_idx, (est, X_val, y_val) in enumerate(fold_data):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                result = permutation_importance(
+                    est,
+                    X_val,
+                    y_val,
+                    scoring=_scorer,
+                    n_repeats=self.n_repeats,
+                    n_jobs=self.n_jobs,
+                    random_state=self.random_state + fold_idx,
+                )
+            fold_importances.append(
+                pd.Series(result.importances_mean, index=X_val.columns)
+            )
+
+        return pd.DataFrame(fold_importances).mean().to_dict()
+
+    @staticmethod
+    def _build_restricted_pipeline(
+        preprocessor: Pipeline | None,
+        current_raw_features: list[str],
+        current_processed_features: list[str],
+        X_current: pd.DataFrame | None = None,
+    ) -> Pipeline | None:
+        """Clone the pipeline, restricting each step and appending a feature selector.
+
+        Steps with an explicit ``variables`` list are filtered to contain only columns
+        present in ``current_raw_features``.  Steps with ``variables=None`` are trial-fitted
+        on a tiny sample to detect compatibility.  A ``FunctionTransformer`` wrapping
+        ``_select_features`` is always appended as the final step so the model receives
+        exactly ``current_processed_features``.
+
+        Args:
+            preprocessor (Pipeline | None): Original preprocessing pipeline.
+            current_raw_features (list[str]): Raw columns still active.
+            current_processed_features (list[str]): Processed columns the model should see.
+            X_current (pd.DataFrame | None): Representative sample used to trial-fit steps
+                with auto-detected variables. Defaults to None.
+
+        Returns:
+            Pipeline | None: Restricted clone with feature selector appended, or None
+                if preprocessor is None.
+        """
+        if preprocessor is None:
+            return None
+
+        raw_set = set(current_raw_features)
+        new_steps: list[tuple[str, BaseEstimator]] = []
+
+        for name, step in preprocessor.steps:
+            cloned_step = clone(step)
+            params = cloned_step.get_params()
+            if isinstance(params.get("variables"), list):
+                filtered = [v for v in params["variables"] if v in raw_set]
+                if not filtered:
+                    continue
+                cloned_step.set_params(variables=filtered)
+            elif params.get("variables") is None and X_current is not None:
+                try:
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        clone(step).fit(X_current.head(5))
+                except Exception:
+                    continue
+            new_steps.append((name, cloned_step))
+
+        new_steps.append(
+            (
+                "_feature_selector",
+                FunctionTransformer(
+                    func=PermutationRecursiveFeatureElimination._select_features,
+                    kw_args={"features": current_processed_features},
+                ),
+            )
+        )
+        return Pipeline(new_steps)
+
+    @staticmethod
+    def _restrict_catboost_cat_features(
+        estimator: BaseEstimator,
+        current_features: set[str],
+        post_pipeline_dtypes: pd.Series | None = None,
+    ) -> BaseEstimator:
+        """Return a cloned CatBoost estimator with cat_features filtered to active non-numeric columns.
+
+        A column is kept in cat_features only when all three conditions hold:
+        - it is still present in the active raw feature set,
+        - it still exists in the post-pipeline output (i.e. was not renamed by the pipeline,
+            e.g. a MeanEncoder that outputs ``COL_PREPROCESS_MEAN_ENC`` drops ``COL``), and
+        - its post-pipeline dtype is non-numeric (i.e. it was not encoded to float64).
+
+        Returns the original estimator unchanged for non-CatBoost estimators.
+
+        Args:
+            estimator (BaseEstimator): Estimator to potentially update.
+            current_features (set[str]): Raw feature names still present in this step.
+            post_pipeline_dtypes (pd.Series | None): Column dtypes of the post-pipeline
+                validation data (index = column names).  Defaults to None.
+
+        Returns:
+            BaseEstimator: Updated estimator for CatBoost; original for all others.
+        """
+        if "CatBoost" not in type(estimator).__name__:
+            return estimator
+        original_cats = estimator.get_params().get("cat_features") or []
+        if not original_cats:
+            return estimator
+        if post_pipeline_dtypes is not None:
+            processed_cols = set(post_pipeline_dtypes.index)
+            active_cats = [
+                c
+                for c in original_cats
+                if c in current_features
+                and c in processed_cols
+                and not pd.api.types.is_numeric_dtype(post_pipeline_dtypes[c])
+            ]
         else:
-            feature_iterator = current_features
-
-        fold_importance = {}
-
-        for feature in feature_iterator:
-            if feature in fold_metric_cache:
-                permutation_scores = fold_metric_cache[feature]
-            else:
-                original_values = X_valid.loc[:, feature].to_numpy().copy()
-                permutation_scores = []
-
-                for repeat_idx in range(self.n_repeats):
-                    if fold_idx not in self._permutation_cache:
-                        self._permutation_cache[fold_idx] = {}
-                    if feature not in self._permutation_cache[fold_idx]:
-                        self._permutation_cache[fold_idx][feature] = []
-                    if len(self._permutation_cache[fold_idx][feature]) <= repeat_idx:
-                        permuted_indices = self._rng.permutation(len(original_values))
-                        self._permutation_cache[fold_idx][feature].append(
-                            permuted_indices
-                        )
-                    permuted_indices = self._permutation_cache[fold_idx][feature][
-                        repeat_idx
-                    ]
-
-                    X_valid.loc[:, feature] = original_values[permuted_indices]
-                    permuted_pred = self._predict(fitted, X_valid)
-                    permutation_scores.append(self.metric_fn(y_valid, permuted_pred))
-                    X_valid.loc[:, feature] = original_values
-
-                fold_metric_cache[feature] = permutation_scores
-
-            if self.metric_direction == "maximize":
-                importance = baseline_score - np.mean(permutation_scores)
-            else:
-                importance = np.mean(permutation_scores) - baseline_score
-            fold_importance[feature] = float(importance)
-
-        return fold_importance, fold_metric_cache
-
-    def _cross_val_permutation_importance(
-        self, X: pd.DataFrame, y: pd.Series, current_features: list[str]
-    ) -> tuple[dict[str, float], float, float]:
-        """
-        Compute permutation importance with caching and parallel fold processing.
-
-        Args:
-            X (pd.DataFrame): Feature matrix.
-            y (pd.Series): Target values.
-            current_features (list[str]): Features to evaluate.
-
-        Returns:
-            tuple[dict[str, float], float, float]: Tuple containing:
-                - dict mapping feature names to average importance scores
-                - average base metric across folds
-                - standard deviation of base metric across folds
-        """
-        _, valid_scores, _ = self.cross_validator.fit(
-            self.estimator, X[current_features], y
-        )
-        fitted_estimators = getattr(self.cross_validator, "fitted_estimators_", [])
-
-        fold_splits = list(self.cross_validator.cv.split(X[current_features], y))
-
-        fold_results = Parallel(n_jobs=self.n_jobs, verbose=0)(
-            delayed(self._process_fold_importance)(
-                fold_idx, train_idx, valid_idx, fitted, X, y, current_features
-            )
-            for fold_idx, ((train_idx, valid_idx), fitted) in enumerate(
-                zip(fold_splits, fitted_estimators)
-            )
-        )
-
-        fold_importance_scores = {f: [] for f in current_features}
-        for fold_idx, (fold_importance, fold_cache) in enumerate(fold_results):
-            self._metric_cache[fold_idx] = fold_cache
-            for feature, importance in fold_importance.items():
-                fold_importance_scores[feature].append(importance)
-
-        avg_importance = {
-            f: float(np.mean(scores)) if scores else 0.0
-            for f, scores in fold_importance_scores.items()
-        }
-
-        return avg_importance, float(np.mean(valid_scores)), float(np.std(valid_scores))
-
-    def _predict(self, estimator, X: pd.DataFrame) -> np.ndarray:
-        """
-        Make predictions using the estimator.
-
-        Supports both regular estimators and EnsembleModel instances.
-
-        Args:
-            estimator: Fitted estimator or EnsembleModel.
-            X (pd.DataFrame): Feature matrix.
-
-        Returns:
-            np.ndarray: Predictions.
-
-        Raises:
-            ValueError: When estimator does not have predict or predict_proba method.
-        """
-        if hasattr(estimator, "predict_proba") and self.metric_type == "probs":
-            preds = estimator.predict_proba(X)
-            if preds.ndim == 2 and preds.shape[1] == 2:
-                return preds[:, 1]
-            return preds
-        elif hasattr(estimator, "predict"):
-            return estimator.predict(X)
-        else:
-            raise ValueError(
-                f"Estimator {type(estimator).__name__} does not have predict or predict_proba method"
-            )
+            active_cats = [c for c in original_cats if c in current_features]
+        if set(active_cats) == set(original_cats):
+            return estimator
+        updated = deepcopy(estimator)
+        updated.set_params(cat_features=active_cats if active_cats else None)
+        return updated
 
     def compute_removal_schedule(self, total_removable_features: int) -> list[int]:
-        """
-        Compute a linear-decay schedule for features to remove per step.
+        """Compute a linear-decay schedule for features to remove per step.
+
+        Removes more features in early steps (many unimportant) and fewer in later
+        steps (each removal riskier).  Schedule sums exactly to
+        ``total_removable_features``.
 
         Args:
-            total_removable_features (int): Number of features that can be removed.
+            total_removable_features (int): Number of features eligible for removal.
 
         Returns:
-            list[int]: Non-empty positive counts to remove at each step.
+            list[int]: Non-zero counts to remove at each step.
         """
         if total_removable_features <= 0 or self.steps <= 0:
             return []
@@ -446,153 +589,502 @@ class PermutationRecursiveFeatureElimination:
         removal_counts = np.round(weights * total_removable_features).astype(int)
         diff = total_removable_features - removal_counts.sum()
         for i in range(abs(diff)):
-            idx = i % self.steps
-            removal_counts[idx] += 1 if diff > 0 else -1
-        removal_counts = np.maximum(removal_counts, 0).astype(int)
-        removal_counts = removal_counts.tolist()
+            removal_counts[i % self.steps] += 1 if diff > 0 else -1
+        removal_counts = np.maximum(removal_counts, 0).astype(int).tolist()
         while removal_counts and removal_counts[-1] == 0:
             removal_counts.pop()
-
         return removal_counts
 
     def _log_step(
         self,
         summary_df: dict[str, list | pd.DataFrame],
         step_idx: int,
-        X: pd.DataFrame,
-        current_features: list[str],
+        total_processed: int,
+        current_processed: list[str],
         importance_scores: dict[str, float],
-        fold_base_metric: float,
+        metric: float,
         features_to_remove: list[str],
     ) -> None:
-        """
-        Log results for the current elimination step.
+        """Append one row per removed processed feature to history.
 
         Args:
-            summary_df (dict[str, list | pd.DataFrame]): Summary dict carrying history.
+            summary_df (dict): Summary dict carrying the history DataFrame.
             step_idx (int): Current step number.
-            X (pd.DataFrame): Original input features.
-            current_features (list[str]): Features remaining before removal.
-            importance_scores (dict[str, float]): Importance score for each feature.
-            fold_base_metric (float): Base metric for the current set of features.
-            features_to_remove (list[str]): Features to remove this step.
+            total_processed (int): Total processed feature count at baseline.
+            current_processed (list[str]): Processed features before this removal.
+            importance_scores (dict[str, float]): Importance score per processed feature.
+            metric (float): Metric value for the current feature set.
+            features_to_remove (list[str]): Processed features being removed this step.
         """
-        for feature in features_to_remove:
-            if feature in self.protected_features:
-                continue
-            summary_df["history"] = pd.concat(
-                [
-                    summary_df["history"],
-                    pd.DataFrame(
-                        [
-                            {
-                                "step": step_idx,
-                                "n_features_removed": len(X.columns)
-                                - len(current_features)
-                                + 1,
-                                "n_features_remaining": len(current_features) - 1,
-                                "removed_feature_name": feature,
-                                "metric_value": fold_base_metric,
-                                "metric_change": 0.0,
-                                "importance_score": importance_scores.get(feature, 0.0),
-                            }
-                        ]
-                    ),
-                ],
-                ignore_index=True,
+        n_removed_base = total_processed - len(current_processed)
+        protected_set = set(self.protected_features)
+        rows = [
+            {
+                "step": step_idx,
+                "n_features_removed": n_removed_base + i + 1,
+                "n_features_remaining": len(current_processed) - i - 1,
+                "removed_feature_name": feat,
+                "metric_value": metric,
+                "metric_change": 0.0,
+                "importance_score": importance_scores.get(feat, 0.0),
+            }
+            for i, feat in enumerate(
+                f for f in features_to_remove if f not in protected_set
             )
-            current_features.remove(feature)
-        gc.collect()
+        ]
+        if rows:
+            summary_df["history"] = pd.concat(
+                [summary_df["history"], pd.DataFrame(rows)], ignore_index=True
+            )
 
     def select_features_weighted_score(
-        self, history: pd.DataFrame, alpha: float | None = None
+        self,
+        history: pd.DataFrame,
+        alpha: float | None = None,
     ) -> tuple[list[str], float | None]:
-        """
-        Select features by maximizing a weighted metric/features score.
+        """Select features by maximising a weighted metric/features score at step level.
+
+        Aggregates history to one row per step (each step's metric is the score of
+        the feature set at the *start* of that step, before any removal), then picks
+        the best step and returns all features that were not removed before it.
 
         Args:
-            history (pd.DataFrame): History dataframe containing step-wise metrics.
-            alpha (float | None, optional): Weight for metric vs feature count balance.
+            history (pd.DataFrame): Step-wise history DataFrame with processed feature names.
+            alpha (float | None): Weight for metric vs feature-count balance.
                 If None, uses self.alpha. Defaults to None.
 
         Returns:
-            tuple[list[str], float | None]: Tuple containing:
-                - list of selected feature names
-                - metric value at the selected step (or None if history is empty)
+            tuple[list[str], float | None]: Selected processed feature names and the
+                metric value at the selected step, or ([], None) if history is empty.
         """
         if history.empty:
             return [], None
         if alpha is None:
             alpha = self.alpha
-        df = history.copy()
-        metric_max = df["metric_value"].max()
-        metric_min = df["metric_value"].min()
-        denom_metric = metric_max - metric_min if metric_max != metric_min else 1.0
-        if self.metric_direction == "maximize":
-            df["metric_norm"] = (df["metric_value"] - metric_min) / denom_metric
-        else:
-            df["metric_norm"] = (metric_max - df["metric_value"]) / denom_metric
-        feat_max = df["n_features_remaining"].max()
-        feat_min = df["n_features_remaining"].min()
-        denom_feat = feat_max - feat_min if feat_max != feat_min else 1.0
-        df["features_norm"] = 1 - (df["n_features_remaining"] - feat_min) / denom_feat
-        df["score"] = alpha * df["metric_norm"] + (1 - alpha) * df["features_norm"]
-        best_row = df.loc[df["score"].idxmax()]
-        selected = set(
-            history[history["step"] >= best_row["step"]]["removed_feature_name"]
+
+        step_agg = (
+            history.groupby("step")
+            .agg(
+                metric_value=("metric_value", "first"),
+                n_features_remaining=("n_features_remaining", "max"),
+            )
+            .reset_index()
         )
-        selected.update(self.protected_features)
-        gc.collect()
-        return list(sorted(selected)), best_row["metric_value"]
+        step_agg.loc[step_agg["step"] > 0, "n_features_remaining"] += 1
+
+        metric_max = step_agg["metric_value"].max()
+        metric_min = step_agg["metric_value"].min()
+        denom_metric = metric_max - metric_min if metric_max != metric_min else 1.0
+        step_agg["metric_norm"] = (
+            (step_agg["metric_value"] - metric_min) / denom_metric
+            if self.metric_direction == "maximize"
+            else (metric_max - step_agg["metric_value"]) / denom_metric
+        )
+        feat_max = step_agg["n_features_remaining"].max()
+        feat_min = step_agg["n_features_remaining"].min()
+        denom_feat = feat_max - feat_min if feat_max != feat_min else 1.0
+        step_agg["features_norm"] = (
+            1 - (step_agg["n_features_remaining"] - feat_min) / denom_feat
+        )
+        step_agg["score"] = (
+            alpha * step_agg["metric_norm"] + (1 - alpha) * step_agg["features_norm"]
+        )
+
+        best_idx = step_agg["score"].idxmax()
+        best_step = int(step_agg.loc[best_idx, "step"])
+        best_metric = float(step_agg.loc[best_idx, "metric_value"])
+
+        removed_before_best = set(
+            history[(history["step"] > 0) & (history["step"] < best_step)][
+                "removed_feature_name"
+            ].dropna()
+        )
+        selected = sorted(set(self.all_processed_features) - removed_before_best)
+        return selected, best_metric
+
+    def _print_step(
+        self,
+        step_idx: int,
+        current_processed_features: list[str],
+        valid_scores: list[float] | np.ndarray,
+        sorted_removable: list[tuple[str, float]],
+        importance_scores: dict[str, float],
+    ) -> None:
+        """Print a step header showing the current feature set, metric, and importance summary.
+
+        Args:
+            step_idx (int): Current step number.
+            current_processed_features (list[str]): Active processed feature names.
+            valid_scores (list[float] | np.ndarray): Per-fold validation scores.
+            sorted_removable (list[tuple[str, float]]): Removable features sorted so
+                the least important appear first (candidates for removal).
+            importance_scores (dict[str, float]): Full importance map for top-5 lookup.
+        """
+        avg = float(np.mean(valid_scores))
+        std = float(np.std(valid_scores))
+        current_set = set(current_processed_features)
+
+        print(
+            f"\n🔁 Step {step_idx} | Number of features remaining: {len(current_processed_features)}\n"
+        )
+        print(f"🔬 Features remaining: {current_processed_features}\n")
+        print(f"📊 Average {self.cross_validator.metric_name}: {avg:.6f} ± {std:.6f}")
+
+        top5_most = sorted(
+            ((f, s) for f, s in importance_scores.items() if f in current_set),
+            key=lambda x: x[1],
+            reverse=(self.metric_direction == "maximize"),
+        )[:5]
+        print("Top 5 most important features:")
+        for feat, score in top5_most:
+            print(f"  • {feat}: {score:.6f}")
+
+        print()
+        print("Top 5 least important features (candidates for removal):")
+        for feat, score in sorted_removable[:5]:
+            print(f"  • {feat}: {score:.6f}")
+        print()
+
+    def _print_summary(
+        self,
+        selected_features: list[str],
+        metric_selected: float | None,
+        base_metric: float,
+        total_processed: int,
+    ) -> None:
+        """Print the final selection summary.
+
+        Args:
+            selected_features (list[str]): Selected processed feature names.
+            metric_selected (float | None): Metric at the selected step.
+            base_metric (float): Baseline metric value.
+            total_processed (int): Total processed feature count before any elimination.
+        """
+        n_selected = len(selected_features)
+        n_removed = total_processed - n_selected
+        pct_removed = 100 * n_removed / total_processed if total_processed > 0 else 0.0
+
+        print(f"\n🎯 Selected features: {selected_features}")
+
+        if metric_selected is not None and base_metric != 0:
+            delta = metric_selected - base_metric
+            pct = 100 * delta / base_metric
+            print(
+                f"📈 Final {self.cross_validator.metric_name} score (approximated): "
+                f"{metric_selected:.6f} | Base: {base_metric:.6f} "
+                f"| Δ: {delta:+.6f} ({pct:+.2f}%)"
+            )
+        else:
+            print(f"📈 Final metric: {metric_selected}")
+
+        print(
+            f"🗑️ Features removed: {n_removed} of {total_processed} ({pct_removed:.2f}%)"
+        )
 
 
 if __name__ == "__main__":
-    from sklearn.datasets import make_classification
-    from sklearn.ensemble import RandomForestClassifier
-    from sklearn.model_selection import KFold
+    import sys
+    from pathlib import Path
 
-    X, y = make_classification(
-        n_samples=2000,
-        n_features=20,
-        n_informative=10,
-        n_redundant=5,
-        n_repeated=0,
-        n_clusters_per_class=2,
-        random_state=17,
-    )
-    X_df = pd.DataFrame(X, columns=[f"feature_{i}" for i in range(X.shape[1])])
-    y_ser = pd.Series(y, name="target")
-    clf = RandomForestClassifier(random_state=17, max_depth=5, n_estimators=100)
-    cross_validator_example = CrossValidationTrainer(
-        problem_type="classification",
-        metric_name="Accuracy",
-        cv=KFold(n_splits=5, shuffle=True, random_state=17),
-        processors=None,
-        verbose=False,
-    )
+    import numpy as np
+    import pandas as pd
+    from feature_engine.encoding import MeanEncoder
+    from feature_engine.imputation import MeanMedianImputer
+    from lightgbm import LGBMClassifier, LGBMRegressor
+    from catboost import CatBoostClassifier, CatBoostRegressor
+    from xgboost import XGBClassifier, XGBRegressor
+    from sklearn.datasets import make_classification, make_regression
+    from sklearn.model_selection import KFold, StratifiedKFold
+    from sklearn.pipeline import Pipeline
 
-    selector = PermutationRecursiveFeatureElimination(
-        estimator=clf,
-        cross_validator=cross_validator_example,
-        steps=10,
-        alpha=0.95,
-        n_repeats=5,
-        verbose=True,
-        protected_features=["feature_0", "feature_1"],
+    sys.path.append(str(Path(__file__).resolve().parents[3]))
+    from kvbiii_ml.data_processing.preprocessing.outlier_handling.winsorizer_trimmer import (
+        WinsorizerWithOriginal,
     )
+    from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
+    from kvbiii_ml.modeling.training.ensemble_model import EnsembleModel
 
-    summary = selector.run(X_df, y_ser)
-    print("\nSummary of Permutation Feature Importance RFE:")
-    print(
-        summary["history"][
+    RANDOM_STATE = 42
+    N_SAMPLES = 3_000
+    N_FOLDS = 3
+    N_FEATURES = 12
+    N_STEPS = 5
+    CAT_FEATURES = ["cat_1", "cat_2"]
+    NUM_FEATURES = [f"num_{i}" for i in range(N_FEATURES)]
+    ES = 30
+
+    def _make_clf_data(n_classes: int) -> tuple[pd.DataFrame, pd.Series]:
+        """Generate classification dataset with numerical and categorical features."""
+        rng = np.random.default_rng(RANDOM_STATE)
+        X_num, y_arr = make_classification(
+            n_samples=N_SAMPLES,
+            n_features=N_FEATURES,
+            n_informative=7,
+            n_redundant=3,
+            n_classes=n_classes,
+            n_clusters_per_class=1,
+            random_state=RANDOM_STATE,
+        )
+        df = pd.DataFrame(X_num, columns=NUM_FEATURES)
+        df["cat_1"] = pd.Categorical(rng.choice(["A", "B", "C", "D"], size=N_SAMPLES))
+        df["cat_2"] = pd.Categorical(rng.choice(["X", "Y", "Z"], size=N_SAMPLES))
+        return df, pd.Series(y_arr, name="target")
+
+    def _make_reg_data() -> tuple[pd.DataFrame, pd.Series]:
+        """Generate regression dataset with numerical and categorical features."""
+        rng = np.random.default_rng(RANDOM_STATE)
+        X_num, y_arr = make_regression(
+            n_samples=N_SAMPLES,
+            n_features=N_FEATURES,
+            n_informative=7,
+            random_state=RANDOM_STATE,
+        )
+        df = pd.DataFrame(X_num, columns=NUM_FEATURES)
+        df["cat_1"] = pd.Categorical(rng.choice(["A", "B", "C", "D"], size=N_SAMPLES))
+        df["cat_2"] = pd.Categorical(rng.choice(["X", "Y", "Z"], size=N_SAMPLES))
+        return df, pd.Series(y_arr, name="target")
+
+    def _build_pipeline(cat_features: list[str], num_features: list[str]) -> Pipeline:
+        """Build the expansion pipeline used across all scenarios."""
+        return Pipeline(
             [
-                "step",
-                "removed_feature_name",
-                "n_features_remaining",
-                "metric_value",
-                "importance_score",
+                ("imputer", MeanMedianImputer(imputation_method="median")),
+                (
+                    "winsorizer_with_original",
+                    WinsorizerWithOriginal(
+                        variables=num_features,
+                        capping_method="iqr",
+                        tail="both",
+                        fold=3.0,
+                    ),
+                ),
+                (
+                    "mean_encoder",
+                    MeanEncoder(variables=cat_features, missing_values="ignore"),
+                ),
             ]
-        ]
+        )
+
+    def _run_rfe(
+        label: str,
+        estimator: BaseEstimator,
+        X: pd.DataFrame,
+        y: pd.Series,
+        metric_name: str,
+        problem_type: str,
+        pipeline: Pipeline | None,
+    ) -> None:
+        """Run RFE with the given pipeline and print a summary line."""
+        cv_cls = StratifiedKFold if problem_type == "classification" else KFold
+        trainer = CrossValidationTrainer(
+            problem_type=problem_type,
+            metric_name=metric_name,
+            cv=cv_cls(n_splits=N_FOLDS, shuffle=True, random_state=RANDOM_STATE),
+            preprocessing_pipeline=pipeline,
+            verbose=False,
+        )
+        selector = PermutationRecursiveFeatureElimination(
+            estimator=estimator,
+            cross_validator=trainer,
+            steps=N_STEPS,
+            n_repeats=3,
+            n_jobs=-1,
+            random_state=RANDOM_STATE,
+            verbose=True,
+        )
+        summary = selector.run(X, y)
+
+        assert len(summary["selected_features"]) > 0, "no features selected"
+        if pipeline is not None:
+            removed_names = summary["history"]["removed_feature_name"].dropna().tolist()
+            assert any(
+                "_PREPROCESS_" in str(f) for f in removed_names
+            ), "no derived features appear in removal history — pipeline did not expand"
+
+        n_selected = len(summary["selected_features"])
+        print(f"  {label:<55} selected={n_selected} features\n")
+
+    _lgbm_clf = LGBMClassifier(
+        n_estimators=200,
+        early_stopping_rounds=ES,
+        verbose=-1,
+        random_state=RANDOM_STATE,
     )
-    print("Selected features:", summary["selected_features"])
-    print(f"Number of selected features: {len(summary['selected_features'])}")
+    _lgbm_reg = LGBMRegressor(
+        n_estimators=200,
+        early_stopping_rounds=ES,
+        verbose=-1,
+        random_state=RANDOM_STATE,
+    )
+
+    X_bin, y_bin = _make_clf_data(n_classes=2)
+    X_multi, y_multi = _make_clf_data(n_classes=3)
+    X_reg, y_reg = _make_reg_data()
+
+    X_bin_cat = X_bin.assign(**{c: X_bin[c].astype(str) for c in CAT_FEATURES})
+    X_multi_cat = X_multi.assign(**{c: X_multi[c].astype(str) for c in CAT_FEATURES})
+    X_reg_cat = X_reg.assign(**{c: X_reg[c].astype(str) for c in CAT_FEATURES})
+
+    clf_pipeline = _build_pipeline(CAT_FEATURES, NUM_FEATURES)
+    reg_pipeline = _build_pipeline(CAT_FEATURES, NUM_FEATURES)
+
+    print("=" * 75)
+    print(
+        "PermutationRecursiveFeatureElimination — full test matrix (3 folds, 5 steps)"
+    )
+    print("=" * 75)
+
+    _run_rfe(
+        "LightGBM | binary classification",
+        _lgbm_clf,
+        X_bin_cat,
+        y_bin,
+        "Balanced Accuracy",
+        "classification",
+        clf_pipeline,
+    )
+    _run_rfe(
+        "LightGBM | regression",
+        _lgbm_reg,
+        X_reg_cat,
+        y_reg,
+        "RMSE",
+        "regression",
+        reg_pipeline,
+    )
+    _run_rfe(
+        "LightGBM | regression (no pipeline)",
+        _lgbm_reg,
+        X_reg_cat[NUM_FEATURES],
+        y_reg,
+        "RMSE",
+        "regression",
+        None,
+    )
+
+    _xgb_clf = XGBClassifier(
+        n_estimators=200,
+        early_stopping_rounds=ES,
+        verbosity=0,
+        random_state=RANDOM_STATE,
+    )
+    _xgb_reg = XGBRegressor(
+        n_estimators=200,
+        early_stopping_rounds=ES,
+        verbosity=0,
+        random_state=RANDOM_STATE,
+    )
+    _run_rfe(
+        "XGBoost | binary classification",
+        _xgb_clf,
+        X_bin_cat,
+        y_bin,
+        "Balanced Accuracy",
+        "classification",
+        clf_pipeline,
+    )
+    _run_rfe(
+        "XGBoost | multiclass classification",
+        _xgb_clf,
+        X_multi_cat,
+        y_multi,
+        "Balanced Accuracy",
+        "classification",
+        clf_pipeline,
+    )
+    _run_rfe(
+        "XGBoost | regression",
+        _xgb_reg,
+        X_reg_cat,
+        y_reg,
+        "RMSE",
+        "regression",
+        reg_pipeline,
+    )
+
+    _cat_clf = CatBoostClassifier(
+        n_estimators=200,
+        early_stopping_rounds=ES,
+        verbose=0,
+        random_state=RANDOM_STATE,
+        cat_features=CAT_FEATURES,
+    )
+    _cat_multi = CatBoostClassifier(
+        n_estimators=200,
+        early_stopping_rounds=ES,
+        verbose=0,
+        random_state=RANDOM_STATE,
+        cat_features=CAT_FEATURES,
+        loss_function="MultiClass",
+    )
+    _cat_reg = CatBoostRegressor(
+        n_estimators=200,
+        early_stopping_rounds=ES,
+        verbose=0,
+        random_state=RANDOM_STATE,
+        cat_features=CAT_FEATURES,
+    )
+    _run_rfe(
+        "CatBoost | binary classification",
+        _cat_clf,
+        X_bin_cat,
+        y_bin,
+        "Balanced Accuracy",
+        "classification",
+        clf_pipeline,
+    )
+    _run_rfe(
+        "CatBoost | multiclass classification",
+        _cat_multi,
+        X_multi_cat,
+        y_multi,
+        "Balanced Accuracy",
+        "classification",
+        clf_pipeline,
+    )
+    _run_rfe(
+        "CatBoost | regression",
+        _cat_reg,
+        X_reg_cat,
+        y_reg,
+        "RMSE",
+        "regression",
+        reg_pipeline,
+    )
+
+    ensemble_clf = EnsembleModel(
+        estimators=[_lgbm_clf, _xgb_clf, _cat_clf], problem_type="classification"
+    )
+    _run_rfe(
+        "Ensemble (LGBM + XGB + CatBoost) | binary classification",
+        ensemble_clf,
+        X_bin_cat,
+        y_bin,
+        "Balanced Accuracy",
+        "classification",
+        clf_pipeline,
+    )
+    ensemble_reg = EnsembleModel(
+        estimators=[_lgbm_reg, _xgb_reg, _cat_reg], problem_type="regression"
+    )
+    _run_rfe(
+        "Ensemble (LGBM + XGB + CatBoost) | regression",
+        ensemble_reg,
+        X_reg_cat,
+        y_reg,
+        "RMSE",
+        "regression",
+        reg_pipeline,
+    )
+    ensemble_multi = EnsembleModel(
+        estimators=[_lgbm_clf, _xgb_clf, _cat_multi], problem_type="classification"
+    )
+    _run_rfe(
+        "Ensemble (LGBM + XGB + CatBoost MultiClass) | multiclass classification",
+        ensemble_multi,
+        X_multi_cat,
+        y_multi,
+        "Balanced Accuracy",
+        "classification",
+        clf_pipeline,
+    )
