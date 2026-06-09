@@ -25,7 +25,7 @@ class ModelImportanceFiltering:
 
     When the cross-validator holds a column-expansion pipeline (steps that inherit
     from ``_FeatureExpansionBase`` and expose a ``_suffix`` attribute), the
-    elimination loop works in *processed* feature space — the post-pipeline column
+    elimination loop works in *processed* feature space - the post-pipeline column
     set.  Raw input features are derived from the active processed set at each step.
 
     ``protected_features`` must be specified as *processed* column names and are
@@ -567,7 +567,7 @@ class ModelImportanceFiltering:
         """Run stepwise model importance filtering and return selection summary.
 
         Algorithm:
-            1. Baseline CV — pipeline applied per fold; processed column set discovered.
+            1. Baseline CV - pipeline applied per fold; processed column set discovered.
             2. protected_features validated against post-pipeline column set.
             3. raw_to_derived mapping built from pipeline expansion steps.
             4. Each step: restricted pipeline built, CV run, importances extracted.
@@ -652,7 +652,7 @@ class ModelImportanceFiltering:
         for step_idx in range(1, self.max_steps + 1):
             if len(current_processed_features) <= len(self.protected_features):
                 if self.verbose:
-                    print("⏹️  Stopping — only protected features remain.")
+                    print("⏹️  Stopping - only protected features remain.")
                 break
 
             restricted_pipeline = self._build_restricted_pipeline(
@@ -686,7 +686,7 @@ class ModelImportanceFiltering:
             if not features_to_remove:
                 if self.verbose:
                     print(
-                        f"✅ Convergence reached — all features exceed threshold {self.threshold}"
+                        f"✅ Convergence reached - all features exceed threshold {self.threshold}"
                     )
                 break
 
@@ -893,14 +893,14 @@ if __name__ == "__main__":
         for feat in non_protected_selected:
             assert (
                 feat in history_features
-            ), f"selected feature '{feat}' missing from history — never-removed append failed"
+            ), f"selected feature '{feat}' missing from history - never-removed append failed"
 
         if pipeline is not None:
             all_history_features = list(history_features)
             if all_history_features:
                 assert any(
                     "_PREPROCESS_" in str(f) for f in all_history_features
-                ), "no derived features appear in removal history — pipeline did not expand"
+                ), "no derived features appear in removal history - pipeline did not expand"
 
         n_selected = len(summary["selected_features"])
         print(f"  {label:<60} selected={n_selected} features\n")
@@ -964,7 +964,7 @@ if __name__ == "__main__":
     reg_pipeline = _build_pipeline(CAT_FEATURES, NUM_FEATURES)
 
     print("=" * 75)
-    print("ModelImportanceFiltering — full test matrix (3 folds, threshold=0.0)")
+    print("ModelImportanceFiltering - full test matrix (3 folds, threshold=0.0)")
     print("=" * 75)
 
     _run_mif(
