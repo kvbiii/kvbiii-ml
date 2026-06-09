@@ -23,7 +23,7 @@ class PermutationRecursiveFeatureElimination:
 
     When the cross-validator holds a column-expansion pipeline (steps that inherit
     from ``_FeatureExpansionBase`` and therefore expose a ``_suffix`` attribute),
-    the elimination loop works entirely in *processed* feature space — the
+    the elimination loop works entirely in *processed* feature space - the
     post-pipeline column set.  Raw input features are derived from the active
     processed set at each step and used only as pipeline inputs.
 
@@ -92,7 +92,7 @@ class PermutationRecursiveFeatureElimination:
         """Run permutation RFE and return the selection summary.
 
         Algorithm:
-            1. Baseline CV — pipeline applied per fold, fold models and fitted pipelines stored.
+            1. Baseline CV - pipeline applied per fold, fold models and fitted pipelines stored.
             2. Processed validation sets built from fitted pipelines.
             3. Processed feature list discovered from post-pipeline columns.
             4. protected_features validated against processed columns.
@@ -212,7 +212,7 @@ class PermutationRecursiveFeatureElimination:
         for step_idx, n_to_remove in enumerate(removal_schedule, start=1):
             if len(current_processed_features) <= len(self.protected_features):
                 if self.verbose:
-                    print("⏹️  Stopping early — only protected features remain.")
+                    print("⏹️  Stopping early - only protected features remain.")
                 break
 
             current_set = set(current_processed_features)
@@ -234,7 +234,7 @@ class PermutationRecursiveFeatureElimination:
             )
             if n_actual <= 0:
                 if self.verbose:
-                    print("⏹️  Stopping — minimum feature count reached.")
+                    print("⏹️  Stopping - minimum feature count reached.")
                 break
 
             features_to_remove = [f for f, _ in sorted_removable[:n_actual]]
@@ -899,7 +899,7 @@ if __name__ == "__main__":
             removed_names = summary["history"]["removed_feature_name"].dropna().tolist()
             assert any(
                 "_PREPROCESS_" in str(f) for f in removed_names
-            ), "no derived features appear in removal history — pipeline did not expand"
+            ), "no derived features appear in removal history - pipeline did not expand"
 
         n_selected = len(summary["selected_features"])
         print(f"  {label:<55} selected={n_selected} features\n")
@@ -930,7 +930,7 @@ if __name__ == "__main__":
 
     print("=" * 75)
     print(
-        "PermutationRecursiveFeatureElimination — full test matrix (3 folds, 5 steps)"
+        "PermutationRecursiveFeatureElimination - full test matrix (3 folds, 5 steps)"
     )
     print("=" * 75)
 
