@@ -95,7 +95,10 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
             df[feature] = (
                 df[feature].fillna(fill_value).astype("str").astype("category")
             )
-            self.categories_[feature] = df[feature].cat.categories.tolist()
+            cats = df[feature].cat.categories.tolist()
+            if fill_value not in cats:
+                cats = sorted(cats + [fill_value])
+            self.categories_[feature] = cats
         return self
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -171,9 +174,15 @@ if __name__ == "__main__":
         }
     )
 
-    assigner = CategoricalAligner(["color", "fuel"]).fit(df_train)
-    transformed = assigner.transform(df_test)
-    print(transformed)
-    print(transformed.dtypes)
-    print(df_train["color"].unique())
-    print(transformed["color"].unique())
+    categorical_aligner = CategoricalAligner(fill_values={"color": "Unknown"})
+    categorical_aligner.fit(df_train)
+
+    print("--- test transform ---")
+    transformed_test = categorical_aligner.transform(df_test)
+    print(transformed_test)
+    print(transformed_test["color"].unique())
+
+    print("\n--- train transform (fill category present even without unknowns) ---")
+    transformed_train = categorical_aligner.transform(df_train)
+    print(transformed_train)
+    print(transformed_train["color"].unique())
