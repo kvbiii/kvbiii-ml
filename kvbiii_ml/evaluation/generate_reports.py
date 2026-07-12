@@ -3,6 +3,7 @@ import pandas as pd
 from pandas.io.formats.style import Styler
 from sklearn.metrics import (
     accuracy_score,
+    balanced_accuracy_score,
     explained_variance_score,
     f1_score,
     log_loss,
@@ -221,94 +222,100 @@ def _build_per_class_split(
     return df
 
 
-def classification_results(
+def _safe_roc_auc(
+    y_true: pd.Series | np.ndarray,
+    y_proba: np.ndarray | None,
+    average: str,
+) -> float:
+    """Compute ROC-AUC safely, returning nan on failure."""
+    if y_proba is None:
+        return np.nan
+    try:
+        return (
+            roc_auc_score(y_true, y_proba[:, 1] if y_proba.ndim > 1 else y_proba)
+            if len(np.unique(y_true)) == 2
+            else roc_auc_score(y_true, y_proba, multi_class="ovr", average=average)
+        )
+    except (ValueError, IndexError):
+        return np.nan
+
+
+def _safe_log_loss(
+    y_true: pd.Series | np.ndarray,
+    y_proba: np.ndarray | None,
+) -> float:
+    """Compute log loss safely, returning nan on failure."""
+    if y_proba is None:
+        return np.nan
+    try:
+        return log_loss(y_true, y_proba)
+    except (ValueError, IndexError):
+        return np.nan
+
+
+def _apply_cutoff(
+    y_proba: np.ndarray,
+    cutoff_val: float | list[float],
+) -> np.ndarray:
+    """
+    Apply probability threshold(s) to produce class predictions.
+
+    Args:
+        y_proba (np.ndarray): Predicted probabilities.
+        cutoff_val (float | list[float]): Single threshold for binary or per-class
+            thresholds for multiclass.
+
+    Returns:
+        np.ndarray: Integer class predictions.
+
+    Raises:
+        ValueError: If cutoff list length does not match number of classes.
+    """
+    if isinstance(cutoff_val, (int, float)):
+        return (
+            (y_proba >= cutoff_val).astype(int)
+            if y_proba.ndim == 1
+            else (y_proba[:, 1] >= cutoff_val).astype(int)
+        )
+
+    cutoff_array = np.array(cutoff_val)
+    if y_proba.shape[1] != len(cutoff_array):
+        raise ValueError(
+            f"Cutoff count ({len(cutoff_array)}) must match classes "
+            f"({y_proba.shape[1]})"
+        )
+    return np.argmax(y_proba / cutoff_array, axis=1)
+
+
+def _build_overall_table(
     y_train_true: pd.Series | np.ndarray,
     y_train_pred: np.ndarray,
     y_test_true: pd.Series | np.ndarray,
     y_test_pred: np.ndarray,
-    y_train_proba: np.ndarray | None = None,
-    y_test_proba: np.ndarray | None = None,
-    average: str = "weighted",
-    cutoff: float | list[float] | None = None,
-) -> tuple[Styler, Styler]:
+    y_train_proba: np.ndarray | None,
+    y_test_proba: np.ndarray | None,
+    average: str,
+    caption: str,
+) -> Styler:
     """
-    Generate comprehensive styled DataFrames with classification evaluation metrics.
+    Build and style the overall classification metrics table.
 
     Args:
-        y_train_true (pd.Series | np.ndarray): True training target values.
-        y_train_pred (np.ndarray): Predicted training target values.
-        y_test_true (pd.Series | np.ndarray): True testing target values.
-        y_test_pred (np.ndarray): Predicted testing target values.
-        y_train_proba (np.ndarray | None, optional): Predicted probabilities for train.
-            Defaults to None.
-        y_test_proba (np.ndarray | None, optional): Predicted probabilities for test.
-            Defaults to None.
-        average (str, optional): Averaging method for multi-class. Defaults to "weighted".
-        cutoff (float | list[float] | None, optional): Custom threshold(s). For binary:
-            single float. For multi-class: list per class. Defaults to None.
+        y_train_true (pd.Series | np.ndarray): True training labels.
+        y_train_pred (np.ndarray): Predicted training labels.
+        y_test_true (pd.Series | np.ndarray): True test labels.
+        y_test_pred (np.ndarray): Predicted test labels.
+        y_train_proba (np.ndarray | None): Training probabilities for ROC-AUC/Log Loss.
+        y_test_proba (np.ndarray | None): Test probabilities for ROC-AUC/Log Loss.
+        average (str): Averaging strategy for multi-class metrics.
+        caption (str): Table caption.
 
     Returns:
-        tuple[Styler, Styler]: Overall metrics table and per-class metrics table
-            (Precision, Recall, F1, Support, ROC-AUC per class for Train and Test).
-
-    Raises:
-        ValueError: If probabilities required for cutoff but not provided.
-        ValueError: If cutoff length doesn't match number of classes.
+        Styler: Styled overall metrics table.
     """
-
-    def _apply_cutoff(
-        y_proba: np.ndarray, cutoff_val: float | list[float]
-    ) -> np.ndarray:
-        if y_proba is None:
-            raise ValueError("Probabilities required when using cutoff")
-
-        if isinstance(cutoff_val, (int, float)):
-            return (
-                (y_proba >= cutoff_val).astype(int)
-                if y_proba.ndim == 1
-                else (y_proba[:, 1] >= cutoff_val).astype(int)
-            )
-
-        cutoff_array = np.array(cutoff_val)
-        if y_proba.shape[1] != len(cutoff_array):
-            raise ValueError(
-                f"Cutoff count ({len(cutoff_array)}) must match classes "
-                f"({y_proba.shape[1]})"
-            )
-        return np.argmax(y_proba / cutoff_array, axis=1)
-
-    if cutoff is not None:
-        if y_train_proba is None or y_test_proba is None:
-            raise ValueError("Probabilities required for cutoff")
-        y_train_pred = _apply_cutoff(y_train_proba, cutoff)
-        y_test_pred = _apply_cutoff(y_test_proba, cutoff)
-
-    def _safe_roc_auc(
-        y_true: pd.Series | np.ndarray, y_proba: np.ndarray | None
-    ) -> float:
-        if y_proba is None:
-            return np.nan
-        try:
-            return (
-                roc_auc_score(y_true, y_proba[:, 1] if y_proba.ndim > 1 else y_proba)
-                if len(np.unique(y_true)) == 2
-                else roc_auc_score(y_true, y_proba, multi_class="ovr", average=average)
-            )
-        except (ValueError, IndexError):
-            return np.nan
-
-    def _safe_log_loss(
-        y_true: pd.Series | np.ndarray, y_proba: np.ndarray | None
-    ) -> float:
-        if y_proba is None:
-            return np.nan
-        try:
-            return log_loss(y_true, y_proba)
-        except (ValueError, IndexError):
-            return np.nan
-
     metric_configs = [
         ("Accuracy", accuracy_score, {}),
+        ("Balanced Accuracy", balanced_accuracy_score, {}),
         ("Precision", precision_score, {"average": average, "zero_division": 0}),
         ("Recall", recall_score, {"average": average, "zero_division": 0}),
         ("F1 (weighted)", f1_score, {"average": average, "zero_division": 0}),
@@ -324,8 +331,8 @@ def classification_results(
     }
 
     metrics["ROC-AUC"] = [
-        _safe_roc_auc(y_train_true, y_train_proba),
-        _safe_roc_auc(y_test_true, y_test_proba),
+        _safe_roc_auc(y_train_true, y_train_proba, average),
+        _safe_roc_auc(y_test_true, y_test_proba, average),
     ]
     metrics["Log Loss"] = [
         _safe_log_loss(y_train_true, y_train_proba),
@@ -333,7 +340,6 @@ def classification_results(
     ]
 
     df = pd.DataFrame(metrics, index=["Train", "Test"])
-
     styled_df = df.style.format({col: "{:.4f}" for col in df.columns})
 
     gradient_config = {
@@ -341,14 +347,35 @@ def classification_results(
         ("Log Loss",): ("YlOrRd_r", None, None),
     }
 
-    overall_styled = _apply_fancy_styling(
-        styled_df, "🎯 Classification Performance Metrics", gradient_config
-    )
+    return _apply_fancy_styling(styled_df, caption, gradient_config)
 
-    classes = np.unique(
-        np.concatenate([np.asarray(y_train_true), np.asarray(y_test_true)])
-    )
 
+def _build_per_class_table(
+    y_train_true: pd.Series | np.ndarray,
+    y_train_pred: np.ndarray,
+    y_test_true: pd.Series | np.ndarray,
+    y_test_pred: np.ndarray,
+    y_train_proba: np.ndarray | None,
+    y_test_proba: np.ndarray | None,
+    classes: np.ndarray,
+    caption: str,
+) -> Styler:
+    """
+    Build and style the per-class classification metrics table.
+
+    Args:
+        y_train_true (pd.Series | np.ndarray): True training labels.
+        y_train_pred (np.ndarray): Predicted training labels.
+        y_test_true (pd.Series | np.ndarray): True test labels.
+        y_test_pred (np.ndarray): Predicted test labels.
+        y_train_proba (np.ndarray | None): Training probabilities for per-class ROC-AUC.
+        y_test_proba (np.ndarray | None): Test probabilities for per-class ROC-AUC.
+        classes (np.ndarray): Unique class labels.
+        caption (str): Table caption.
+
+    Returns:
+        Styler: Styled per-class metrics table.
+    """
     train_per_class = _build_per_class_split(
         y_train_true, y_train_pred, y_train_proba, classes, "Train"
     )
@@ -370,8 +397,109 @@ def classification_results(
         .background_gradient(subset=metric_cols, cmap="YlGnBu", vmin=0.0, vmax=1.0)
         .background_gradient(subset=support_cols, cmap="Blues", vmin=0.0, vmax=None)
     )
-    per_class_styled = _apply_fancy_styling(
-        per_class_styled, "📋 Per-Class Performance Metrics", {}
+    return _apply_fancy_styling(per_class_styled, caption, {})
+
+
+def classification_results(
+    y_train_true: pd.Series | np.ndarray,
+    y_train_pred: np.ndarray,
+    y_test_true: pd.Series | np.ndarray,
+    y_test_pred: np.ndarray,
+    y_train_proba: np.ndarray | None = None,
+    y_test_proba: np.ndarray | None = None,
+    id2label: dict[int, str] | None = None,
+    cutoffs: float | list[float] | None = None,
+    average: str = "weighted",
+) -> tuple[Styler, ...]:
+    """
+    Generate comprehensive styled DataFrames with classification evaluation metrics.
+
+    Always returns an overall metrics table computed with the original predictions
+    (default cutoffs, typically 0.5). When `cutoffs` is provided, a second overall table
+    is appended using the custom threshold(s) applied to probabilities. For multiclass
+    problems (> 2 classes), matching per-class tables are appended in the same order.
+
+    Args:
+        y_train_true (pd.Series | np.ndarray): True training target values.
+        y_train_pred (np.ndarray): Predicted training target values.
+        y_test_true (pd.Series | np.ndarray): True testing target values.
+        y_test_pred (np.ndarray): Predicted testing target values.
+        y_train_proba (np.ndarray | None, optional): Predicted probabilities for train. Defaults to None.
+        y_test_proba (np.ndarray | None, optional): Predicted probabilities for test. Defaults to None.
+        id2label (dict[int, str] | None, optional): Mapping from class indices to labels for nicer display. Defaults to None (uses class indices).
+        cutoffs (float | list[float] | None, optional): Custom threshold(s). For binary: single float. For multi-class: list of floats per class. Defaults to None.
+        average (str, optional): Averaging method for multi-class metrics. Defaults to "weighted".
+
+    Returns:
+        tuple[Styler, Styler] | tuple[Styler, Styler, Styler, Styler]:
+            When ``cutoffs`` is None (always 2 tables):
+                [0] overall_metrics_styled  — overall metrics at default cutoff.
+                [1] per_class_metrics_styled — per-class metrics at default cutoff.
+            When ``cutoffs`` is provided (always 4 tables):
+                [0] overall_metrics_styled         — overall, default cutoff.
+                [1] overall_metrics_cutoff_styled  — overall, custom cutoff.
+                [2] per_class_metrics_styled        — per-class, default cutoff.
+                [3] per_class_metrics_cutoff_styled — per-class, custom cutoff.
+
+    Raises:
+        ValueError: If ``cutoffs`` is provided but probabilities or ``id2label`` are missing.
+        ValueError: If cutoff list length does not match number of classes.
+    """
+    if cutoffs is not None and (
+        y_train_proba is None or y_test_proba is None or id2label is None
+    ):
+        raise ValueError("Probabilities and class labels are required for cutoff")
+
+    classes = np.unique(
+        np.concatenate([np.asarray(y_train_true), np.asarray(y_test_true)])
     )
 
-    return overall_styled, per_class_styled
+    overall_default = _build_overall_table(
+        y_train_true,
+        y_train_pred,
+        y_test_true,
+        y_test_pred,
+        y_train_proba,
+        y_test_proba,
+        average,
+        "🎯 Classification Performance Metrics - Default Cutoff (0.5)",
+    )
+    per_class_default = _build_per_class_table(
+        y_train_true,
+        y_train_pred,
+        y_test_true,
+        y_test_pred,
+        y_train_proba,
+        y_test_proba,
+        classes,
+        "📋 Per-Class Performance Metrics - Default Cutoff (0.5)",
+    )
+
+    if cutoffs is None:
+        return overall_default, per_class_default
+
+    y_train_pred_cutoff = pd.Series(_apply_cutoff(y_train_proba, cutoffs)).map(id2label)
+    y_test_pred_cutoff = pd.Series(_apply_cutoff(y_test_proba, cutoffs)).map(id2label)
+    cutoff_label = str(cutoffs)
+
+    overall_cutoff = _build_overall_table(
+        y_train_true,
+        y_train_pred_cutoff,
+        y_test_true,
+        y_test_pred_cutoff,
+        y_train_proba,
+        y_test_proba,
+        average,
+        f"🎯 Classification Performance Metrics - Cutoff: {cutoff_label}",
+    )
+    per_class_cutoff = _build_per_class_table(
+        y_train_true,
+        y_train_pred_cutoff,
+        y_test_true,
+        y_test_pred_cutoff,
+        y_train_proba,
+        y_test_proba,
+        classes,
+        f"📋 Per-Class Performance Metrics - Cutoff: {cutoff_label}",
+    )
+    return overall_default, overall_cutoff, per_class_default, per_class_cutoff
