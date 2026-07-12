@@ -40,6 +40,35 @@ def _root_mean_squared_percentage_error(
     )
 
 
+def _brier_score(y_true: np.ndarray, y_prob: np.ndarray) -> float:
+    """Compute Brier score for binary and multiclass problems.
+
+    Binary: standard brier_score_loss on the positive-class column.
+    Multiclass: mean OVR brier_score_loss across all classes.
+
+    Args:
+        y_true (np.ndarray): True labels of shape (n_samples,).
+        y_prob (np.ndarray): Probabilities, either 1d for binary or
+            (n_samples, n_classes) for multiclass/binary matrix input.
+
+    Returns:
+        float: Brier score (lower is better).
+    """
+    y_prob_arr = np.asarray(y_prob)
+    y_true_arr = np.asarray(y_true)
+    if y_prob_arr.ndim == 2:
+        if y_prob_arr.shape[1] == 2:
+            return float(brier_score_loss(y_true_arr, y_prob_arr[:, 1]))
+        classes = np.unique(y_true_arr)
+        return float(
+            np.mean([
+                brier_score_loss((y_true_arr == c).astype(int), y_prob_arr[:, i])
+                for i, c in enumerate(classes)
+            ])
+        )
+    return float(brier_score_loss(y_true_arr, y_prob_arr))
+
+
 METRICS_NAMES: dict[str, MetricFunction] = {
     "Accuracy": accuracy_score,
     "Balanced Accuracy": balanced_accuracy_score,
@@ -79,12 +108,7 @@ METRICS_NAMES: dict[str, MetricFunction] = {
         y_true, y_proba, multi_class="ovr", average="macro"
     ),
     "Log Loss": log_loss,
-    "Brier Score": lambda y_true, y_prob: brier_score_loss(
-        y_true,
-        y_prob[:, 1] if (
-            hasattr(y_prob, "ndim") and y_prob.ndim == 2 and y_prob.shape[1] == 2
-        ) else y_prob,
-    ),
+    "Brier Score": _brier_score,
     "MAE": mean_absolute_error,
     "MAPE": mean_absolute_percentage_error,
     "MSE": mean_squared_error,
@@ -99,7 +123,8 @@ METRICS: dict[str, tuple[MetricFunction, str, str]] = {
         eval_func,
         (
             "probs"
-            if key in ["Roc AUC", "Mean Average Precision", "Log Loss", "Brier Score"]
+            if key
+            in ["Roc AUC", "Roc AUC (Multi-class)", "Mean Average Precision", "Log Loss", "Brier Score"]
             else "preds"
         ),
         (
