@@ -1,6 +1,9 @@
 import gc
-import pandas as pd
+from importlib import import_module
+from typing import cast
+
 import numpy as np
+import pandas as pd
 import shap
 from sklearn.base import BaseEstimator
 
@@ -202,105 +205,4 @@ def _get_ensemble_weights(model: object) -> np.ndarray:
 
 
 if __name__ == "__main__":
-    from sklearn.datasets import make_regression, make_classification
-    from sklearn.model_selection import train_test_split
-    from sklearn.ensemble import (
-        RandomForestRegressor,
-        RandomForestClassifier,
-        ExtraTreesClassifier,
-    )
-    from sklearn.tree import DecisionTreeClassifier
-    from kvbiii_ml.modeling.training.ensemble_model import EnsembleModel
-    from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
-    from sklearn.metrics import r2_score, accuracy_score
-
-    print("================ SHAP EXAMPLES ================")
-
-    # 1. Single LGBMRegressor (regression)
-    print("\n[1] Single LGBMRegressor (regression)")
-    from lightgbm import LGBMRegressor
-
-    X_reg, y_reg = make_regression(
-        n_samples=300, n_features=10, n_informative=6, noise=0.2, random_state=42
-    )
-    feature_names_reg = [f"f{i}" for i in range(X_reg.shape[1])]
-    X_reg_df = pd.DataFrame(X_reg, columns=feature_names_reg)
-    X_train, X_test, y_train, y_test = train_test_split(
-        X_reg_df, y_reg, test_size=0.25, random_state=17
-    )
-    lgbm = LGBMRegressor(random_state=42, n_estimators=150, verbose=-1)
-    lgbm.fit(X_train, y_train)
-    shap_exp_lgbm = compute_shap_values(lgbm, X_test.head(20))
-    print("SHAP values shape:", shap_exp_lgbm.values.shape)
-    print("R2 sample:", r2_score(y_test[:20], lgbm.predict(X_test.head(20))))
-
-    # 2. EnsembleModel with classifiers
-    print("\n[2] EnsembleModel with tree classifiers (classification)")
-    X_clf, y_clf = make_classification(
-        n_samples=400,
-        n_features=8,
-        n_informative=5,
-        n_redundant=1,
-        n_classes=2,
-        random_state=42,
-    )
-    feature_names_clf = [f"c{i}" for i in range(X_clf.shape[1])]
-    X_clf_df = pd.DataFrame(X_clf, columns=feature_names_clf)
-    Xc_train, Xc_test, yc_train, yc_test = train_test_split(
-        X_clf_df, y_clf, test_size=0.25, random_state=17
-    )
-    est1 = RandomForestClassifier(n_estimators=120, max_depth=5, random_state=1)
-    est2 = ExtraTreesClassifier(n_estimators=150, max_depth=6, random_state=2)
-    est3 = DecisionTreeClassifier(max_depth=5, random_state=3)
-    ensemble_cls = EnsembleModel([est1, est2, est3], problem_type="classification")
-    ensemble_cls.fit(Xc_train, yc_train)
-    shap_exp_ensemble = compute_shap_values(ensemble_cls, Xc_test.head(15))
-    print("SHAP values shape (ensemble classifiers):", shap_exp_ensemble.values.shape)
-    y_pred_ens = ensemble_cls.predict(Xc_test)
-    print("Accuracy:", accuracy_score(yc_test, y_pred_ens))
-
-    # 3. CrossValidationTrainer with single estimator
-    print("\n[3] CrossValidationTrainer with single RandomForestRegressor")
-    X_reg2, y_reg2 = make_regression(
-        n_samples=250, n_features=12, n_informative=7, noise=0.3, random_state=11
-    )
-    feature_names_reg2 = [f"r{i}" for i in range(X_reg2.shape[1])]
-    X_reg2_df = pd.DataFrame(X_reg2, columns=feature_names_reg2)
-    Xr_train, Xr_test, yr_train, yr_test = train_test_split(
-        X_reg2_df, y_reg2, test_size=0.3, random_state=19
-    )
-    rf_reg = RandomForestRegressor(n_estimators=80, max_depth=6, random_state=4)
-    cv_trainer_reg = CrossValidationTrainer(
-        metric_name="R2", problem_type="regression", verbose=False
-    )
-    cv_trainer_reg.fit(rf_reg, Xr_train, pd.Series(yr_train))
-    shap_exp_cv_single = compute_shap_values(cv_trainer_reg, Xr_test.head(10))
-    print("SHAP values shape (CV single regressor):", shap_exp_cv_single.values.shape)
-
-    # 4. CrossValidationTrainer with EnsembleModel (classification)
-    print("\n[4] CrossValidationTrainer with EnsembleModel (classification)")
-    X_clf2, y_clf2 = make_classification(
-        n_samples=300,
-        n_features=9,
-        n_informative=6,
-        n_redundant=1,
-        n_classes=2,
-        random_state=21,
-    )
-    feature_names_clf2 = [f"ec{i}" for i in range(X_clf2.shape[1])]
-    X_clf2_df = pd.DataFrame(X_clf2, columns=feature_names_clf2)
-    Xc2_train, Xc2_test, yc2_train, yc2_test = train_test_split(
-        X_clf2_df, y_clf2, test_size=0.3, random_state=29
-    )
-    base1 = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=5)
-    base2 = ExtraTreesClassifier(n_estimators=120, max_depth=6, random_state=6)
-    nested_ensemble = EnsembleModel([base1, base2], problem_type="classification")
-    cv_trainer_cls = CrossValidationTrainer(
-        metric_name="Accuracy", problem_type="classification", verbose=False
-    )
-    cv_trainer_cls.fit(nested_ensemble, Xc2_train, pd.Series(yc2_train))
-    shap_exp_cv_ens = compute_shap_values(cv_trainer_cls, Xc2_test.head(12))
-    print(
-        "SHAP values shape (CV with ensemble classifier):",
-        shap_exp_cv_ens.values.shape,
-    )
+    print("shap_values module loaded.")
