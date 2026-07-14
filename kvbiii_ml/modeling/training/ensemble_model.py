@@ -1,5 +1,7 @@
 import gc
 from collections.abc import Iterable
+from copy import deepcopy
+
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin, clone
@@ -7,7 +9,7 @@ from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin, clone
 from kvbiii_ml.modeling.training.base_trainer import BaseTrainer
 
 
-class EnsembleModel(BaseTrainer, BaseEstimator):
+class EnsembleModel(BaseEstimator):
     """Ensemble model combining multiple base estimators."""
 
     def __init__(
@@ -15,6 +17,7 @@ class EnsembleModel(BaseTrainer, BaseEstimator):
         estimators: list,
         problem_type: str,
         weights: np.ndarray | None = None,
+        meta_learner: BaseEstimator | None = None,
     ) -> None:
         """
         Args:
@@ -23,6 +26,8 @@ class EnsembleModel(BaseTrainer, BaseEstimator):
                 "regression".
             weights (np.ndarray | None): Weights for each estimator. If None,
                 equal weights are used.
+            meta_learner (BaseEstimator | None): Meta-learner for stacking.
+                If None, ensemble uses blending (weighted averaging).
         """
         if not isinstance(estimators, Iterable) or len(estimators) == 0:
             raise ValueError("estimators must be a non-empty list of estimators.")
@@ -35,24 +40,51 @@ class EnsembleModel(BaseTrainer, BaseEstimator):
         self.estimators = estimators
         self.problem_type = problem_type
         self.weights = weights
+        self.meta_learner = meta_learner
         self._estimators_list = list(estimators)
         self._weights_normalized = self._validate_and_normalize_weights(weights)
         self.classes_: np.ndarray | None = None
         self.fitted_estimators_: list[BaseEstimator] = []
+        self.fitted_meta_learner_: BaseEstimator | None = None
+        self._x_train: pd.DataFrame | None = None
 
-        # Dynamically add the appropriate mixin
         if problem_type == "classification":
             self.__class__ = type(
                 self.__class__.__name__,
-                (ClassifierMixin, BaseTrainer, BaseEstimator),
+                (ClassifierMixin, BaseEstimator),
                 dict(self.__class__.__dict__),
             )
         else:
             self.__class__ = type(
                 self.__class__.__name__,
-                (RegressorMixin, BaseTrainer, BaseEstimator),
+                (RegressorMixin, BaseEstimator),
                 dict(self.__class__.__dict__),
             )
+
+    def _safe_clone_estimator(self, estimator: BaseEstimator) -> BaseEstimator:
+        """
+        Clone estimator with fallback for non-sklearn-clone-compatible models.
+
+        Args:
+            estimator (BaseEstimator): Estimator to clone.
+
+        Returns:
+            BaseEstimator: Cloned estimator if possible, otherwise the original.
+        """
+        try:
+            return clone(estimator)
+        except (TypeError, RuntimeError, AttributeError, ValueError, KeyError):
+            try:
+                return deepcopy(estimator)
+            except (
+                TypeError,
+                RuntimeError,
+                AttributeError,
+                ValueError,
+                KeyError,
+                NotImplementedError,
+            ):
+                return estimator
 
     def _validate_and_normalize_weights(self, weights: np.ndarray | None) -> np.ndarray:
         """Validate and normalize estimator weights.
@@ -89,14 +121,16 @@ class EnsembleModel(BaseTrainer, BaseEstimator):
         y_train: pd.Series,
         eval_set: list[tuple[pd.DataFrame, pd.Series]] | None = None,
         sample_weight: pd.Series | None = None,
+        verbose: int | None = None,
     ) -> "EnsembleModel":
-        """Fit all base estimators.
+        """Fit all base estimators and optional meta-learner.
 
         Args:
             X_train (pd.DataFrame): Training features.
             y_train (pd.Series): Training target.
             eval_set (tuple[pd.DataFrame, pd.Series] | None): Optional validation set for early stopping.
             sample_weight (pd.Series | None): Optional sample weights.
+            verbose (int | None): Optional verbosity for fitting.
 
         Returns:
             EnsembleModel: Fitted ensemble instance.
@@ -104,33 +138,69 @@ class EnsembleModel(BaseTrainer, BaseEstimator):
         if (
             eval_set is not None
             and isinstance(eval_set, list)
-            and len(eval_set) == 1
+            and len(eval_set) >= 1
             and isinstance(eval_set[0], tuple)
         ):
-            X_valid, y_valid = eval_set[0]
+            if len(eval_set) == 2:
+                X_valid, y_valid = eval_set[1]
+            else:
+                X_valid, y_valid = eval_set[0]
+
         else:
             X_valid, y_valid = None, None
         self.fitted_estimators_ = []
-        self._X_train = X_train
+        self._x_train = X_train
         for base_estimator in self._estimators_list:
-            try:
-                estimator = clone(base_estimator)
-            except TypeError:
-                estimator = base_estimator
-            estimator = self._set_categorical_params(estimator)
+            estimator = self._safe_clone_estimator(base_estimator)
+            estimator = self._set_categorical_params_for_estimator(estimator)
             fitted = BaseTrainer.fit_estimator(
-                estimator, X_train, y_train, X_valid, y_valid, sample_weight
+                estimator, X_train, y_train, X_valid, y_valid, sample_weight, verbose
             )
             self.fitted_estimators_.append(fitted)
-        self._X_train = None
+        self._x_train = None
 
         if self.problem_type == "classification":
             self.classes_ = np.unique(y_train)
+
+        if self.meta_learner is not None:
+            meta_features = self._generate_meta_features(X_train)
+            self.fitted_meta_learner_ = self._safe_clone_estimator(self.meta_learner)
+            self.fitted_meta_learner_.fit(
+                meta_features, y_train, sample_weight=sample_weight
+            )
         return self
 
-    def _set_categorical_params(self, estimator: BaseEstimator) -> BaseEstimator:
+    def _generate_meta_features(self, X: pd.DataFrame) -> np.ndarray:
+        """Generate meta-features from base estimators' predictions.
+
+        Args:
+            X (pd.DataFrame): Input features.
+
+        Returns:
+            np.ndarray: Meta-features (base estimators' predictions stacked).
         """
-        Assign categorical feature parameters for supported estimators.
+        meta_features = []
+        for estimator in self.fitted_estimators_:
+            X_ordered = self._order_X_for_estimator(X, estimator)
+            if self.problem_type == "classification":
+                feat = estimator.predict_proba(X_ordered)
+            else:
+                feat = estimator.predict(X_ordered).reshape(-1, 1)
+            meta_features.append(feat)
+        return np.hstack(meta_features)
+
+    def _set_categorical_params_for_estimator(
+        self,
+        estimator: BaseEstimator,
+    ) -> BaseEstimator:
+        """Assign or sanitise categorical feature parameters for supported estimators.
+
+        For CatBoost: filters any pre-configured ``cat_features`` to exclude columns
+        that are numeric in ``X_train`` (e.g. encoded to float64 by a pipeline step
+        such as MeanEncoder).  Falls back to auto-detecting ``category``-dtype columns
+        when no ``cat_features`` were pre-configured.
+
+        For HistGradientBoosting: auto-detects ``category``-dtype columns.
 
         Args:
             estimator (BaseEstimator): Estimator to configure.
@@ -138,26 +208,49 @@ class EnsembleModel(BaseTrainer, BaseEstimator):
         Returns:
             BaseEstimator: Estimator with categorical parameters set when applicable.
         """
-        if not hasattr(self, "_X_train") or self._X_train is None:
+        if self._x_train is None:
             return estimator
-        try:
-            categorical_features = self._X_train.select_dtypes(
-                include="category"
-            ).columns.tolist()
-        except (ValueError, TypeError, AttributeError):
-            categorical_features = []
-        if not categorical_features:
-            return estimator
+
         name = estimator.__class__.__name__
+
         if name.startswith("CatBoost"):
-            estimator.set_params(cat_features=categorical_features)
+            existing_cats = estimator.get_params().get("cat_features") or []
+            if existing_cats:
+                active_cats = [
+                    c
+                    for c in existing_cats
+                    if c in self._x_train.columns
+                    and not pd.api.types.is_numeric_dtype(self._x_train[c])
+                ]
+                if set(active_cats) != set(existing_cats):
+                    estimator.set_params(
+                        cat_features=active_cats if active_cats else None
+                    )
+            else:
+                try:
+                    auto_cats = self._x_train.select_dtypes(
+                        include="category"
+                    ).columns.tolist()
+                except (ValueError, TypeError, AttributeError):
+                    auto_cats = []
+                if auto_cats:
+                    estimator.set_params(cat_features=auto_cats)
+
         elif name.startswith("HistGradientBoosting"):
-            estimator.set_params(categorical_features=categorical_features)
+            try:
+                auto_cats = self._x_train.select_dtypes(
+                    include="category"
+                ).columns.tolist()
+            except (ValueError, TypeError, AttributeError):
+                auto_cats = []
+            if auto_cats:
+                estimator.set_params(categorical_features=auto_cats)
+
         return estimator
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
         """
-        Predict using the ensemble.
+        Predict using the ensemble (stacking or blending).
 
         Args:
             X (pd.DataFrame): Features to score.
@@ -170,6 +263,18 @@ class EnsembleModel(BaseTrainer, BaseEstimator):
         """
         if not hasattr(self, "fitted_estimators_") or len(self.fitted_estimators_) == 0:
             raise RuntimeError("EnsembleModel must be fitted before calling predict().")
+
+        if self.fitted_meta_learner_ is not None:
+            meta_features = self._generate_meta_features(X)
+            return self.fitted_meta_learner_.predict(meta_features)
+
+        if self.problem_type == "classification":
+            proba = self.predict_proba(X)
+            return (
+                self.classes_[np.argmax(proba, axis=1)]
+                if self.classes_ is not None
+                else np.argmax(proba, axis=1)
+            )
 
         predictions = []
         successful_indices = []
@@ -203,7 +308,7 @@ class EnsembleModel(BaseTrainer, BaseEstimator):
             gc.collect()
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
-        """Predict class probabilities using the ensemble.
+        """Predict class probabilities using the ensemble (stacking or blending).
 
         Args:
             X (pd.DataFrame): Features to score.
@@ -222,6 +327,12 @@ class EnsembleModel(BaseTrainer, BaseEstimator):
         if not hasattr(self, "fitted_estimators_") or len(self.fitted_estimators_) == 0:
             raise RuntimeError("EnsembleModel must be fitted before calling predict().")
 
+        if self.fitted_meta_learner_ is not None:
+            meta_features = self._generate_meta_features(X)
+            return self._prepare_probabilities(
+                self.fitted_meta_learner_.predict_proba(meta_features)
+            )
+
         predictions = []
         successful_indices = []
         try:
@@ -229,6 +340,9 @@ class EnsembleModel(BaseTrainer, BaseEstimator):
                 try:
                     X_ordered = self._order_X_for_estimator(X, estimator)
                     estimator_predictions = estimator.predict_proba(X_ordered)
+                    estimator_predictions = self._prepare_probabilities(
+                        estimator_predictions
+                    )
                     predictions.append(estimator_predictions)
                     successful_indices.append(idx)
                 except (ValueError, AttributeError, TypeError) as e:
@@ -237,11 +351,13 @@ class EnsembleModel(BaseTrainer, BaseEstimator):
 
             if not predictions:
                 raise RuntimeError("All estimators failed during prediction.")
+
             predictions = np.array(predictions)
             active_weights = self._weights_normalized[successful_indices]
             active_weights = active_weights / active_weights.sum()
 
-            return np.average(predictions, axis=0, weights=active_weights)
+            proba = np.average(predictions, axis=0, weights=active_weights)
+            return self._prepare_probabilities(proba)
         finally:
             if "predictions" in locals() and isinstance(predictions, list):
                 del predictions
@@ -256,21 +372,47 @@ class EnsembleModel(BaseTrainer, BaseEstimator):
         For classification: returns predicted class, mean probability, and
         disagreement (std of probabilities across estimators).
 
+        Note: When using stacking, disagreement is unavailable and returned as zeros.
+
         Args:
             X (pd.DataFrame): Features to score.
 
         Returns:
-            dict [str, np.ndarray]: Dictionary with keys:
+            dict[str, np.ndarray]: Dictionary with keys depending on problem type.
         """
         if not hasattr(self, "fitted_estimators_") or len(self.fitted_estimators_) == 0:
             raise RuntimeError(
                 "EnsembleModel must be fitted before calling predict_with_confidence()."
             )
+
+        if self.fitted_meta_learner_ is not None:
+            if self.problem_type == "regression":
+                pred = self.predict(X)
+                return {
+                    "prediction": pred,
+                    "std": np.zeros_like(pred),
+                    "ci_95_lower": pred,
+                    "ci_95_upper": pred,
+                }
+            else:
+                proba = self.predict_proba(X)
+                pred_class = np.argmax(proba, axis=1)
+                pred_confidence = proba[np.arange(len(pred_class)), pred_class]
+                return {
+                    "prediction": pred_class,
+                    "confidence": pred_confidence,
+                    "disagreement": np.zeros_like(pred_confidence),
+                    "proba": proba,
+                }
+
         predictions = []
         for estimator in self.fitted_estimators_:
             X_ordered = self._order_X_for_estimator(X, estimator)
             if self.problem_type == "classification":
                 estimator_predictions = estimator.predict_proba(X_ordered)
+                estimator_predictions = self._prepare_probabilities(
+                    estimator_predictions
+                )
             else:
                 estimator_predictions = estimator.predict(X_ordered)
             predictions.append(estimator_predictions)
@@ -380,23 +522,70 @@ class EnsembleModel(BaseTrainer, BaseEstimator):
 
         return np.average(importances, axis=0, weights=active_weights)
 
+    def _prepare_probabilities(self, probabilities: np.ndarray) -> np.ndarray:
+        """Coerce probability outputs into a finite row-normalized matrix."""
+        probabilities = np.asarray(probabilities, dtype=float)
+        if probabilities.ndim == 1:
+            probabilities = np.column_stack((1.0 - probabilities, probabilities))
+        probabilities = np.clip(probabilities, 0.0, 1.0)
+        row_sums = probabilities.sum(axis=1, keepdims=True)
+        return np.divide(
+            probabilities,
+            row_sums,
+            out=np.full_like(probabilities, 1.0 / probabilities.shape[1]),
+            where=row_sums > 0,
+        )
+
 
 if __name__ == "__main__":
-    from sklearn.ensemble import RandomForestClassifier as _RF
-    from xgboost import XGBClassifier as _XGB
+    from sklearn.datasets import load_iris
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.linear_model import LogisticRegression
+    from xgboost import XGBClassifier
 
-    X_demo = pd.DataFrame(np.random.randn(50, 4), columns=["f1", "f2", "f3", "f4"])
-    y_demo = pd.Series((np.random.rand(50) > 0.5).astype(int))
+    data = load_iris()
+    X = pd.DataFrame(data.data, columns=data.feature_names)
+    y = pd.Series(data.target)
 
-    est1 = _RF(n_estimators=10, random_state=42)
-    est2 = _XGB(use_label_encoder=False, eval_metric="logloss", random_state=42)
-    ensemble = EnsembleModel([est1, est2], problem_type="classification")
-    ensemble.fit(X_demo, y_demo)
-    y_pred = ensemble.predict(X_demo)
-    y_proba = ensemble.predict_proba(X_demo)
-    print("predictions shape:", y_pred.shape)
-    print("probabilities shape:", y_proba.shape)
-    confidence = ensemble.predict_with_confidence(X_demo)
-    print("Confidence:", confidence)
-    feature_importances = ensemble.feature_importances_
-    print("Feature importances:", feature_importances)
+    print("=== Blending (default) ===")
+    ensemble_blend = EnsembleModel(
+        estimators=[
+            RandomForestClassifier(n_estimators=10),
+            LogisticRegression(max_iter=100),
+        ],
+        problem_type="classification",
+    )
+    ensemble_blend.fit(X, y)
+    predictions_blend = ensemble_blend.predict(X)
+    print(
+        f"Blending predictions value counts:\n{pd.Series(predictions_blend).value_counts()}"
+    )
+
+    print("\n=== Blending with XGBClassifier (verbose must be suppressed) ===")
+    ensemble_xgb = EnsembleModel(
+        estimators=[
+            XGBClassifier(n_estimators=50, verbosity=0),
+            RandomForestClassifier(n_estimators=10),
+        ],
+        problem_type="classification",
+    )
+    ensemble_xgb.fit(X, y, eval_set=[(X, y)])
+    predictions_xgb = ensemble_xgb.predict(X)
+    print(
+        f"XGB blending predictions value counts:\n{pd.Series(predictions_xgb).value_counts()}"
+    )
+
+    print("\n=== Stacking with LogisticRegression meta-learner ===")
+    ensemble_stack = EnsembleModel(
+        estimators=[
+            RandomForestClassifier(n_estimators=10),
+            LogisticRegression(max_iter=1000),
+        ],
+        problem_type="classification",
+        meta_learner=LogisticRegression(max_iter=1000),
+    )
+    ensemble_stack.fit(X, y)
+    predictions_stack = ensemble_stack.predict(X)
+    print(
+        f"Stacking predictions value counts:\n{pd.Series(predictions_stack).value_counts()}"
+    )

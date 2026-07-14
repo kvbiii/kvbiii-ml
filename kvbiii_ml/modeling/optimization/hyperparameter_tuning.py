@@ -1,6 +1,7 @@
+import warnings
+
 import numpy as np
 import optuna
-import warnings
 import pandas as pd
 from sklearn.base import BaseEstimator, clone
 
@@ -9,9 +10,8 @@ from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
 warnings.filterwarnings(
     "ignore",
-    message="Argument ``multivariate`` is an experimental feature. The interface can change in the future.",
-    category=UserWarning,
-    module="optuna",
+    category=optuna.exceptions.ExperimentalWarning,
+    message=".*multivariate.*",
 )
 
 
@@ -27,6 +27,7 @@ class RandomSearchCV:
         cross_validator: CrossValidationTrainer,
         n_trials: int = 100,
         seed: int = 17,
+        max_samples: int = 100000,
     ):
         """Initialize a lightweight random search tuner.
 
@@ -34,10 +35,13 @@ class RandomSearchCV:
             cross_validator (BaseCrossValidator): Cross-validation splitter. Defaults to 5-fold KFold.
             n_trials (int): Number of trials to run. Defaults to 100.
             seed (int): Random seed for the sampler. Defaults to 17.
+            max_samples (int): Maximum number of rows used during CV objective evaluation.
+                Defaults to 100000.
         """
         self.cross_validator = cross_validator
         self.n_trials = n_trials
         self.seed = seed
+        self.max_samples = max_samples
         self.metric_fn = self.cross_validator.metric_fn
         self.metric_type = self.cross_validator.metric_type
         self.metric_direction = self.cross_validator.metric_direction
@@ -193,8 +197,8 @@ class RandomSearchCV:
             float: Mean cross-validated validation score for this trial.
         """
         params = {k: self.get_param(trial, k, v) for k, v in self.params_grid.items()}
-        if X.shape[0] > 100000:
-            X_sample = X.sample(n=100000, random_state=self.seed)
+        if X.shape[0] > self.max_samples:
+            X_sample = X.sample(n=self.max_samples, random_state=self.seed)
         else:
             X_sample = X.copy()
         y_sample = y.loc[X_sample.index]
@@ -231,34 +235,61 @@ class RandomSearchCV:
 
 
 if __name__ == "__main__":
-    from sklearn.model_selection import KFold
-    from sklearn.datasets import load_breast_cancer
-    from sklearn.ensemble import RandomForestClassifier
+    from lightgbm import LGBMClassifier
+    from sklearn.datasets import make_classification
+    from sklearn.model_selection import StratifiedKFold
+    from sklearn.pipeline import Pipeline
+    from kvbiii_ml.data_processing.preprocessing.outlier_handling.winsorizer_trimmer import (
+        WinsorizerWithOriginal,
+    )
 
-    X_df, y_ser = load_breast_cancer(return_X_y=True, as_frame=True)
+    RANDOM_STATE = 17
+    N_SAMPLES = 2_000
+    N_FEATURES = 10
+    FEATURE_NAMES = [f"feature_{i}" for i in range(N_FEATURES)]
 
-    cv = CrossValidationTrainer(
-        metric_name="Accuracy",
+    X_arr, y_arr = make_classification(
+        n_samples=N_SAMPLES,
+        n_features=N_FEATURES,
+        n_informative=5,
+        n_redundant=2,
+        random_state=RANDOM_STATE,
+    )
+    X_df = pd.DataFrame(X_arr, columns=FEATURE_NAMES)
+    y_ser = pd.Series(y_arr)
+
+    preprocessing_pipeline = Pipeline(
+        [
+            (
+                "winsorizer",
+                WinsorizerWithOriginal(
+                    variables=FEATURE_NAMES,
+                    capping_method="gaussian",
+                    tail="right",
+                ),
+            ),
+        ]
+    )
+    cross_validation_trainer = CrossValidationTrainer(
+        metric_name="Balanced Accuracy",
         problem_type="classification",
-        cv=KFold(n_splits=5, shuffle=True, random_state=17),
-        processors=None,
+        cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE),
+        preprocessing_pipeline=preprocessing_pipeline,
         verbose=False,
     )
-
     tuner = RandomSearchCV(
-        cross_validator=cv,
-        n_trials=100,
-        seed=17,
+        cross_validator=cross_validation_trainer, n_trials=10, seed=RANDOM_STATE
     )
-
-    grid = {
-        "n_estimators": ("int", [10, 110], {"step": 50}),
-        "max_depth": ("int", [2, 10], {"step": 2}),
-        "min_samples_split": ("int", [2, 10], {"step": 2}),
-        "min_samples_leaf": ("int", [1, 5], {"step": 1}),
-        "bootstrap": ("categorical", [True, False]),
+    clf = LGBMClassifier(n_estimators=100, verbose=-1, random_state=RANDOM_STATE)
+    params_grid = {
+        "num_leaves": ("int", [16, 128]),
+        "learning_rate": ("float", [0.01, 0.3], {"log": True}),
+        "min_child_samples": ("int", [5, 50]),
     }
-
-    study = tuner.tune(RandomForestClassifier(), X_df.head(300), y_ser.head(300), grid)
-    print("Best value:", study.best_value)
-    print("Best params:", study.best_trial.params)
+    study = tuner.tune(estimator=clf, X=X_df, y=y_ser, params_grid=params_grid)
+    print("Best trial:")
+    print(study.best_trial)
+    print("Best params:")
+    print(study.best_params)
+    print("Best value:")
+    print(study.best_value)
