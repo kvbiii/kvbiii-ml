@@ -68,11 +68,11 @@ def test_ensemblemodel_init_creates_valid_instance(ensemble_estimators):
         weights=[0.7, 0.3],
         problem_type="classification",
     )
-    if not (ensemble.estimators == ensemble_estimators):
+    if ensemble.estimators != ensemble_estimators:
         raise AssertionError()
-    if not (np.isclose(sum(ensemble.weights), 1.0)):
+    if not np.isclose(sum(ensemble.weights), 1.0):
         raise AssertionError()
-    if not (ensemble.problem_type == "classification"):
+    if ensemble.problem_type != "classification":
         raise AssertionError()
 
 
@@ -92,11 +92,11 @@ def test_ensemblemodel_init_validates_weights(ensemble_estimators):
         estimators=ensemble_estimators, problem_type="classification"
     )
 
-    if not (len(ensemble.weights) == len(ensemble_estimators)):
+    if len(ensemble.weights) != len(ensemble_estimators):
         raise AssertionError()
-    if not (abs(sum(ensemble.weights) - 1.0) < 1e-10):
+    if not abs(sum(ensemble.weights) - 1.0) < 1e-10:
         raise AssertionError()
-    if not (all(w == ensemble.weights[0] for w in ensemble.weights)):
+    if not all(w == ensemble.weights[0] for w in ensemble.weights):
         raise AssertionError()
 
     # Test with unnormalized weights
@@ -104,11 +104,11 @@ def test_ensemblemodel_init_validates_weights(ensemble_estimators):
         estimators=ensemble_estimators, weights=[2, 3], problem_type="classification"
     )
 
-    if not (abs(sum(ensemble.weights) - 1.0) < 1e-10):
+    if not abs(sum(ensemble.weights) - 1.0) < 1e-10:
         raise AssertionError()
-    if not (abs(ensemble.weights[0] - 0.4) < 1e-10):
+    if not abs(ensemble.weights[0] - 0.4) < 1e-10:
         raise AssertionError()
-    if not (abs(ensemble.weights[1] - 0.6) < 1e-10):
+    if not abs(ensemble.weights[1] - 0.6) < 1e-10:
         raise AssertionError()
 
     # Test with invalid weights
@@ -145,11 +145,11 @@ def test_ensemblemodel_fit_trains_all_estimators(
 
     # Check all estimators were fitted
     # Current implementation clones then fits via BaseTrainer; original mocks won't record .fit
-    if not (len(ensemble.fitted_estimators_) == len(mock_estimators)):
+    if len(ensemble.fitted_estimators_) != len(mock_estimators):
         raise AssertionError()
 
     # Should return self for chaining
-    if not (fitted_ensemble is ensemble):
+    if fitted_ensemble is not ensemble:
         raise AssertionError()
 
 
@@ -180,7 +180,7 @@ def test_ensemblemodel_predict_combines_estimator_predictions(mock_estimators):
     # Need to mark as fitted to bypass internal fit requirement
     ensemble.fitted_estimators_ = mock_estimators
     preds = ensemble.predict(X)
-    if not (preds.shape[0] == X.shape[0]):
+    if preds.shape[0] != X.shape[0]:
         raise AssertionError()
 
 
@@ -211,11 +211,11 @@ def test_ensemblemodel_predict_proba_computes_weighted_probabilities(mock_estima
     probabilities = ensemble.predict_proba(X)
 
     # Check shape
-    if not (probabilities.shape == (5, 2)):
+    if probabilities.shape != (5, 2):
         raise AssertionError()
 
     # Check probabilities sum to 1
-    if not (np.allclose(np.sum(probabilities, axis=1), np.ones(5))):
+    if not np.allclose(np.sum(probabilities, axis=1), np.ones(5)):
         raise AssertionError()
 
     # Manually calculate expected probabilities for first sample
@@ -224,7 +224,7 @@ def test_ensemblemodel_predict_proba_computes_weighted_probabilities(mock_estima
         + 0.5 * np.array([0.3, 0.7])
         + 0.3 * np.array([0.6, 0.4])
     )
-    if not (np.allclose(probabilities[0], expected_proba_0)):
+    if not np.allclose(probabilities[0], expected_proba_0):
         raise AssertionError()
 
 
@@ -256,7 +256,7 @@ def test_ensemblemodel_predict_for_regression_averages_predictions(mock_estimato
     ensemble.fitted_estimators_ = mock_estimators
     predictions = ensemble.predict(X)
 
-    if not (len(predictions) == len(X)):
+    if len(predictions) != len(X):
         raise AssertionError()
 
     # Calculate expected weighted averages
@@ -319,11 +319,11 @@ def test_ensemblemodel_set_params_updates_parameters():
     result = ensemble.set_params(weights=[0.3, 0.7])
 
     # Should return self
-    if not (result is ensemble):
+    if result is not ensemble:
         raise AssertionError()
 
     # Should update estimator parameters
-    if not (np.isclose(sum(ensemble.weights), 1.0)):
+    if not np.isclose(sum(ensemble.weights), 1.0):
         raise AssertionError()
 
 

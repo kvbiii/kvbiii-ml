@@ -67,9 +67,9 @@ def test_removal_schedule_shap():
         verbose=False,
     )
     sched = rng.compute_removal_schedule(9)
-    if not (all(n > 0 for n in sched)):
+    if not all(n > 0 for n in sched):
         raise AssertionError()
-    if not (sum(sched) <= 9):
+    if not sum(sched) <= 9:
         raise AssertionError()
 
 
@@ -85,21 +85,18 @@ def test_run_shap_rfe(shap_rfe_data):
         verbose=False,
     )
     result = selector.run(X, y)
-    if not (
-        set(result.keys())
-        == {
-            "selected_features",
-            "selected_features_names",
-            "history",
-        }
-    ):
+    if set(result.keys()) != {
+        "selected_features",
+        "selected_features_names",
+        "history",
+    }:
         raise AssertionError()
     history = result["history"]
-    if not (not history.empty):
+    if history.empty:
         raise AssertionError()
-    if not (history.iloc[0]["step"] == 0):
+    if history.iloc[0]["step"] != 0:
         raise AssertionError()
-    if not (len(result["selected_features"]) <= X.shape[1]):
+    if not len(result["selected_features"]) <= X.shape[1]:
         raise AssertionError()
 
 
@@ -141,9 +138,9 @@ def test_select_features_weighted_score_logic():
         ]
     )
     selected, best_metric = selector.select_features_weighted_score(history, alpha=0.8)
-    if not (isinstance(selected, list)):
+    if not isinstance(selected, list):
         raise AssertionError()
-    if not (best_metric is not None):
+    if best_metric is None:
         raise AssertionError()
 
 

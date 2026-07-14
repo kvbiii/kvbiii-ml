@@ -58,12 +58,12 @@ def test_categoriesassigner_init_stores_categorical_features():
     features = ["color", "fuel", "brand"]
     assigner = CategoriesAssigner(features)
 
-    if not (assigner.categorical_features == features):
+    if assigner.categorical_features != features:
         raise AssertionError()
 
     # Test empty list initialization
     empty_assigner = CategoriesAssigner([])
-    if not (empty_assigner.categorical_features == []):
+    if empty_assigner.categorical_features != []:
         raise AssertionError()
 
 
@@ -81,23 +81,23 @@ def test_categoriesassigner_fit_extracts_category_levels(categorical_training_da
     assigner = CategoriesAssigner(["color", "fuel"])
     fitted_assigner = assigner.fit(categorical_training_data)
 
-    if not (fitted_assigner is assigner):
+    if fitted_assigner is not assigner:
         raise AssertionError()
-    if not ("color" in assigner.feature_groups):
+    if "color" not in assigner.feature_groups:
         raise AssertionError()
-    if not ("fuel" in assigner.feature_groups):
+    if "fuel" not in assigner.feature_groups:
         raise AssertionError()
 
     # Check categories are extracted
-    if not (set(assigner.feature_groups["color"]) == {"red", "blue", "green"}):
+    if set(assigner.feature_groups["color"]) != {"red", "blue", "green"}:
         raise AssertionError()
-    if not (set(assigner.feature_groups["fuel"]) == {"petrol", "diesel", "electric"}):
+    if set(assigner.feature_groups["fuel"]) != {"petrol", "diesel", "electric"}:
         raise AssertionError()
 
     # Check modes are computed
-    if not ("color" in assigner.feature_modes_):
+    if "color" not in assigner.feature_modes_:
         raise AssertionError()
-    if not ("fuel" in assigner.feature_modes_):
+    if "fuel" not in assigner.feature_modes_:
         raise AssertionError()
 
 
@@ -115,9 +115,9 @@ def test_categoriesassigner_fit_handles_missing_features(categorical_training_da
     assigner = CategoriesAssigner(["color", "nonexistent_feature"])
     assigner.fit(categorical_training_data)
 
-    if not ("color" in assigner.feature_groups):
+    if "color" not in assigner.feature_groups:
         raise AssertionError()
-    if not ("nonexistent_feature" not in assigner.feature_groups):
+    if "nonexistent_feature" in assigner.feature_groups:
         raise AssertionError()
 
 
@@ -140,11 +140,11 @@ def test_categoriesassigner_fit_handles_non_categorical_features():
     assigner = CategoriesAssigner(["color", "numeric", "text"])
     assigner.fit(data)
 
-    if not ("color" in assigner.feature_groups):
+    if "color" not in assigner.feature_groups:
         raise AssertionError()
-    if not ("numeric" not in assigner.feature_groups):
+    if "numeric" in assigner.feature_groups:
         raise AssertionError()
-    if not ("text" not in assigner.feature_groups):
+    if "text" in assigner.feature_groups:
         raise AssertionError()
 
 
@@ -172,9 +172,9 @@ def test_categoriesassigner_fit_computes_correct_modes(test_settings):
     assigner = CategoriesAssigner(["category", "balanced"])
     assigner.fit(data)
 
-    if not (assigner.feature_modes_["category"] == "A"):
+    if assigner.feature_modes_["category"] != "A":
         raise AssertionError()
-    if not (assigner.feature_modes_["balanced"] in ["X", "Y"]):
+    if assigner.feature_modes_["balanced"] not in ["X", "Y"]:
         raise AssertionError()
 
 
@@ -198,15 +198,15 @@ def test_categoriesassigner_transform_preserves_known_categories(
     transformed = assigner.transform(categorical_test_data)
 
     # Check that known values are preserved
-    if not (transformed.loc[0, "color"] == "blue"):
+    if transformed.loc[0, "color"] != "blue":
         raise AssertionError()
-    if not (transformed.loc[2, "fuel"] == "petrol"):
+    if transformed.loc[2, "fuel"] != "petrol":
         raise AssertionError()
 
     # Check categorical dtype is maintained
-    if not (isinstance(transformed["color"].dtype, pd.CategoricalDtype)):
+    if not isinstance(transformed["color"].dtype, pd.CategoricalDtype):
         raise AssertionError()
-    if not (isinstance(transformed["fuel"].dtype, pd.CategoricalDtype)):
+    if not isinstance(transformed["fuel"].dtype, pd.CategoricalDtype):
         raise AssertionError()
 
 
@@ -234,11 +234,11 @@ def test_categoriesassigner_transform_replaces_unknown_with_mode(
     fuel_mode = assigner.feature_modes_["fuel"]
 
     # Check unknown values are replaced with mode
-    if not (transformed.loc[1, "color"] == color_mode):
+    if transformed.loc[1, "color"] != color_mode:
         raise AssertionError()
-    if not (transformed.loc[2, "color"] == color_mode):
+    if transformed.loc[2, "color"] != color_mode:
         raise AssertionError()
-    if not (transformed.loc[1, "fuel"] == fuel_mode):
+    if transformed.loc[1, "fuel"] != fuel_mode:
         raise AssertionError()
 
 
@@ -260,13 +260,13 @@ def test_categoriesassigner_transform_handles_missing_values():
     assigner.fit(training_data)
     transformed = assigner.transform(test_data)
 
-    if not (transformed.loc[0, "category"] == "A"):
+    if transformed.loc[0, "category"] != "A":
         raise AssertionError()
-    if not (pd.isna(transformed.loc[1, "category"])):
+    if not pd.isna(transformed.loc[1, "category"]):
         raise AssertionError()
-    if not (transformed.loc[2, "category"] in ["A", "B"]):
+    if transformed.loc[2, "category"] not in ["A", "B"]:
         raise AssertionError()
-    if not (transformed.loc[3, "category"] == "B"):
+    if transformed.loc[3, "category"] != "B":
         raise AssertionError()
 
 
@@ -294,7 +294,7 @@ def test_categoriesassigner_transform_creates_copy_of_input(
     pd.testing.assert_frame_equal(categorical_test_data, original_test)
 
     # Transformed should be different (contains categorical dtypes)
-    if not (not categorical_test_data.equals(transformed)):
+    if categorical_test_data.equals(transformed):
         raise AssertionError()
 
 
@@ -327,15 +327,15 @@ def test_categoriesassigner_transform_ignores_non_configured_features():
     transformed = assigner.transform(test_data)
 
     # Configured feature should be processed
-    if not (isinstance(transformed["configured"].dtype, pd.CategoricalDtype)):
+    if not isinstance(transformed["configured"].dtype, pd.CategoricalDtype):
         raise AssertionError()
 
     # Non-configured categorical feature should remain unchanged
-    if not (transformed.loc[1, "not_configured"] == "Z"):
+    if transformed.loc[1, "not_configured"] != "Z":
         raise AssertionError()
 
     # Numeric feature should be unchanged
-    if not (transformed["numeric"].equals(test_data["numeric"])):
+    if not transformed["numeric"].equals(test_data["numeric"]):
         raise AssertionError()
 
 
@@ -357,9 +357,9 @@ def test_categoriesassigner_get_feature_names_out_returns_input_features(
 
     feature_names = assigner.get_feature_names_out()
 
-    if not (isinstance(feature_names, pd.Index)):
+    if not isinstance(feature_names, pd.Index):
         raise AssertionError()
-    if not (list(feature_names) == list(categorical_training_data.columns)):
+    if list(feature_names) != list(categorical_training_data.columns):
         raise AssertionError()
 
     # Test that input parameter is ignored
@@ -391,11 +391,11 @@ def test_categoriesassigner_handles_empty_categorical_features_list():
     transformed = assigner.transform(test_data)
 
     # Data should be unchanged except for potential copy
-    if not (transformed["category"].equals(test_data["category"])):
+    if not transformed["category"].equals(test_data["category"]):
         raise AssertionError()
-    if not (transformed["numeric"].equals(test_data["numeric"])):
+    if not transformed["numeric"].equals(test_data["numeric"]):
         raise AssertionError()
-    if not (len(assigner.feature_groups) == 0):
+    if len(assigner.feature_groups) != 0:
         raise AssertionError()
 
 
@@ -416,7 +416,7 @@ def test_categoriesassigner_fit_handles_empty_categories():
     assigner.fit(training_data)
 
     # Should handle normal categories without error
-    if not ("normal_cat" in assigner.feature_groups):
+    if "normal_cat" not in assigner.feature_groups:
         raise AssertionError()
 
 

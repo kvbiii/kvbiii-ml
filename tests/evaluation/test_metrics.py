@@ -34,9 +34,9 @@ def test_metrics_names_contains_expected_classification_metrics():
     ]
 
     for metric in expected_classification_metrics:
-        if not (metric in METRICS_NAMES):
+        if metric not in METRICS_NAMES:
             raise AssertionError(f"Missing classification metric: {metric}")
-        if not (callable(METRICS_NAMES[metric])):
+        if not callable(METRICS_NAMES[metric]):
             raise AssertionError(f"Metric {metric} function not callable")
 
 
@@ -51,9 +51,9 @@ def test_metrics_names_contains_expected_regression_metrics():
     expected_regression_metrics = ["MAE", "MAPE", "MSE", "RMSE", "RMSLE", "R2"]
 
     for metric in expected_regression_metrics:
-        if not (metric in METRICS_NAMES):
+        if metric not in METRICS_NAMES:
             raise AssertionError(f"Missing regression metric: {metric}")
-        if not (callable(METRICS_NAMES[metric])):
+        if not callable(METRICS_NAMES[metric]):
             raise AssertionError(f"Metric {metric} function not callable")
 
 
@@ -67,31 +67,25 @@ def test_metrics_dictionary_structure_is_valid():
         - Third element is optimization direction ('minimize' or 'maximize')
     """
     for metric_name, metric_config in METRICS.items():
-        if not (isinstance(metric_config, list)):
+        if not isinstance(metric_config, list):
             raise AssertionError(f"Metric {metric_name} config must be list")
-        if not (len(metric_config) == 3):
+        if len(metric_config) != 3:
             raise AssertionError(f"Metric {metric_name} must have 3 config elements")
 
         metric_func, pred_type, direction = metric_config
-        if not (callable(metric_func)):
+        if not callable(metric_func):
             raise AssertionError(f"Metric {metric_name} function must be callable")
-        if not (
-            pred_type
-            in [
-                "preds",
-                "probs",
-            ]
-        ):
+        if pred_type not in [
+            "preds",
+            "probs",
+        ]:
             raise AssertionError(
                 f"Metric {metric_name} pred_type must be 'preds' or 'probs'"
             )
-        if not (
-            direction
-            in [
-                "minimize",
-                "maximize",
-            ]
-        ):
+        if direction not in [
+            "minimize",
+            "maximize",
+        ]:
             raise AssertionError(
                 f"Metric {metric_name} direction must be 'minimize' or 'maximize'"
             )
@@ -107,16 +101,16 @@ def test_get_metric_function_returns_valid_callable_for_accuracy():
     """
     accuracy_func = get_metric_function("Accuracy")
 
-    if not (callable(accuracy_func)):
+    if not callable(accuracy_func):
         raise AssertionError()
 
     y_true = np.array([0, 1, 1, 0, 1])
     y_pred = np.array([0, 1, 0, 0, 1])
     score = accuracy_func(y_true, y_pred)
 
-    if not (isinstance(score, (int, float))):
+    if not isinstance(score, (int, float)):
         raise AssertionError()
-    if not (0.0 <= score <= 1.0):
+    if not 0.0 <= score <= 1.0:
         raise AssertionError()
 
 
@@ -130,16 +124,16 @@ def test_get_metric_function_returns_valid_callable_for_mae():
     """
     mae_func = get_metric_function("MAE")
 
-    if not (callable(mae_func)):
+    if not callable(mae_func):
         raise AssertionError()
 
     y_true = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
     y_pred = np.array([1.1, 2.2, 2.8, 3.9, 5.2])
     score = mae_func(y_true, y_pred)
 
-    if not (isinstance(score, (int, float))):
+    if not isinstance(score, (int, float)):
         raise AssertionError()
-    if not (score >= 0.0):
+    if not score >= 0.0:
         raise AssertionError()
 
 
@@ -163,17 +157,17 @@ def test_get_metric_type_returns_correct_prediction_types():
         - Regression metrics require 'preds'
     """
     # Test metrics that require predictions
-    if not (get_metric_type("Accuracy") == "preds"):
+    if get_metric_type("Accuracy") != "preds":
         raise AssertionError()
-    if not (get_metric_type("F1") == "preds"):
+    if get_metric_type("F1") != "preds":
         raise AssertionError()
-    if not (get_metric_type("MAE") == "preds"):
+    if get_metric_type("MAE") != "preds":
         raise AssertionError()
-    if not (get_metric_type("RMSE") == "preds"):
+    if get_metric_type("RMSE") != "preds":
         raise AssertionError()
 
     # Test metrics that require probabilities
-    if not (get_metric_type("Roc AUC") == "probs"):
+    if get_metric_type("Roc AUC") != "probs":
         raise AssertionError()
 
 
@@ -197,23 +191,23 @@ def test_get_metric_direction_returns_correct_optimization_directions():
         - R-squared should be maximized (higher is better)
     """
     # Test metrics to maximize
-    if not (get_metric_direction("Accuracy") == "maximize"):
+    if get_metric_direction("Accuracy") != "maximize":
         raise AssertionError()
-    if not (get_metric_direction("F1") == "maximize"):
+    if get_metric_direction("F1") != "maximize":
         raise AssertionError()
-    if not (get_metric_direction("Roc AUC") == "maximize"):
+    if get_metric_direction("Roc AUC") != "maximize":
         raise AssertionError()
-    if not (get_metric_direction("R2") == "maximize"):
+    if get_metric_direction("R2") != "maximize":
         raise AssertionError()
 
     # Test metrics to minimize (error-based)
-    if not (get_metric_direction("MAE") == "minimize"):
+    if get_metric_direction("MAE") != "minimize":
         raise AssertionError()
-    if not (get_metric_direction("MSE") == "minimize"):
+    if get_metric_direction("MSE") != "minimize":
         raise AssertionError()
-    if not (get_metric_direction("RMSE") == "minimize"):
+    if get_metric_direction("RMSE") != "minimize":
         raise AssertionError()
-    if not (get_metric_direction("RMSLE") == "minimize"):
+    if get_metric_direction("RMSLE") != "minimize":
         raise AssertionError()
 
 
@@ -238,16 +232,16 @@ def test_list_available_metrics_returns_complete_metric_list():
     """
     available_metrics = list_available_metrics()
 
-    if not (isinstance(available_metrics, list)):
+    if not isinstance(available_metrics, list):
         raise AssertionError()
-    if not (len(available_metrics) == len(METRICS)):
+    if len(available_metrics) != len(METRICS):
         raise AssertionError()
-    if not (all(isinstance(metric, str) for metric in available_metrics)):
+    if not all(isinstance(metric, str) for metric in available_metrics):
         raise AssertionError()
 
     # Verify all METRICS keys are included
     for metric_name in METRICS.keys():
-        if not (metric_name in available_metrics):
+        if metric_name not in available_metrics:
             raise AssertionError()
 
 
@@ -271,16 +265,16 @@ def test_f1_score_variants_work_with_different_averaging():
     macro_score = f1_macro(y_true, y_pred)
     weighted_score = f1_weighted(y_true, y_pred)
 
-    if not (0.0 <= micro_score <= 1.0):
+    if not 0.0 <= micro_score <= 1.0:
         raise AssertionError()
-    if not (0.0 <= macro_score <= 1.0):
+    if not 0.0 <= macro_score <= 1.0:
         raise AssertionError()
-    if not (0.0 <= weighted_score <= 1.0):
+    if not 0.0 <= weighted_score <= 1.0:
         raise AssertionError()
 
     # Scores should be different due to different averaging strategies
     scores = [micro_score, macro_score, weighted_score]
-    if not (len(set(scores)) > 1):
+    if len(set(scores)) <= 1:
         raise AssertionError("Different F1 averaging should produce different scores")
 
 
@@ -305,12 +299,12 @@ def test_regression_metrics_handle_continuous_targets(test_settings):
         metric_func = get_metric_function(metric_name)
         score = metric_func(y_true, y_pred)
 
-        if not (isinstance(score, (int, float))):
+        if not isinstance(score, (int, float)):
             raise AssertionError()
 
         # Error metrics should be non-negative
         if metric_name in ["MAE", "MSE", "RMSE"]:
-            if not (score >= 0.0):
+            if not score >= 0.0:
                 raise AssertionError(f"{metric_name} should be non-negative")
 
 
@@ -339,9 +333,9 @@ def test_classification_metrics_handle_binary_targets(sample_predictions):
         metric_func = get_metric_function(metric_name)
         score = metric_func(y_true, y_pred)
 
-        if not (isinstance(score, (int, float))):
+        if not isinstance(score, (int, float)):
             raise AssertionError()
-        if not (0.0 <= score <= 1.0):
+        if not 0.0 <= score <= 1.0:
             raise AssertionError(f"{metric_name} should be between 0 and 1")
 
 
@@ -365,9 +359,9 @@ def test_roc_auc_metric_requires_probabilities(
     roc_auc_func = get_metric_function("Roc AUC")
     score = roc_auc_func(y_true, y_proba)
 
-    if not (isinstance(score, (int, float))):
+    if not isinstance(score, (int, float)):
         raise AssertionError()
-    if not (0.0 <= score <= 1.0):
+    if not 0.0 <= score <= 1.0:
         raise AssertionError("ROC AUC should be between 0 and 1")
 
 

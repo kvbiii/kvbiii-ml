@@ -63,13 +63,13 @@ def test_tuner_classification_positive_weights(small_classification_data):
 
     study = tuner.tune(X, y)
 
-    if not (study.best_value is not None):
+    if study.best_value is None:
         raise AssertionError()
-    if not (tuner.best_weights is not None):
+    if tuner.best_weights is None:
         raise AssertionError()
-    if not (np.isclose(tuner.best_weights.sum(), 1.0, atol=1e-6)):
+    if not np.isclose(tuner.best_weights.sum(), 1.0, atol=1e-6):
         raise AssertionError()
-    if not (np.all(tuner.best_weights >= 0)):
+    if not np.all(tuner.best_weights >= 0):
         raise AssertionError()
 
 
@@ -90,13 +90,13 @@ def test_tuner_classification_negative_weights_path(small_classification_data):
         allow_negative_weights=True,
     )
     tuner.tune(X, y)
-    if not (tuner.best_weights is not None):
+    if tuner.best_weights is None:
         raise AssertionError()
     l1 = np.sum(np.abs(tuner.best_weights))
-    if not (np.isclose(l1, 1.0, atol=1e-6)):
+    if not np.isclose(l1, 1.0, atol=1e-6):
         raise AssertionError()
     # Some negative weight likely (not guaranteed) – so only check range
-    if not (np.all(np.abs(tuner.best_weights) <= 1.0 + 1e-6)):
+    if not np.all(np.abs(tuner.best_weights) <= 1.0 + 1e-6):
         raise AssertionError()
 
 
@@ -112,9 +112,9 @@ def test_tuner_regression_weights(small_regression_data):
         estimators=estimators, cross_validator=cv_trainer, n_trials=3, seed=5
     )
     tuner.tune(X, y)
-    if not (tuner.best_weights is not None):
+    if tuner.best_weights is None:
         raise AssertionError()
-    if not (np.isclose(tuner.best_weights.sum(), 1.0, atol=1e-6)):
+    if not np.isclose(tuner.best_weights.sum(), 1.0, atol=1e-6):
         raise AssertionError()
 
 
@@ -130,9 +130,9 @@ def test_blend_predictions_shapes_classification_logits():
     preds_list = [np.full(10, 0.7), np.full(10, 0.2)]
     weights = np.array([0.4, -0.6])
     blended = t._blend_predictions(preds_list, weights)
-    if not (blended.shape == (10,)):
+    if blended.shape != (10,):
         raise AssertionError()
-    if not (np.all((blended >= 0.0) & (blended <= 1.0))):
+    if not np.all((blended >= 0.0) & (blended <= 1.0)):
         raise AssertionError()
 
 
@@ -152,10 +152,10 @@ def test_blend_predictions_multiclass_probability_normalization():
     ]
     weights = np.array([0.3, 0.7])
     blended = t._blend_predictions(preds_list, weights)
-    if not (blended.shape == (6, 3)):
+    if blended.shape != (6, 3):
         raise AssertionError()
     row_sums = blended.sum(axis=1)
-    if not (np.allclose(row_sums, 1.0, atol=1e-6)):
+    if not np.allclose(row_sums, 1.0, atol=1e-6):
         raise AssertionError()
 
 

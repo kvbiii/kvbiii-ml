@@ -894,11 +894,11 @@ if __name__ == "__main__":
         )
         summary = selector.run(X, y)
 
-        if not (len(summary["selected_features"]) > 0):
+        if not len(summary["selected_features"]) > 0:
             raise AssertionError("no features selected")
         if pipeline is not None:
             removed_names = summary["history"]["removed_feature_name"].dropna().tolist()
-            if not (any("_PREPROCESS_" in str(f) for f in removed_names)):
+            if not any("_PREPROCESS_" in str(f) for f in removed_names):
                 raise AssertionError(
                     "no derived features appear in removal history - pipeline did not expand"
                 )

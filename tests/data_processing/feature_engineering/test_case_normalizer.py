@@ -18,19 +18,19 @@ def test_case_normalizer_lower_object_and_string() -> None:
     normalizer.fit(df)
     out = normalizer.transform(df)
 
-    if not (out.loc[0, "obj"] == "a"):
+    if out.loc[0, "obj"] != "a":
         raise AssertionError()
-    if not (out.loc[1, "obj"] == "b"):
+    if out.loc[1, "obj"] != "b":
         raise AssertionError()
-    if not (pd.isna(out.loc[2, "obj"])):
+    if not pd.isna(out.loc[2, "obj"]):
         raise AssertionError()
-    if not (out.loc[0, "str"] == "x"):
+    if out.loc[0, "str"] != "x":
         raise AssertionError()
-    if not (out.loc[1, "str"] == "y"):
+    if out.loc[1, "str"] != "y":
         raise AssertionError()
-    if not (pd.isna(out.loc[2, "str"])):
+    if not pd.isna(out.loc[2, "str"]):
         raise AssertionError()
-    if not (out["num"].tolist() == [1, 2, 3]):
+    if out["num"].tolist() != [1, 2, 3]:
         raise AssertionError()
 
 
@@ -42,13 +42,13 @@ def test_case_normalizer_preserves_non_string_values() -> None:
     normalizer.fit(df)
     out = normalizer.transform(df)
 
-    if not (out.loc[0, "mixed"] == "A"):
+    if out.loc[0, "mixed"] != "A":
         raise AssertionError()
-    if not (out.loc[1, "mixed"] == 1):
+    if out.loc[1, "mixed"] != 1:
         raise AssertionError()
-    if not (out.loc[2, "mixed"] == 2.5):
+    if out.loc[2, "mixed"] != 2.5:
         raise AssertionError()
-    if not (pd.isna(out.loc[3, "mixed"])):
+    if not pd.isna(out.loc[3, "mixed"]):
         raise AssertionError()
 
 
@@ -66,13 +66,13 @@ def test_case_normalizer_auto_detects_string_like_columns() -> None:
     normalizer.fit(df)
     out = normalizer.transform(df)
 
-    if not (normalizer.features_names_ == ["cat", "obj"]):
+    if normalizer.features_names_ != ["cat", "obj"]:
         raise AssertionError()
-    if not (out["cat"].dtype.name == "category"):
+    if out["cat"].dtype.name != "category":
         raise AssertionError()
-    if not (list(out["cat"].cat.categories) == ["up", "down"]):
+    if list(out["cat"].cat.categories) != ["up", "down"]:
         raise AssertionError()
-    if not (out["obj"].tolist() == ["left", "right"]):
+    if out["obj"].tolist() != ["left", "right"]:
         raise AssertionError()
 
 
@@ -89,7 +89,7 @@ def test_case_normalizer_get_feature_names_out_returns_inputs() -> None:
 
     normalizer.fit(df)
 
-    if not (list(normalizer.get_feature_names_out()) == ["A", "B"]):
+    if list(normalizer.get_feature_names_out()) != ["A", "B"]:
         raise AssertionError()
 
 

@@ -33,11 +33,11 @@ def test_removal_schedule_basic():
         verbose=False,
     )
     sched = selector.compute_removal_schedule(10)
-    if not (isinstance(sched, list)):
+    if not isinstance(sched, list):
         raise AssertionError()
-    if not (all(n > 0 for n in sched)):
+    if not all(n > 0 for n in sched):
         raise AssertionError()
-    if not (sum(sched) < 10):
+    if not sum(sched) < 10:
         raise AssertionError()
 
 
@@ -58,12 +58,12 @@ def test_prepare_x_y_categorical_mi_rfe():
     )
     y = pd.Series([0, 1, 0, 1])
     prepared_x, prepared_y = selector._prepare_X_y_for_mi(X, y)
-    if not ("discrete_features" in selector.mi_kwargs):
+    if "discrete_features" not in selector.mi_kwargs:
         raise AssertionError()
     # categorical column encoded numerically
-    if not (pd.api.types.is_numeric_dtype(prepared_x["b"])):
+    if not pd.api.types.is_numeric_dtype(prepared_x["b"]):
         raise AssertionError()
-    if not (prepared_y.equals(y)):
+    if not prepared_y.equals(y):
         raise AssertionError()
 
 
@@ -100,24 +100,21 @@ def test_run_returns_selected_features(mi_rfe_data):
     # The issue is in the source code where CrossValidationTrainer is called without problem_type
     result = selector.run(X, y)
 
-    if not (
-        set(result.keys())
-        == {
-            "selected_features",
-            "selected_features_names",
-            "history",
-        }
-    ):
+    if set(result.keys()) != {
+        "selected_features",
+        "selected_features_names",
+        "history",
+    }:
         raise AssertionError()
     history = result["history"]
-    if not (not history.empty):
+    if history.empty:
         raise AssertionError()
-    if not (history.iloc[0]["step"] == 0):
+    if history.iloc[0]["step"] != 0:
         raise AssertionError()
-    if not (len(result["selected_features"]) <= X.shape[1]):
+    if not len(result["selected_features"]) <= X.shape[1]:
         raise AssertionError()
     # Selected features subset of original
-    if not (set(result["selected_features"]).issubset(set(X.columns))):
+    if not set(result["selected_features"]).issubset(set(X.columns)):
         raise AssertionError()
 
 
@@ -163,9 +160,9 @@ def test_select_features_weighted_score_edge():
         ]
     )
     selected, best_metric = selector.select_features_weighted_score(history, alpha=0.8)
-    if not (isinstance(selected, list)):
+    if not isinstance(selected, list):
         raise AssertionError()
-    if not (best_metric is not None):
+    if best_metric is None:
         raise AssertionError()
 
 

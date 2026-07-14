@@ -27,7 +27,7 @@ def test_basetrainer_fit_estimator_basic_fitting(
     fitted = BaseTrainer.fit_estimator(mock_estimator, sample_dataframe, sample_series)
 
     mock_estimator.fit.assert_called_once_with(sample_dataframe, sample_series)
-    if not (fitted is mock_estimator):
+    if fitted is not mock_estimator:
         raise AssertionError()
 
 
@@ -64,11 +64,11 @@ def test_basetrainer_fit_estimator_handles_eval_set_parameter(
         )
 
         call_args = mock_estimator.fit.call_args
-        if not ("eval_set" in call_args.kwargs):
+        if "eval_set" not in call_args.kwargs:
             raise AssertionError()
-        if not (call_args.kwargs["eval_set"] == [(X_valid, y_valid)]):
+        if call_args.kwargs["eval_set"] != [(X_valid, y_valid)]:
             raise AssertionError()
-        if not (call_args.kwargs["verbose"] is False):
+        if call_args.kwargs["verbose"] is not False:
             raise AssertionError()
 
 
@@ -104,9 +104,9 @@ def test_basetrainer_fit_estimator_handles_validation_parameters(
         )
 
         call_args = mock_estimator.fit.call_args
-        if not (call_args.kwargs["X_val"] is X_valid):
+        if call_args.kwargs["X_val"] is not X_valid:
             raise AssertionError()
-        if not (call_args.kwargs["y_val"] is y_valid):
+        if call_args.kwargs["y_val"] is not y_valid:
             raise AssertionError()
 
 
@@ -139,7 +139,7 @@ def test_basetrainer_fit_estimator_handles_sample_weight_parameter(
         )
 
         call_args = mock_estimator.fit.call_args
-        if not (call_args.kwargs["sample_weight"] is sample_weights):
+        if call_args.kwargs["sample_weight"] is not sample_weights:
             raise AssertionError()
 
 
@@ -173,15 +173,15 @@ def test_basetrainer_fit_and_predict_returns_predictions_for_preds_type(
     )
 
     # Verify predict was called for all datasets
-    if not (mock_estimator.predict.call_count == 3):
+    if mock_estimator.predict.call_count != 3:
         raise AssertionError()
-    if not (train_pred is not None):
+    if train_pred is None:
         raise AssertionError()
-    if not (valid_pred is not None):
+    if valid_pred is None:
         raise AssertionError()
-    if not (test_pred is not None):
+    if test_pred is None:
         raise AssertionError()
-    if not (fitted_est is mock_estimator):
+    if fitted_est is not mock_estimator:
         raise AssertionError()
 
 
@@ -214,13 +214,13 @@ def test_basetrainer_fit_and_predict_returns_probabilities_for_probs_type(
     )
 
     # Verify predict_proba was called
-    if not (mock_estimator.predict_proba.call_count == 2):
+    if mock_estimator.predict_proba.call_count != 2:
         raise AssertionError()
-    if not (train_pred is not None):
+    if train_pred is None:
         raise AssertionError()
-    if not (valid_pred is not None):
+    if valid_pred is None:
         raise AssertionError()
-    if not (test_pred is None):
+    if test_pred is not None:
         raise AssertionError()
 
 
@@ -288,7 +288,7 @@ def test_basetrainer_predict_returns_none_when_no_data_provided(mock_estimator):
     """
     predictions = BaseTrainer.predict(mock_estimator, None)
 
-    if not (predictions is None):
+    if predictions is not None:
         raise AssertionError()
     mock_estimator.predict.assert_not_called()
 
@@ -339,7 +339,7 @@ def test_basetrainer_predict_proba_returns_positive_class_for_binary_classificat
 
     expected = binary_proba[:, 1]  # Positive class only
     np.testing.assert_array_equal(probabilities, expected)
-    if not (probabilities.shape == (3,)):
+    if probabilities.shape != (3,):
         raise AssertionError()
 
 
@@ -356,7 +356,7 @@ def test_basetrainer_predict_proba_returns_none_when_no_data_provided(mock_estim
     """
     probabilities = BaseTrainer.predict_proba(mock_estimator, None)
 
-    if not (probabilities is None):
+    if probabilities is not None:
         raise AssertionError()
     mock_estimator.predict_proba.assert_not_called()
 

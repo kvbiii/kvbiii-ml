@@ -22,15 +22,15 @@ class TestCrossFeatureGenerator:
         """
         generator = CrossFeatureGenerator()
 
-        if not (generator.features_names == []):
+        if generator.features_names != []:
             raise AssertionError()
-        if not (generator.degree == 2):
+        if generator.degree != 2:
             raise AssertionError()
-        if not (generator.separator == "_"):
+        if generator.separator != "_":
             raise AssertionError()
-        if not (generator.feature_combinations_ == []):
+        if generator.feature_combinations_ != []:
             raise AssertionError()
-        if not (generator.encoding_maps_ == {}):
+        if generator.encoding_maps_ != {}:
             raise AssertionError()
 
     def test_crossfeaturegenerator_init_custom_parameters(self):
@@ -46,11 +46,11 @@ class TestCrossFeatureGenerator:
             features_names=features, degree=3, separator="-"
         )
 
-        if not (generator.features_names == features):
+        if generator.features_names != features:
             raise AssertionError()
-        if not (generator.degree == 3):
+        if generator.degree != 3:
             raise AssertionError()
-        if not (generator.separator == "-"):
+        if generator.separator != "-":
             raise AssertionError()
 
     def test_crossfeaturegenerator_validate_init_params_invalid_features(self):
@@ -120,7 +120,7 @@ class TestCrossFeatureGenerator:
             {"num1": [1, 2, 3], "num2": [1.5, 2.5, 3.5], "cat1": ["A", "B", "C"]}
         )
 
-        if not (generator._is_numerical_combo(df, ["num1", "num2"]) == True):
+        if generator._is_numerical_combo(df, ["num1", "num2"]) != True:
             raise AssertionError()
 
     def test_crossfeaturegenerator_is_numerical_combo_mixed_types(self):
@@ -134,7 +134,7 @@ class TestCrossFeatureGenerator:
 
         df = pd.DataFrame({"num1": [1, 2, 3], "cat1": ["A", "B", "C"]})
 
-        if not (generator._is_numerical_combo(df, ["num1", "cat1"]) == False):
+        if generator._is_numerical_combo(df, ["num1", "cat1"]) != False:
             raise AssertionError()
 
     def test_crossfeaturegenerator_fit_categorical_features(self):
@@ -150,15 +150,15 @@ class TestCrossFeatureGenerator:
         generator = CrossFeatureGenerator(features_names=["A", "B"], degree=2)
         fitted_generator = generator.fit(df)
 
-        if not (fitted_generator is generator):
+        if fitted_generator is not generator:
             raise AssertionError()
-        if not (len(generator.feature_combinations_) == 1):
+        if len(generator.feature_combinations_) != 1:
             raise AssertionError()
-        if not (("A", "B") in generator.feature_combinations_):
+        if ("A", "B") not in generator.feature_combinations_:
             raise AssertionError()
-        if not ("A-B" in generator.encoding_maps_):
+        if "A-B" not in generator.encoding_maps_:
             raise AssertionError()
-        if not (len(generator.encoding_maps_["A-B"]) == 3):
+        if len(generator.encoding_maps_["A-B"]) != 3:
             raise AssertionError()
 
     def test_crossfeaturegenerator_fit_numerical_features(self):
@@ -174,11 +174,11 @@ class TestCrossFeatureGenerator:
         generator = CrossFeatureGenerator(features_names=["D", "E"], degree=2)
         generator.fit(df)
 
-        if not ("D-E" in generator.numerical_combos_):
+        if "D-E" not in generator.numerical_combos_:
             raise AssertionError()
-        if not ("D-E" not in generator.encoding_maps_):
+        if "D-E" in generator.encoding_maps_:
             raise AssertionError()
-        if not ("D-E" in generator.combined_value_maps_):
+        if "D-E" not in generator.combined_value_maps_:
             raise AssertionError()
 
     def test_crossfeaturegenerator_fit_empty_features_uses_all_columns(self):
@@ -193,9 +193,9 @@ class TestCrossFeatureGenerator:
         generator = CrossFeatureGenerator(degree=2)
         generator.fit(df)
 
-        if not (set(generator.features_names) == {"A", "B", "C"}):
+        if set(generator.features_names) != {"A", "B", "C"}:
             raise AssertionError()
-        if not (len(generator.feature_combinations_) == 3):
+        if len(generator.feature_combinations_) != 3:
             raise AssertionError()
 
     def test_crossfeaturegenerator_fit_insufficient_columns_raises_error(self):
@@ -225,15 +225,15 @@ class TestCrossFeatureGenerator:
         generator.fit(df)
         result = generator.transform(df)
 
-        if not ("A-B" in result.columns):
+        if "A-B" not in result.columns:
             raise AssertionError()
-        if not ("A" in result.columns):
+        if "A" not in result.columns:
             raise AssertionError()
-        if not ("B" in result.columns):
+        if "B" not in result.columns:
             raise AssertionError()
-        if not (result["A-B"].dtype == int):
+        if result["A-B"].dtype != int:
             raise AssertionError()
-        if not (len(result) == len(df)):
+        if len(result) != len(df):
             raise AssertionError()
 
     def test_crossfeaturegenerator_transform_numerical_features(self):
@@ -250,9 +250,9 @@ class TestCrossFeatureGenerator:
         generator.fit(df)
         result = generator.transform(df)
 
-        if not ("D-E" in result.columns):
+        if "D-E" not in result.columns:
             raise AssertionError()
-        if not (result["D-E"].tolist() == [10, 18, 28]):
+        if result["D-E"].tolist() != [10, 18, 28]:
             raise AssertionError()
 
     def test_crossfeaturegenerator_transform_unfitted_raises_error(self):
@@ -286,9 +286,9 @@ class TestCrossFeatureGenerator:
         generator.fit(train_df)
         result = generator.transform(test_df)
 
-        if not ("A-B" in result.columns):
+        if "A-B" not in result.columns:
             raise AssertionError()
-        if not (-1 in result["A-B"].values):
+        if -1 not in result["A-B"].values:
             raise AssertionError()
 
     def test_crossfeaturegenerator_fit_transform_equivalent_to_fit_then_transform(self):
@@ -317,7 +317,7 @@ class TestCrossFeatureGenerator:
         """
         generator = CrossFeatureGenerator()
 
-        if not (generator.get_feature_names() == []):
+        if generator.get_feature_names() != []:
             raise AssertionError()
 
     def test_crossfeaturegenerator_get_feature_names_after_fit(self):
@@ -334,7 +334,7 @@ class TestCrossFeatureGenerator:
         feature_names = generator.get_feature_names()
 
         expected_names = ["A-B", "A-C", "B-C"]
-        if not (sorted(feature_names) == sorted(expected_names)):
+        if sorted(feature_names) != sorted(expected_names):
             raise AssertionError()
 
     def test_crossfeaturegenerator_custom_separator(self):
@@ -351,7 +351,7 @@ class TestCrossFeatureGenerator:
 
         # Check that the combined values use the custom separator
         combined_values = generator.combined_value_maps_["A-B"]
-        if not (all("|" in str(val) for val in combined_values.unique())):
+        if not all("|" in str(val) for val in combined_values.unique()):
             raise AssertionError()
 
     def test_crossfeaturegenerator_degree_three_combinations(self):
@@ -369,9 +369,9 @@ class TestCrossFeatureGenerator:
         generator.fit(df)
 
         # 4 choose 3 = 4 combinations
-        if not (len(generator.feature_combinations_) == 4):
+        if len(generator.feature_combinations_) != 4:
             raise AssertionError()
-        if not (all(len(combo) == 3 for combo in generator.feature_combinations_)):
+        if not all(len(combo) == 3 for combo in generator.feature_combinations_):
             raise AssertionError()
 
 

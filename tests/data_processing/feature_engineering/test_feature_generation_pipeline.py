@@ -24,7 +24,7 @@ class DummyAdder:
 
     def transform(self, X):
         """Returns a copy of X with a constant ADDED column appended."""
-        if not (self.fitted):
+        if not self.fitted:
             raise AssertionError()
         X = X.copy()
         X["ADDED"] = 1
@@ -48,9 +48,9 @@ def test_pipeline_basic_flow():
     )
     transformed = pipe.fit_transform(df, y=pd.Series([0, 1, 0, 1]))
     cross_cols = steps[0].get_feature_names()
-    if not (any(col in transformed.columns for col in cross_cols)):
+    if not any(col in transformed.columns for col in cross_cols):
         raise AssertionError()
-    if not ("ADDED" in transformed.columns):
+    if "ADDED" not in transformed.columns:
         raise AssertionError()
 
 
@@ -63,7 +63,7 @@ def test_pipeline_transform_reuses_fitted_steps():
     )
     pipe.fit(df, y=pd.Series([0, 1]))
     out = pipe.transform(df)
-    if not (set(out.columns) >= set(df.columns)):
+    if not set(out.columns) >= set(df.columns):
         raise AssertionError()
 
 
@@ -101,19 +101,19 @@ def test_pipeline_supports_sklearn_preprocessing_transformer():
     )
 
     transformed = pipe.fit_transform(df, y=y)
-    if not (isinstance(transformed, pd.DataFrame)):
+    if not isinstance(transformed, pd.DataFrame):
         raise AssertionError()
-    if not (list(transformed.columns) == ["A", "B"]):
+    if list(transformed.columns) != ["A", "B"]:
         raise AssertionError()
-    if not (transformed.shape == df.shape):
+    if transformed.shape != df.shape:
         raise AssertionError()
 
     transformed_test = pipe.transform(df)
-    if not (isinstance(transformed_test, pd.DataFrame)):
+    if not isinstance(transformed_test, pd.DataFrame):
         raise AssertionError()
-    if not (list(transformed_test.columns) == ["A", "B"]):
+    if list(transformed_test.columns) != ["A", "B"]:
         raise AssertionError()
-    if not (transformed_test.shape == df.shape):
+    if transformed_test.shape != df.shape:
         raise AssertionError()
 
 

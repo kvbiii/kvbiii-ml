@@ -69,12 +69,12 @@ def test_errorsdiagnostics_init_sets_problem_type():
     """
     # Test classification
     diag_cls = ErrorDiagnostics(problem_type="classification")
-    if not (diag_cls.problem_type == "classification"):
+    if diag_cls.problem_type != "classification":
         raise AssertionError()
 
     # Test regression
     diag_reg = ErrorDiagnostics(problem_type="regression")
-    if not (diag_reg.problem_type == "regression"):
+    if diag_reg.problem_type != "regression":
         raise AssertionError()
 
     # Test invalid type
@@ -103,23 +103,23 @@ def test_errorsdiagnostics_compute_classification_errors(
     error_df = diag.compute_errors(y_true, y_pred, X=feature_data, probas=probas)
 
     # Check DataFrame structure
-    if not (isinstance(error_df, pd.DataFrame)):
+    if not isinstance(error_df, pd.DataFrame):
         raise AssertionError()
-    if not ("y_true" in error_df.columns):
+    if "y_true" not in error_df.columns:
         raise AssertionError()
-    if not ("y_pred" in error_df.columns):
+    if "y_pred" not in error_df.columns:
         raise AssertionError()
-    if not ("error" in error_df.columns):
+    if "error" not in error_df.columns:
         raise AssertionError()
-    if not ("proba_true_class" in error_df.columns):
+    if "proba_true_class" not in error_df.columns:
         raise AssertionError()
-    if not ("numeric_feature" in error_df.columns):
+    if "numeric_feature" not in error_df.columns:
         raise AssertionError()
-    if not ("categorical_feature" in error_df.columns):
+    if "categorical_feature" not in error_df.columns:
         raise AssertionError()
 
     # Check error identification
-    if not (error_df["error"].sum() == 4):
+    if error_df["error"].sum() != 4:
         raise AssertionError()
 
     # Verify probability calculations
@@ -132,7 +132,7 @@ def test_errorsdiagnostics_compute_classification_errors(
             expected_proba = probas[i, 0]
         else:
             expected_proba = probas[i, 1]
-        if not (abs(error_df.loc[i, "proba_true_class"] - expected_proba) < 1e-10):
+        if not abs(error_df.loc[i, "proba_true_class"] - expected_proba) < 1e-10:
             raise AssertionError()
 
 
@@ -156,21 +156,21 @@ def test_errorsdiagnostics_compute_regression_errors(
     error_df = diag.compute_errors(y_true, y_pred, X=feature_data)
 
     # Check DataFrame structure
-    if not (isinstance(error_df, pd.DataFrame)):
+    if not isinstance(error_df, pd.DataFrame):
         raise AssertionError()
-    if not ("y_true" in error_df.columns):
+    if "y_true" not in error_df.columns:
         raise AssertionError()
-    if not ("y_pred" in error_df.columns):
+    if "y_pred" not in error_df.columns:
         raise AssertionError()
-    if not ("absolute_error" in error_df.columns):
+    if "absolute_error" not in error_df.columns:
         raise AssertionError()
-    if not ("squared_error" in error_df.columns):
+    if "squared_error" not in error_df.columns:
         raise AssertionError()
-    if not ("percentage_error" in error_df.columns):
+    if "percentage_error" not in error_df.columns:
         raise AssertionError()
-    if not ("numeric_feature" in error_df.columns):
+    if "numeric_feature" not in error_df.columns:
         raise AssertionError()
-    if not ("categorical_feature" in error_df.columns):
+    if "categorical_feature" not in error_df.columns:
         raise AssertionError()
 
     # Check error calculations
@@ -205,21 +205,21 @@ def test_errorsdiagnostics_compute_errors_without_features(classification_predic
     error_df = diag.compute_errors(y_true, y_pred, probas=probas)
 
     # Basic checks
-    if not (isinstance(error_df, pd.DataFrame)):
+    if not isinstance(error_df, pd.DataFrame):
         raise AssertionError()
-    if not ("y_true" in error_df.columns):
+    if "y_true" not in error_df.columns:
         raise AssertionError()
-    if not ("y_pred" in error_df.columns):
+    if "y_pred" not in error_df.columns:
         raise AssertionError()
-    if not ("error" in error_df.columns):
+    if "error" not in error_df.columns:
         raise AssertionError()
-    if not ("proba_true_class" in error_df.columns):
+    if "proba_true_class" not in error_df.columns:
         raise AssertionError()
 
     # No feature columns should be present
-    if not ("numeric_feature" not in error_df.columns):
+    if "numeric_feature" in error_df.columns:
         raise AssertionError()
-    if not ("categorical_feature" not in error_df.columns):
+    if "categorical_feature" in error_df.columns:
         raise AssertionError()
 
 
@@ -242,21 +242,21 @@ def test_errorsdiagnostics_compute_errors_without_probabilities(
     error_df = diag.compute_errors(y_true, y_pred, X=feature_data)
 
     # Basic checks
-    if not (isinstance(error_df, pd.DataFrame)):
+    if not isinstance(error_df, pd.DataFrame):
         raise AssertionError()
-    if not ("y_true" in error_df.columns):
+    if "y_true" not in error_df.columns:
         raise AssertionError()
-    if not ("y_pred" in error_df.columns):
+    if "y_pred" not in error_df.columns:
         raise AssertionError()
-    if not ("error" in error_df.columns):
+    if "error" not in error_df.columns:
         raise AssertionError()
 
     # No probability column should be present
-    if not ("proba_true_class" not in error_df.columns):
+    if "proba_true_class" in error_df.columns:
         raise AssertionError()
 
     # Error identification should still work
-    if not (error_df["error"].sum() == 4):
+    if error_df["error"].sum() != 4:
         raise AssertionError()
 
 
@@ -265,7 +265,7 @@ def test_errorsdiagnostics_basic_classification_flow(classification_predictions)
     y_true, y_pred, probas = classification_predictions
     diag = ErrorDiagnostics("classification")
     error_df = diag.compute_errors(y_true, y_pred, probas=probas)
-    if not ({"y_true", "y_pred", "error"} <= set(error_df.columns)):
+    if not {"y_true", "y_pred", "error"} <= set(error_df.columns):
         raise AssertionError()
 
 
@@ -273,7 +273,7 @@ def test_errorsdiagnostics_basic_regression_flow(regression_predictions):
     """Tests that compute_errors produces absolute and squared error columns for regression."""
     y_true, y_pred = regression_predictions
     df = ErrorDiagnostics("regression").compute_errors(y_true, y_pred)
-    if not ({"absolute_error", "squared_error"} <= set(df.columns)):
+    if not {"absolute_error", "squared_error"} <= set(df.columns):
         raise AssertionError()
 
 
@@ -282,7 +282,7 @@ def test_errorsdiagnostics_feature_merge(classification_predictions, feature_dat
     y_true, y_pred, probas = classification_predictions
     diag = ErrorDiagnostics("classification")
     df = diag.compute_errors(y_true, y_pred, X=feature_data, probas=probas)
-    if not (set(feature_data.columns) <= set(df.columns)):
+    if not set(feature_data.columns) <= set(df.columns):
         raise AssertionError()
 
 
@@ -295,7 +295,7 @@ def test_errorsdiagnostics_misclassified_subset(
         y_true, y_pred, X=feature_data
     )
     mis = df[df.error == 1]
-    if not (mis.shape[0] == 4):
+    if mis.shape[0] != 4:
         raise AssertionError()
 
 
@@ -305,7 +305,7 @@ def test_errorsdiagnostics_regression_errors_have_expected_columns(
     """Tests that regression compute_errors output includes all expected error columns."""
     y_true, y_pred = regression_predictions
     df = ErrorDiagnostics("regression").compute_errors(y_true, y_pred)
-    if not ({"error", "absolute_error", "squared_error"} <= set(df.columns)):
+    if not {"error", "absolute_error", "squared_error"} <= set(df.columns):
         raise AssertionError()
 
 

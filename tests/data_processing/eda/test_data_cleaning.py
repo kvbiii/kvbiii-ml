@@ -55,7 +55,7 @@ def test_datacleaner_init_creates_instance_with_default_parameters():
     try:
         cleaner = DataCleaner()
         # Basic assertion that instance was created
-        if not (isinstance(cleaner, DataCleaner)):
+        if not isinstance(cleaner, DataCleaner):
             raise AssertionError()
     except (NameError, AttributeError):
         pytest.skip("DataCleaner class not implemented")
@@ -71,17 +71,17 @@ def test_datacleaner_init_accepts_custom_parameters():
     """
     try:
         cleaner = DataCleaner()
-        if not (cleaner is not None):
+        if cleaner is None:
             raise AssertionError()
 
         # Check that static methods are available
-        if not (hasattr(DataCleaner, "get_categorical_features")):
+        if not hasattr(DataCleaner, "get_categorical_features"):
             raise AssertionError()
-        if not (hasattr(DataCleaner, "initial_features_removal")):
+        if not hasattr(DataCleaner, "initial_features_removal"):
             raise AssertionError()
-        if not (hasattr(DataCleaner, "drop_highly_skewed_categorical_features")):
+        if not hasattr(DataCleaner, "drop_highly_skewed_categorical_features"):
             raise AssertionError()
-        if not (hasattr(DataCleaner, "categorize_categorical_features_by_missing")):
+        if not hasattr(DataCleaner, "categorize_categorical_features_by_missing"):
             raise AssertionError()
 
     except (NameError, AttributeError):
@@ -110,14 +110,14 @@ def test_remove_duplicate_rows_removes_exact_duplicates(dirty_data):
     original_length = len(test_data)
     cleaned_data = test_data.drop_duplicates()
 
-    if not (len(cleaned_data) < original_length):
+    if not len(cleaned_data) < original_length:
         raise AssertionError()
-    if not (isinstance(cleaned_data, pd.DataFrame)):
+    if not isinstance(cleaned_data, pd.DataFrame):
         raise AssertionError()
     # Check that all remaining rows are unique
-    if not (len(cleaned_data) == len(cleaned_data.drop_duplicates())):
+    if len(cleaned_data) != len(cleaned_data.drop_duplicates()):
         raise AssertionError()
-    if not (len(cleaned_data) == 3):
+    if len(cleaned_data) != 3:
         raise AssertionError()
 
 
@@ -147,9 +147,9 @@ def test_handle_missing_values_drops_missing_rows():
 
     cleaned_data = data_with_missing.dropna()
 
-    if not (len(cleaned_data) == 2):
+    if len(cleaned_data) != 2:
         raise AssertionError()
-    if not (not cleaned_data.isnull().any().any()):
+    if cleaned_data.isnull().any().any():
         raise AssertionError()
 
 
@@ -174,12 +174,12 @@ def test_handle_missing_values_fills_missing_with_mean():
     cleaned_data["numeric"] = cleaned_data["numeric"].fillna(numeric_mean)
 
     # No missing values should remain in numeric column
-    if not (not cleaned_data["numeric"].isnull().any()):
+    if cleaned_data["numeric"].isnull().any():
         raise AssertionError()
 
     # Check that mean was used for numeric column
     expected_mean = np.mean([1.0, 2.0, 4.0])  # 2.333...
-    if not (abs(cleaned_data.loc[2, "numeric"] - expected_mean) < 1e-10):
+    if not abs(cleaned_data.loc[2, "numeric"] - expected_mean) < 1e-10:
         raise AssertionError()
 
 
@@ -200,10 +200,10 @@ def test_handle_missing_values_fills_missing_with_median():
     cleaned_data = data_with_missing.copy()
     cleaned_data["numeric"] = cleaned_data["numeric"].fillna(numeric_median)
 
-    if not (not cleaned_data["numeric"].isnull().any()):
+    if cleaned_data["numeric"].isnull().any():
         raise AssertionError()
     # Median of [1, 2, 4, 5] is 3.0
-    if not (cleaned_data.loc[2, "numeric"] == 3.0):
+    if cleaned_data.loc[2, "numeric"] != 3.0:
         raise AssertionError()
 
 
@@ -240,14 +240,14 @@ def test_remove_outliers_using_iqr_method(dirty_data):
     ]
 
     # Should have fewer rows after outlier removal
-    if not (len(cleaned_data) <= len(test_data)):
+    if not len(cleaned_data) <= len(test_data):
         raise AssertionError()
 
     # Extreme outliers should be removed
     outlier_feature = cleaned_data["outlier_feature"]
-    if not (outlier_feature.max() < 50):
+    if not outlier_feature.max() < 50:
         raise AssertionError()
-    if not (outlier_feature.min() > -50):
+    if not outlier_feature.min() > -50:
         raise AssertionError()
 
 
@@ -269,13 +269,13 @@ def test_remove_outliers_using_zscore_method():
     cleaned_data = data_with_outliers[z_scores < threshold]
 
     # Should remove some data points (outliers)
-    if not (len(cleaned_data) < len(data_with_outliers)):
+    if not len(cleaned_data) < len(data_with_outliers):
         raise AssertionError()
 
     # Check that extreme outliers are filtered
     outlier_mask = z_scores >= threshold
     outliers_removed = data_with_outliers[outlier_mask]
-    if not (len(outliers_removed) > 0):
+    if not len(outliers_removed) > 0:
         raise AssertionError()
 
 
@@ -306,21 +306,21 @@ def test_standardize_column_names_cleans_column_names(dirty_data):
     )
 
     # Check that column names are standardized
-    if not ("normal_feature" in standardized_data.columns):
+    if "normal_feature" not in standardized_data.columns:
         raise AssertionError()
-    if not ("feature_with_spaces" in standardized_data.columns):
+    if "feature_with_spaces" not in standardized_data.columns:
         raise AssertionError()
-    if not ("uppercase" in standardized_data.columns):
+    if "uppercase" not in standardized_data.columns:
         raise AssertionError()
 
     # No spaces should remain in column names
     for col in standardized_data.columns:
-        if not (" " not in col):
+        if " " in col:
             raise AssertionError()
 
     # Should be lowercase
     for col in standardized_data.columns:
-        if not (col == col.lower()):
+        if col != col.lower():
             raise AssertionError()
 
 
@@ -357,19 +357,19 @@ def test_standardize_column_names_handles_special_characters():
     # Check standardized names
     for col in standardized_data.columns:
         # Should not contain problematic characters
-        if not ("-" not in col):
+        if "-" in col:
             raise AssertionError()
-        if not ("." not in col):
+        if "." in col:
             raise AssertionError()
-        if not (" " not in col):
+        if " " in col:
             raise AssertionError()
-        if not ("@" not in col):
+        if "@" in col:
             raise AssertionError()
-        if not ("#" not in col):
+        if "#" in col:
             raise AssertionError()
-        if not ("$" not in col):
+        if "$" in col:
             raise AssertionError()
-        if not ("%" not in col):
+        if "%" in col:
             raise AssertionError()
 
 
@@ -399,14 +399,14 @@ def test_datacleaner_fit_transform_combines_all_cleaning_steps(dirty_data):
         cleaned_data = DataCleaner.initial_features_removal(test_data)
 
         # Should have fewer columns due to duplicate/single-value/all-NA removal
-        if not (cleaned_data.shape[1] < original_shape[1]):
+        if not cleaned_data.shape[1] < original_shape[1]:
             raise AssertionError()
-        if not (cleaned_data.shape[0] == original_shape[0]):
+        if cleaned_data.shape[0] != original_shape[0]:
             raise AssertionError()
 
         # Get categorical features
         cat_features = DataCleaner.get_categorical_features(cleaned_data)
-        if not (isinstance(cat_features, list)):
+        if not isinstance(cat_features, list):
             raise AssertionError()
 
         # Test categorization by missing values
@@ -414,7 +414,7 @@ def test_datacleaner_fit_transform_combines_all_cleaning_steps(dirty_data):
             cat_categories = DataCleaner.categorize_categorical_features_by_missing(
                 cleaned_data, cat_features
             )
-            if not (isinstance(cat_categories, dict)):
+            if not isinstance(cat_categories, dict):
                 raise AssertionError()
             expected_keys = [
                 "categorical_not_many_missing_features",
@@ -423,7 +423,7 @@ def test_datacleaner_fit_transform_combines_all_cleaning_steps(dirty_data):
                 "non_missing_categorical_features",
             ]
             for key in expected_keys:
-                if not (key in cat_categories):
+                if key not in cat_categories:
                     raise AssertionError()
 
     except (NameError, AttributeError):
@@ -444,16 +444,16 @@ def test_datacleaner_handles_empty_dataframe():
 
     # Test static methods with empty DataFrame
     result = cleaner.initial_features_removal(empty_df)
-    if not (isinstance(result, pd.DataFrame)):
+    if not isinstance(result, pd.DataFrame):
         raise AssertionError()
-    if not (len(result) == 0):
+    if len(result) != 0:
         raise AssertionError()
 
     # Test categorical features detection
     cat_features = cleaner.get_categorical_features(empty_df)
-    if not (isinstance(cat_features, list)):
+    if not isinstance(cat_features, list):
         raise AssertionError()
-    if not (len(cat_features) == 0):
+    if len(cat_features) != 0:
         raise AssertionError()
 
 
@@ -482,20 +482,20 @@ def test_datacleaner_preserves_data_types_where_appropriate(test_settings):
         cat_features = DataCleaner.get_categorical_features(typed_data, threshold=10)
 
         # Should identify categorical columns
-        if not ("category_column" in cat_features):
+        if "category_column" not in cat_features:
             raise AssertionError()
 
         # Test initial cleaning preserves structure
         cleaned_data = DataCleaner.initial_features_removal(typed_data)
-        if not (cleaned_data.shape == typed_data.shape):
+        if cleaned_data.shape != typed_data.shape:
             raise AssertionError()
 
         # Data types should be preserved
-        if not (pd.api.types.is_integer_dtype(cleaned_data["int_column"])):
+        if not pd.api.types.is_integer_dtype(cleaned_data["int_column"]):
             raise AssertionError()
-        if not (pd.api.types.is_float_dtype(cleaned_data["float_column"])):
+        if not pd.api.types.is_float_dtype(cleaned_data["float_column"]):
             raise AssertionError()
-        if not (isinstance(cleaned_data["category_column"].dtype, pd.CategoricalDtype)):
+        if not isinstance(cleaned_data["category_column"].dtype, pd.CategoricalDtype):
             raise AssertionError()
 
     except (NameError, AttributeError):
@@ -536,25 +536,25 @@ def test_datacleaner_get_categorical_features_method(test_settings):
     # Test with default threshold (100)
     cat_features_100 = DataCleaner.get_categorical_features(test_data, threshold=100)
 
-    if not ("low_card_cat" in cat_features_100):
+    if "low_card_cat" not in cat_features_100:
         raise AssertionError()
-    if not ("binary_numeric" in cat_features_100):
+    if "binary_numeric" not in cat_features_100:
         raise AssertionError()
-    if not ("object_cat" in cat_features_100):
+    if "object_cat" not in cat_features_100:
         raise AssertionError()
-    if not ("continuous" not in cat_features_100):
+    if "continuous" in cat_features_100:
         raise AssertionError()
 
     # Test with lower threshold (10)
     cat_features_10 = DataCleaner.get_categorical_features(test_data, threshold=10)
 
-    if not ("low_card_cat" in cat_features_10):
+    if "low_card_cat" not in cat_features_10:
         raise AssertionError()
-    if not ("binary_numeric" in cat_features_10):
+    if "binary_numeric" not in cat_features_10:
         raise AssertionError()
-    if not ("object_cat" in cat_features_10):
+    if "object_cat" not in cat_features_10:
         raise AssertionError()
-    if not (len(cat_features_10) <= len(cat_features_100)):
+    if not len(cat_features_10) <= len(cat_features_100):
         raise AssertionError()
 
 
@@ -587,20 +587,20 @@ def test_datacleaner_initial_features_removal_method(test_settings):
     cleaned_data = DataCleaner.initial_features_removal(base_data)
 
     # Should remove single_value, all_missing, and one of the duplicates
-    if not (cleaned_data.shape[1] < original_shape[1]):
+    if not cleaned_data.shape[1] < original_shape[1]:
         raise AssertionError()
-    if not (cleaned_data.shape[0] == original_shape[0]):
+    if cleaned_data.shape[0] != original_shape[0]:
         raise AssertionError()
 
     # Normal feature should remain
-    if not ("normal_feature" in cleaned_data.columns):
+    if "normal_feature" not in cleaned_data.columns:
         raise AssertionError()
 
     # One of the duplicates should remain, one should be removed
     duplicate_features_remaining = [
         col for col in cleaned_data.columns if "duplicate" in col
     ]
-    if not (len(duplicate_features_remaining) == 1):
+    if len(duplicate_features_remaining) != 1:
         raise AssertionError()
 
 
@@ -644,25 +644,25 @@ def test_datacleaner_categorize_categorical_features_by_missing_method(test_sett
         "non_missing_categorical_features",
     ]
     for key in expected_keys:
-        if not (key in categories):
+        if key not in categories:
             raise AssertionError()
-        if not (isinstance(categories[key], list)):
+        if not isinstance(categories[key], list):
             raise AssertionError()
 
     # Check categorization logic
-    if not ("no_missing" in categories["non_missing_categorical_features"]):
+    if "no_missing" not in categories["non_missing_categorical_features"]:
         raise AssertionError()
-    if not ("few_missing" in categories["categorical_not_many_missing_features"]):
+    if "few_missing" not in categories["categorical_not_many_missing_features"]:
         raise AssertionError()
-    if not ("many_missing" in categories["categorical_many_missing_features"]):
+    if "many_missing" not in categories["categorical_many_missing_features"]:
         raise AssertionError()
 
     # Features with any missing should be in categorical_missing_features
-    if not ("few_missing" in categories["categorical_missing_features"]):
+    if "few_missing" not in categories["categorical_missing_features"]:
         raise AssertionError()
-    if not ("many_missing" in categories["categorical_missing_features"]):
+    if "many_missing" not in categories["categorical_missing_features"]:
         raise AssertionError()
-    if not ("no_missing" not in categories["categorical_missing_features"]):
+    if "no_missing" in categories["categorical_missing_features"]:
         raise AssertionError()
 
 

@@ -55,9 +55,9 @@ def test_single_model_path():
     model = SmallModel()
     X = pd.DataFrame(np.random.randn(5, 3), columns=["a", "b", "c"])
     exp = shap_module.compute_shap_values(model, X)
-    if not (hasattr(exp, "values")):
+    if not hasattr(exp, "values"):
         raise AssertionError()
-    if not (exp.values.shape == (5, 3)):
+    if exp.values.shape != (5, 3):
         raise AssertionError()
 
 
@@ -75,7 +75,7 @@ def test_ensemble_model_path_weights():
     ens = Ensemble()
     X = pd.DataFrame(np.random.randn(4, 2), columns=["f0", "f1"])
     exp = shap_module.compute_shap_values(ens, X)
-    if not (exp.values.shape == (4, 2)):
+    if exp.values.shape != (4, 2):
         raise AssertionError()
 
 
@@ -92,7 +92,7 @@ def test_ensemble_uniform_weights_fallback():
     obj = CVLike()
     X = pd.DataFrame(np.random.randn(3, 2), columns=["f0", "f1"])
     exp = shap_module.compute_shap_values(obj, X)
-    if not (exp.values.shape == (3, 2)):
+    if exp.values.shape != (3, 2):
         raise AssertionError()
 
 

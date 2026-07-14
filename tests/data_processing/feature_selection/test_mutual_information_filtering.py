@@ -91,25 +91,25 @@ def test_mutualinformationfiltering_init_creates_classification_instance():
     """
     mif = MutualInformationFiltering(problem_type="classification")
 
-    if not (mif.problem_type == "classification"):
+    if mif.problem_type != "classification":
         raise AssertionError()
-    if not (mif.threshold == 0.1):
+    if mif.threshold != 0.1:
         raise AssertionError()
-    if not (mif.keep_top_k is None):
+    if mif.keep_top_k is not None:
         raise AssertionError()
-    if not (mif.verbose is False):
+    if mif.verbose is not False:
         raise AssertionError()
-    if not (mif.selected_features_ == []):
+    if mif.selected_features_ != []:
         raise AssertionError()
-    if not (mif.threshold_border_ is None):
+    if mif.threshold_border_ is not None:
         raise AssertionError()
 
     # Check MI computation parameters
-    if not ("n_neighbors" in mif.mi_kwargs):
+    if "n_neighbors" not in mif.mi_kwargs:
         raise AssertionError()
-    if not ("random_state" in mif.mi_kwargs):
+    if "random_state" not in mif.mi_kwargs:
         raise AssertionError()
-    if not (mif.mi_kwargs["random_state"] == 17):
+    if mif.mi_kwargs["random_state"] != 17:
         raise AssertionError()
 
 
@@ -125,13 +125,13 @@ def test_mutualinformationfiltering_init_creates_regression_instance():
         problem_type="regression", threshold=0.05, keep_top_k=5, verbose=True
     )
 
-    if not (mif.problem_type == "regression"):
+    if mif.problem_type != "regression":
         raise AssertionError()
-    if not (mif.threshold == 0.05):
+    if mif.threshold != 0.05:
         raise AssertionError()
-    if not (mif.keep_top_k == 5):
+    if mif.keep_top_k != 5:
         raise AssertionError()
-    if not (mif.verbose is True):
+    if mif.verbose is not True:
         raise AssertionError()
 
 
@@ -168,13 +168,13 @@ def test_mutualinformationfiltering_fit_computes_mi_scores_for_classification(
 
     fitted_mif = mif.fit(X, y)
 
-    if not (fitted_mif is mif):
+    if fitted_mif is not mif:
         raise AssertionError()
-    if not (len(mif.selected_features_) > 0):
+    if not len(mif.selected_features_) > 0:
         raise AssertionError()
-    if not (all(feature in X.columns for feature in mif.selected_features_)):
+    if not all(feature in X.columns for feature in mif.selected_features_):
         raise AssertionError()
-    if not (mif.threshold_border_ == 0.0):
+    if mif.threshold_border_ != 0.0:
         raise AssertionError()
 
 
@@ -196,11 +196,11 @@ def test_mutualinformationfiltering_fit_computes_mi_scores_for_regression(
 
     mif.fit(X, y)
 
-    if not (len(mif.selected_features_) > 0):
+    if not len(mif.selected_features_) > 0:
         raise AssertionError()
-    if not (isinstance(mif.threshold_border_, float)):
+    if not isinstance(mif.threshold_border_, float):
         raise AssertionError()
-    if not (all(isinstance(feature, str) for feature in mif.selected_features_)):
+    if not all(isinstance(feature, str) for feature in mif.selected_features_):
         raise AssertionError()
 
 
@@ -223,11 +223,11 @@ def test_mutualinformationfiltering_fit_handles_top_k_selection(
 
     mif.fit(X, y)
 
-    if not (len(mif.selected_features_) == k):
+    if len(mif.selected_features_) != k:
         raise AssertionError()
-    if not (mif.threshold_border_ is not None):
+    if mif.threshold_border_ is None:
         raise AssertionError()
-    if not (isinstance(mif.threshold_border_, float)):
+    if not isinstance(mif.threshold_border_, float):
         raise AssertionError()
 
 
@@ -250,9 +250,9 @@ def test_mutualinformationfiltering_fit_handles_top_k_larger_than_features(
 
     mif.fit(X, y)
 
-    if not (len(mif.selected_features_) == X.shape[1]):
+    if len(mif.selected_features_) != X.shape[1]:
         raise AssertionError()
-    if not (set(mif.selected_features_) == set(X.columns)):
+    if set(mif.selected_features_) != set(X.columns):
         raise AssertionError()
 
 
@@ -291,13 +291,13 @@ def test_mutualinformationfiltering_transform_returns_selected_features(
 
     transformed_x = mif.transform(X)
 
-    if not (isinstance(transformed_x, pd.DataFrame)):
+    if not isinstance(transformed_x, pd.DataFrame):
         raise AssertionError()
-    if not (transformed_x.shape[1] == 3):
+    if transformed_x.shape[1] != 3:
         raise AssertionError()
-    if not (transformed_x.shape[0] == X.shape[0]):
+    if transformed_x.shape[0] != X.shape[0]:
         raise AssertionError()
-    if not (list(transformed_x.columns) == mif.selected_features_):
+    if list(transformed_x.columns) != mif.selected_features_:
         raise AssertionError()
 
 
@@ -342,7 +342,7 @@ def test_mutualinformationfiltering_fit_transform_combines_fit_and_transform(
     transformed_x_2 = mif2.transform(X)
 
     pd.testing.assert_frame_equal(transformed_x_1, transformed_x_2)
-    if not (mif1.selected_features_ == mif2.selected_features_):
+    if mif1.selected_features_ != mif2.selected_features_:
         raise AssertionError()
 
 
@@ -382,15 +382,15 @@ def test_mutualinformationfiltering_prepare_x_y_for_mi_handles_categorical_featu
     prepared_x, _prepared_y = mif._prepare_X_y_for_mi(X, y)
 
     # Categorical should be converted to codes
-    if not (pd.api.types.is_numeric_dtype(prepared_x["categorical"])):
+    if not pd.api.types.is_numeric_dtype(prepared_x["categorical"]):
         raise AssertionError()
 
     # discrete_features should be set for MI computation
-    if not ("discrete_features" in mif.mi_kwargs):
+    if "discrete_features" not in mif.mi_kwargs:
         raise AssertionError()
-    if not (mif.mi_kwargs["discrete_features"][1] == True):
+    if mif.mi_kwargs["discrete_features"][1] != True:
         raise AssertionError()
-    if not (mif.mi_kwargs["discrete_features"][0] == False):
+    if mif.mi_kwargs["discrete_features"][0] != False:
         raise AssertionError()
 
 
@@ -418,9 +418,9 @@ def test_mutualinformationfiltering_compute_mi_scores_handles_nan_values(
 
         scores = mif._compute_mi_scores(X, y)
 
-        if not (all(np.isfinite(score) for score in scores.values())):
+        if not all(np.isfinite(score) for score in scores.values()):
             raise AssertionError()
-        if not (all(score >= 0.0 for score in scores.values())):
+        if not all(score >= 0.0 for score in scores.values()):
             raise AssertionError()
 
 
@@ -447,9 +447,9 @@ def test_mutualinformationfiltering_verbose_mode_prints_selection_info(
     mif_threshold.fit(X, y)
 
     captured = capsys.readouterr()
-    if not ("nominal MI threshold" in captured.out):
+    if "nominal MI threshold" not in captured.out:
         raise AssertionError()
-    if not ("Selected" in captured.out):
+    if "Selected" not in captured.out:
         raise AssertionError()
 
     # Test top-k selection
@@ -459,9 +459,9 @@ def test_mutualinformationfiltering_verbose_mode_prints_selection_info(
     mif_topk.fit(X, y)
 
     captured = capsys.readouterr()
-    if not ("top-k selection" in captured.out):
+    if "top-k selection" not in captured.out:
         raise AssertionError()
-    if not ("Implied MI threshold" in captured.out):
+    if "Implied MI threshold" not in captured.out:
         raise AssertionError()
 
 
@@ -484,7 +484,7 @@ def test_mutualinformationfiltering_handles_empty_feature_selection(
     )  # Very high threshold
     mif.fit(X, y)
 
-    if not (len(mif.selected_features_) == 0):
+    if len(mif.selected_features_) != 0:
         raise AssertionError()
 
     # Transform should raise error since implementation treats empty selection as not fitted

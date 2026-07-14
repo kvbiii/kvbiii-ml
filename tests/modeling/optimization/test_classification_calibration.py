@@ -74,7 +74,7 @@ def test_calibrator_binary_returns_estimator() -> None:
     )
     best_estimator = calibrator.fit(x_df, y_ser)
     proba = best_estimator.predict_proba(x_df.iloc[:12])
-    if not (proba.shape[0] == 12):
+    if proba.shape[0] != 12:
         raise AssertionError()
 
     plot_proba = _to_binary_proba(best_estimator.predict_proba(x_df))
@@ -101,7 +101,7 @@ def test_calibrator_multiclass_returns_estimator() -> None:
     )
     best_estimator = calibrator.fit(x_df, y_ser)
     proba = best_estimator.predict_proba(x_df.iloc[:12])
-    if not (proba.shape[0] == 12):
+    if proba.shape[0] != 12:
         raise AssertionError()
 
     plot_proba = best_estimator.predict_proba(x_df)
@@ -142,7 +142,7 @@ def test_calibrator_supports_explicit_validation_split() -> None:
         model_name="Binary",
     )
     proba = best_estimator.predict_proba(X_valid.iloc[:12])
-    if not (proba.shape[0] == 12):
+    if proba.shape[0] != 12:
         raise AssertionError()
 
 

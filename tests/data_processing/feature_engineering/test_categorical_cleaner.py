@@ -44,7 +44,7 @@ def test_categoricalcleaner_init_stores_configuration():
     """Initialization stores provided feature_groups mapping."""
     groups = {"Not Provided": ["col1", "col2"], "Unknown": ["col3"]}
     cleaner = CategoricalCleaner(groups)
-    if not (cleaner.feature_groups == groups):
+    if cleaner.feature_groups != groups:
         raise AssertionError()
 
 
@@ -63,7 +63,7 @@ def test_categoricalcleaner_fit_returns_self(messy_categorical_data):
     )
     result = cleaner.fit(messy_categorical_data)
 
-    if not (result is cleaner):
+    if result is not cleaner:
         raise AssertionError()
 
 
@@ -76,9 +76,9 @@ def test_categoricalcleaner_transform_replaces_placeholders(messy_categorical_da
     cleaner = CategoricalCleaner(groups)
     cleaner.fit(messy_categorical_data)
     result = cleaner.transform(messy_categorical_data)
-    if not (pd.isna(result.loc[0, "messy_spaces"])):
+    if not pd.isna(result.loc[0, "messy_spaces"]):
         raise AssertionError()
-    if not (pd.isna(result.loc[1, "messy_special"])):
+    if not pd.isna(result.loc[1, "messy_special"]):
         raise AssertionError()
     # Non configured columns unchanged
     pd.testing.assert_series_equal(result["numeric"], messy_categorical_data["numeric"])
@@ -138,20 +138,19 @@ def test_categoricalcleaner_transform_handles_new_features(messy_categorical_dat
     result = cleaner.transform(test_data)
 
     # New column should be in result but unchanged
-    if not ("new_column" in result.columns):
+    if "new_column" not in result.columns:
         raise AssertionError()
-    if not (result["new_column"].iloc[0] == " NEW "):
+    if result["new_column"].iloc[0] != " NEW ":
         raise AssertionError()
 
     # Configured columns should be cast to category dtype even if no placeholder matches
-    if not (str(result["messy_spaces"].dtype) == "category"):
+    if str(result["messy_spaces"].dtype) != "category":
         raise AssertionError()
-    if not (str(result["messy_case"].dtype) == "category"):
+    if str(result["messy_case"].dtype) != "category":
         raise AssertionError()
     # Original raw values (with spaces / case) remain since cleaner only replaces placeholders
-    if not (
-        set(result["messy_spaces"].cat.categories)
-        == set(messy_categorical_data["messy_spaces"].dropna().unique())
+    if set(result["messy_spaces"].cat.categories) != set(
+        messy_categorical_data["messy_spaces"].dropna().unique()
     ):
         raise AssertionError()
 
@@ -174,19 +173,18 @@ def test_categoricalcleaner_transform_handles_missing_features(messy_categorical
     result = cleaner.transform(messy_categorical_data)
 
     # Available features converted to category; values unchanged except dtype
-    if not (str(result["messy_spaces"].dtype) == "category"):
+    if str(result["messy_spaces"].dtype) != "category":
         raise AssertionError()
-    if not (" A" in result["messy_spaces"].cat.categories):
+    if " A" not in result["messy_spaces"].cat.categories:
         raise AssertionError()
     # Case not modified by cleaner
-    if not (
-        set(result["messy_case"].cat.categories)
-        == set(messy_categorical_data["messy_case"].dropna().unique())
+    if set(result["messy_case"].cat.categories) != set(
+        messy_categorical_data["messy_case"].dropna().unique()
     ):
         raise AssertionError()
 
     # Should not add the non-existent feature
-    if not ("non_existent_feature" not in result.columns):
+    if "non_existent_feature" in result.columns:
         raise AssertionError()
 
 
@@ -208,12 +206,12 @@ def test_categoricalcleaner_get_feature_names_out_returns_input_features(
     feature_names = cleaner.get_feature_names_out()
 
     # Implementation returns pd.Index
-    if not (list(feature_names) == list(messy_categorical_data.columns)):
+    if list(feature_names) != list(messy_categorical_data.columns):
         raise AssertionError()
 
     # Should ignore input parameter
     feature_names_with_param = cleaner.get_feature_names_out(["ignored"])
-    if not (list(feature_names_with_param) == list(messy_categorical_data.columns)):
+    if list(feature_names_with_param) != list(messy_categorical_data.columns):
         raise AssertionError()
 
 

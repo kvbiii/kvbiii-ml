@@ -97,19 +97,19 @@ def test_generate_classification_report_creates_comprehensive_report(
     mock_roc_auc.assert_called_once()
 
     # Check report structure
-    if not ("classification_report" in report):
+    if "classification_report" not in report:
         raise AssertionError()
-    if not ("confusion_matrix" in report):
+    if "confusion_matrix" not in report:
         raise AssertionError()
-    if not ("roc_auc" in report):
+    if "roc_auc" not in report:
         raise AssertionError()
-    if not ("accuracy" in report):
+    if "accuracy" not in report:
         raise AssertionError()
-    if not ("precision" in report):
+    if "precision" not in report:
         raise AssertionError()
-    if not ("recall" in report):
+    if "recall" not in report:
         raise AssertionError()
-    if not ("f1" in report):
+    if "f1" not in report:
         raise AssertionError()
 
     # Test without probabilities
@@ -120,7 +120,7 @@ def test_generate_classification_report_creates_comprehensive_report(
 
     # ROC AUC shouldn't be called or included
     mock_roc_auc.assert_not_called()
-    if not ("roc_auc" not in report_no_proba):
+    if "roc_auc" in report_no_proba:
         raise AssertionError()
 
 
@@ -164,21 +164,21 @@ def test_generate_regression_report_includes_common_metrics(
     mock_explained_variance.assert_called_once()
 
     # Check report structure
-    if not ("mse" in report):
+    if "mse" not in report:
         raise AssertionError()
-    if not ("rmse" in report):
+    if "rmse" not in report:
         raise AssertionError()
-    if not ("mae" in report):
+    if "mae" not in report:
         raise AssertionError()
-    if not ("r2" in report):
+    if "r2" not in report:
         raise AssertionError()
-    if not ("explained_variance" in report):
+    if "explained_variance" not in report:
         raise AssertionError()
-    if not ("mape" in report):
+    if "mape" not in report:
         raise AssertionError()
 
     # Check RMSE calculation
-    if not (report["rmse"] == 5.0):
+    if report["rmse"] != 5.0:
         raise AssertionError()
 
 
@@ -218,15 +218,15 @@ def test_plot_confusion_matrix_visualization(mock_plt, classification_data):
         raise AssertionError()
 
     # Check labels were set
-    if not (mock_plt.xlabel.called):
+    if not mock_plt.xlabel.called:
         raise AssertionError()
-    if not (mock_plt.ylabel.called):
+    if not mock_plt.ylabel.called:
         raise AssertionError()
-    if not (mock_plt.title.called):
+    if not mock_plt.title.called:
         raise AssertionError()
 
     # Check show was called
-    if not (mock_plt.show.called):
+    if not mock_plt.show.called:
         raise AssertionError()
 
 
@@ -297,21 +297,21 @@ def test_plot_regression_error_visualization(mock_plt, regression_data):
     plot_regression_error(y_true, y_pred, figsize=(15, 10))
 
     # Check plots were created
-    if not (mock_plt.figure.call_count >= 1):
+    if not mock_plt.figure.call_count >= 1:
         raise AssertionError()
-    if not (mock_plt.subplot.call_count >= 3):
+    if not mock_plt.subplot.call_count >= 3:
         raise AssertionError()
 
     # Check scatter plot for actual vs predicted
-    if not (mock_plt.scatter.call_count >= 1):
+    if not mock_plt.scatter.call_count >= 1:
         raise AssertionError()
 
     # Check histogram for error distribution
-    if not (mock_plt.hist.call_count >= 1):
+    if not mock_plt.hist.call_count >= 1:
         raise AssertionError()
 
     # Check plots were shown
-    if not (mock_plt.show.called):
+    if not mock_plt.show.called:
         raise AssertionError()
 
 

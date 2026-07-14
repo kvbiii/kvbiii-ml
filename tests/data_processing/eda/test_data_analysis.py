@@ -66,34 +66,34 @@ def test_base_information_computes_dataset_overview(sample_dataframe):
         "Unique values",
         "Count",
     ]
-    if not (all(col in result_df.columns for col in expected_columns)):
+    if not all(col in result_df.columns for col in expected_columns):
         raise AssertionError()
 
     # Check missing value counts
     numerical_missing = result_df[result_df["Feature"] == "numerical_feature"][
         "Number of missing values"
     ].values[0]
-    if not (numerical_missing == 11):
+    if numerical_missing != 11:
         raise AssertionError()
 
     categorical_missing = result_df[result_df["Feature"] == "categorical_feature"][
         "Number of missing values"
     ].values[0]
-    if not (categorical_missing == 6):
+    if categorical_missing != 6:
         raise AssertionError()
 
     # Check unique value counts
     binary_unique = result_df[result_df["Feature"] == "binary_feature"][
         "Unique values"
     ].values[0]
-    if not (binary_unique == 2):
+    if binary_unique != 2:
         raise AssertionError()
 
     # Check counts (non-missing values)
     num_feature_count = result_df[result_df["Feature"] == "numerical_feature"][
         "Count"
     ].values[0]
-    if not (num_feature_count == len(sample_dataframe) - 11):
+    if num_feature_count != len(sample_dataframe) - 11:
         raise AssertionError()
 
 
@@ -111,13 +111,13 @@ def test_get_categorical_features_identifies_correct_features(sample_dataframe):
     # With default threshold (100)
     categorical_features = DataAnalyzer.get_categorical_features(sample_dataframe)
 
-    if not ("categorical_feature" in categorical_features):
+    if "categorical_feature" not in categorical_features:
         raise AssertionError()
-    if not ("binary_feature" in categorical_features):
+    if "binary_feature" not in categorical_features:
         raise AssertionError()
-    if not ("numerical_feature" not in categorical_features):
+    if "numerical_feature" in categorical_features:
         raise AssertionError()
-    if not ("high_cardinality" not in categorical_features):
+    if "high_cardinality" in categorical_features:
         raise AssertionError()
 
     # With custom threshold (200)
@@ -126,14 +126,14 @@ def test_get_categorical_features_identifies_correct_features(sample_dataframe):
     )
     # Implementation filters strictly by threshold on categorical/object columns; high_cardinality is numeric so won't appear
     # Relax expectation accordingly
-    if not (isinstance(categorical_features_high, list)):
+    if not isinstance(categorical_features_high, list):
         raise AssertionError()
 
     # With custom threshold (1)
     categorical_features_low = DataAnalyzer.get_categorical_features(
         sample_dataframe, unique_threshold=1
     )
-    if not ("binary_feature" in categorical_features_low):
+    if "binary_feature" not in categorical_features_low:
         raise AssertionError()
 
 
@@ -151,7 +151,7 @@ def test_extract_unique_items_handles_various_inputs():
     # The current implementation uses eval and returns set order; ensure content match ignoring order
     string_list = "['apple', 'banana', 'apple', ' Orange ']"
     result = DataAnalyzer.extract_unique_items(string_list)
-    if not (set(result) == {"apple", "banana", "orange"}):
+    if set(result) != {"apple", "banana", "orange"}:
         raise AssertionError()
 
     # Test actual list
@@ -162,26 +162,26 @@ def test_extract_unique_items_handles_various_inputs():
         # Current implementation uses pd.isna which errors on list; treat as acceptable empty result
         result = []
     if result:  # only assert content if non-empty
-        if not (set(result) == {"red", "green", "blue"}):
+        if set(result) != {"red", "green", "blue"}:
             raise AssertionError()
 
     # Test None/NaN
     result = DataAnalyzer.extract_unique_items(None)
-    if not (result == []):
+    if result != []:
         raise AssertionError()
 
     result = DataAnalyzer.extract_unique_items(pd.NA)
-    if not (result == []):
+    if result != []:
         raise AssertionError()
 
     # Test invalid string
     result = DataAnalyzer.extract_unique_items("not a list")
-    if not (result == []):
+    if result != []:
         raise AssertionError()
 
     # Test "Not Provided" string
     result = DataAnalyzer.extract_unique_items("Not Provided")
-    if not (result == []):
+    if result != []:
         raise AssertionError()
 
 
@@ -222,28 +222,28 @@ def test_describe_numerical_feature_computes_correct_statistics(sample_dataframe
         "Missing (%)",
     ]
 
-    if not (all(stat in result_df.columns for stat in expected_stats)):
+    if not all(stat in result_df.columns for stat in expected_stats):
         raise AssertionError()
 
     # Compare with manually computed values
     numerical_data = sample_dataframe["numerical_feature"].dropna()
 
-    if not (result_df["Count"].values[0] == len(numerical_data)):
+    if result_df["Count"].values[0] != len(numerical_data):
         raise AssertionError()
-    if not (abs(result_df["Mean"].values[0] - numerical_data.mean()) < 1e-10):
+    if not abs(result_df["Mean"].values[0] - numerical_data.mean()) < 1e-10:
         raise AssertionError()
-    if not (abs(result_df["Std"].values[0] - numerical_data.std()) < 1e-10):
+    if not abs(result_df["Std"].values[0] - numerical_data.std()) < 1e-10:
         raise AssertionError()
-    if not (abs(result_df["Min"].values[0] - numerical_data.min()) < 1e-10):
+    if not abs(result_df["Min"].values[0] - numerical_data.min()) < 1e-10:
         raise AssertionError()
-    if not (abs(result_df["Max"].values[0] - numerical_data.max()) < 1e-10):
+    if not abs(result_df["Max"].values[0] - numerical_data.max()) < 1e-10:
         raise AssertionError()
 
     # Check missing values
-    if not (result_df["Missing"].values[0] == 11):
+    if result_df["Missing"].values[0] != 11:
         raise AssertionError()
     expected_missing_pct = 11 / len(sample_dataframe) * 100
-    if not (abs(result_df["Missing (%)"].values[0] - expected_missing_pct) < 1e-10):
+    if not abs(result_df["Missing (%)"].values[0] - expected_missing_pct) < 1e-10:
         raise AssertionError()
 
 
@@ -268,21 +268,21 @@ def test_describe_categorical_feature_provides_distribution_analysis(sample_data
     result_df = result.data
 
     # Check structure
-    if not ("Category" in result_df.columns):
+    if "Category" not in result_df.columns:
         raise AssertionError()
-    if not ("Count" in result_df.columns):
+    if "Count" not in result_df.columns:
         raise AssertionError()
-    if not ("Percentage (%)" in result_df.columns):
+    if "Percentage (%)" not in result_df.columns:
         raise AssertionError()
 
     # Verify total matches
     total_count = result_df["Count"].sum()
-    if not (total_count == len(sample_dataframe)):
+    if total_count != len(sample_dataframe):
         raise AssertionError()
 
     # Verify percentages sum to 100 (allowing for rounding error)
     total_percentage = result_df["Percentage (%)"].sum()
-    if not (abs(total_percentage - 100) < 0.1):
+    if not abs(total_percentage - 100) < 0.1:
         raise AssertionError()
 
     # Test with limited categories
@@ -292,12 +292,12 @@ def test_describe_categorical_feature_provides_distribution_analysis(sample_data
     limited_df = limited_result.data
 
     # Should have at most top_n + 1 rows (for "Other")
-    if not (len(limited_df) <= 6):
+    if not len(limited_df) <= 6:
         raise AssertionError()
 
     # Check "Other" category is present if there are more than top_n categories
     if sample_dataframe["high_cardinality"].nunique() > 5:
-        if not (any("Other" in str(cat) for cat in limited_df["Category"])):
+        if not any("Other" in str(cat) for cat in limited_df["Category"]):
             raise AssertionError()
 
     # Test without null values
@@ -308,7 +308,7 @@ def test_describe_categorical_feature_provides_distribution_analysis(sample_data
 
     # Null category should not be in the results
     null_categories = [cat for cat in no_null_df["Category"] if pd.isna(cat)]
-    if not (len(null_categories) == 0):
+    if len(null_categories) != 0:
         raise AssertionError()
 
 
@@ -329,13 +329,13 @@ def test_describe_time_series_feature_analyzes_temporal_patterns(sample_datafram
     )
     monthly_df = monthly_result.data
 
-    if not ("Month" in monthly_df.columns):
+    if "Month" not in monthly_df.columns:
         raise AssertionError()
-    if not ("Count" in monthly_df.columns):
+    if "Count" not in monthly_df.columns:
         raise AssertionError()
 
     # Total count should match dataframe length
-    if not (monthly_df["Count"].sum() == len(sample_dataframe)):
+    if monthly_df["Count"].sum() != len(sample_dataframe):
         raise AssertionError()
 
     # Test yearly aggregation
@@ -344,7 +344,7 @@ def test_describe_time_series_feature_analyzes_temporal_patterns(sample_datafram
     )
     yearly_df = yearly_result.data
 
-    if not ("Year" in yearly_df.columns):
+    if "Year" not in yearly_df.columns:
         raise AssertionError()
 
     # Test daily aggregation
@@ -353,7 +353,7 @@ def test_describe_time_series_feature_analyzes_temporal_patterns(sample_datafram
     )
     daily_df = daily_result.data
 
-    if not ("Day" in daily_df.columns):
+    if "Day" not in daily_df.columns:
         raise AssertionError()
 
     # Test invalid aggregation
@@ -373,9 +373,9 @@ def test_describe_time_series_feature_analyzes_temporal_patterns(sample_datafram
 
     # Should include an "Unknown" category for missing values
     unknown_rows = missing_df[missing_df["Month"] == "Unknown"]
-    if not (len(unknown_rows) == 1):
+    if len(unknown_rows) != 1:
         raise AssertionError()
-    if not (unknown_rows["Count"].values[0] == 6):
+    if unknown_rows["Count"].values[0] != 6:
         raise AssertionError()
 
 

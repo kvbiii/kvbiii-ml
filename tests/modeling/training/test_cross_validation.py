@@ -25,17 +25,17 @@ def test_crossvalidationtrainer_init_creates_instance_with_default_cv(test_setti
         metric_name="Accuracy", problem_type="classification"
     )
 
-    if not (trainer.metric_name == "Accuracy"):
+    if trainer.metric_name != "Accuracy":
         raise AssertionError()
-    if not (trainer.problem_type == "classification"):
+    if trainer.problem_type != "classification":
         raise AssertionError()
-    if not (isinstance(trainer.cv, KFold)):
+    if not isinstance(trainer.cv, KFold):
         raise AssertionError()
-    if not (trainer.cv.n_splits == 5):
+    if trainer.cv.n_splits != 5:
         raise AssertionError()
-    if not (trainer.verbose is True):
+    if trainer.verbose is not True:
         raise AssertionError()
-    if not (len(trainer.processors) == 0):
+    if len(trainer.processors) != 0:
         raise AssertionError()
 
 
@@ -62,11 +62,11 @@ def test_crossvalidationtrainer_init_accepts_custom_cv_and_processors(
         verbose=False,
     )
 
-    if not (trainer.cv is kfold_cv):
+    if trainer.cv is not kfold_cv:
         raise AssertionError()
-    if not (trainer.processors == processors):
+    if trainer.processors != processors:
         raise AssertionError()
-    if not (trainer.verbose is False):
+    if trainer.verbose is not False:
         raise AssertionError()
 
 
@@ -270,15 +270,15 @@ def test_crossvalidationtrainer_fit_executes_cross_validation_loop(
         logistic_regression_estimator, X, y
     )
 
-    if not (len(train_scores) == 5):
+    if len(train_scores) != 5:
         raise AssertionError()
-    if not (len(valid_scores) == 5):
+    if len(valid_scores) != 5:
         raise AssertionError()
-    if not (len(trainer.fitted_estimators_) == 5):
+    if len(trainer.fitted_estimators_) != 5:
         raise AssertionError()
-    if not (all(isinstance(score, float) for score in train_scores)):
+    if not all(isinstance(score, float) for score in train_scores):
         raise AssertionError()
-    if not (all(isinstance(score, float) for score in valid_scores)):
+    if not all(isinstance(score, float) for score in valid_scores):
         raise AssertionError()
 
 
@@ -304,11 +304,11 @@ def test_crossvalidationtrainer_fit_handles_test_data_averaging(
         logistic_regression_estimator, X, y, X_test=X_test
     )
 
-    if not (test_preds is not None):
+    if test_preds is None:
         raise AssertionError()
-    if not (len(test_preds) == len(X_test)):
+    if len(test_preds) != len(X_test):
         raise AssertionError()
-    if not (isinstance(test_preds, np.ndarray)):
+    if not isinstance(test_preds, np.ndarray):
         raise AssertionError()
 
 
@@ -332,11 +332,11 @@ def test_crossvalidationtrainer_predict_returns_averaged_predictions(
 
     predictions = trainer.predict(X)
 
-    if not (len(predictions) == len(X)):
+    if len(predictions) != len(X):
         raise AssertionError()
-    if not (predictions.dtype in [np.int32, np.int64]):
+    if predictions.dtype not in [np.int32, np.int64]:
         raise AssertionError()
-    if not (all(pred in [0, 1] for pred in predictions)):
+    if not all(pred in [0, 1] for pred in predictions):
         raise AssertionError()
 
 
@@ -374,9 +374,9 @@ def test_crossvalidationtrainer_predict_proba_returns_averaged_probabilities(
 
     probabilities = trainer.predict_proba(X)
 
-    if not (probabilities.shape == (len(X), 2)):
+    if probabilities.shape != (len(X), 2):
         raise AssertionError()
-    if not (np.allclose(probabilities.sum(axis=1), 1.0)):
+    if not np.allclose(probabilities.sum(axis=1), 1.0):
         raise AssertionError()
     if not (np.all(probabilities >= 0) and np.all(probabilities <= 1)):
         raise AssertionError()
@@ -419,18 +419,18 @@ def test_crossvalidationtrainer_predict_with_confidence_returns_regression_metri
 
     confidence_results = trainer.predict_with_confidence(X)
 
-    if not ("prediction" in confidence_results):
+    if "prediction" not in confidence_results:
         raise AssertionError()
-    if not ("std" in confidence_results):
+    if "std" not in confidence_results:
         raise AssertionError()
-    if not ("ci_95_lower" in confidence_results):
+    if "ci_95_lower" not in confidence_results:
         raise AssertionError()
-    if not ("ci_95_upper" in confidence_results):
+    if "ci_95_upper" not in confidence_results:
         raise AssertionError()
 
-    if not (len(confidence_results["prediction"]) == len(X)):
+    if len(confidence_results["prediction"]) != len(X):
         raise AssertionError()
-    if not (len(confidence_results["std"]) == len(X)):
+    if len(confidence_results["std"]) != len(X):
         raise AssertionError()
 
 
@@ -454,20 +454,20 @@ def test_crossvalidationtrainer_predict_with_confidence_returns_classification_m
 
     confidence_results = trainer.predict_with_confidence(X)
 
-    if not ("prediction" in confidence_results):
+    if "prediction" not in confidence_results:
         raise AssertionError()
-    if not ("confidence" in confidence_results):
+    if "confidence" not in confidence_results:
         raise AssertionError()
-    if not ("disagreement" in confidence_results):
+    if "disagreement" not in confidence_results:
         raise AssertionError()
-    if not ("proba" in confidence_results):
+    if "proba" not in confidence_results:
         raise AssertionError()
 
-    if not (len(confidence_results["prediction"]) == len(X)):
+    if len(confidence_results["prediction"]) != len(X):
         raise AssertionError()
-    if not (len(confidence_results["confidence"]) == len(X)):
+    if len(confidence_results["confidence"]) != len(X):
         raise AssertionError()
-    if not (confidence_results["proba"].shape == (len(X), 2)):
+    if confidence_results["proba"].shape != (len(X), 2):
         raise AssertionError()
 
 
@@ -493,7 +493,7 @@ def test_crossvalidationtrainer_order_x_for_estimator_reorders_features_correctl
     )
 
     expected_order = ["categorical_1", "numeric_1", "integer_1"]
-    if not (list(reordered_x.columns) == expected_order):
+    if list(reordered_x.columns) != expected_order:
         raise AssertionError()
 
     # Test fallback when no feature names available
@@ -530,7 +530,7 @@ def test_crossvalidationtrainer_order_x_for_estimator_handles_normalized_feature
 
     reordered_x = CrossValidationTrainer._order_X_for_estimator(X, mock_estimator)
 
-    if not (list(reordered_x.columns) == list(X.columns)):
+    if list(reordered_x.columns) != list(X.columns):
         raise AssertionError()
 
 
@@ -566,15 +566,12 @@ def test_crossvalidationtrainer_fit_maps_verbose_one_and_includes_train_in_eval_
         mock_fit.side_effect = _fake_fit_and_predict
         trainer.fit(logistic_regression_estimator, X, y)
 
-    if not (captured_kwargs):
+    if not captured_kwargs:
         raise AssertionError()
-    if not (all(kwargs.get("fit_verbose") is True for kwargs in captured_kwargs)):
+    if not all(kwargs.get("fit_verbose") is True for kwargs in captured_kwargs):
         raise AssertionError()
-    if not (
-        all(
-            kwargs.get("include_train_in_eval_set") is True
-            for kwargs in captured_kwargs
-        )
+    if not all(
+        kwargs.get("include_train_in_eval_set") is True for kwargs in captured_kwargs
     ):
         raise AssertionError()
 

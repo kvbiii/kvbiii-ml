@@ -17,7 +17,7 @@ def test_empty_module_import_and_is_empty():
     # Ensure file exists and is empty or only whitespace/comments
     path = pathlib.Path(module.__file__)
     content = path.read_text(encoding="utf-8")
-    if not (content.strip() == ""):
+    if content.strip() != "":
         raise AssertionError()
 
 

@@ -52,9 +52,9 @@ def test_rank_metrics_identifies_top_related_features(dataset_with_missing):
     rankings = imputer.rank_metrics(dataset_with_missing, "feature_with_missing")
     # Highly correlated feature should appear before independent feature
     ordered = rankings.index.tolist()
-    if not ("highly_correlated" in ordered):
+    if "highly_correlated" not in ordered:
         raise AssertionError()
-    if not (ordered.index("highly_correlated") < ordered.index("independent_feature")):
+    if not ordered.index("highly_correlated") < ordered.index("independent_feature"):
         raise AssertionError()
 
 
@@ -68,22 +68,22 @@ def test_cramers_v_and_theils_u_behave(dataset_with_missing):
     )
     cv = imputer.cramers_v(cat, binned)
     tu = imputer.theils_u(cat, binned)
-    if not (0.0 <= cv <= 1.0):
+    if not 0.0 <= cv <= 1.0:
         raise AssertionError()
-    if not (0.0 <= tu <= 1.0):
+    if not 0.0 <= tu <= 1.0:
         raise AssertionError()
 
 
 def test_imputer_reduces_missing_values(dataset_with_missing):
     """fit_transform should impute (reduce) missing values for the target column."""
     before = dataset_with_missing["feature_with_missing"].isna().sum()
-    if not (before > 0):
+    if not before > 0:
         raise AssertionError()
     imputer = StatisticalAssociationImputer(top_n=3)
     result = imputer.fit_transform(dataset_with_missing)
     after = result["feature_with_missing"].isna().sum()
     # It may not always impute all, but should not return NaN count higher than before
-    if not (after <= before):
+    if not after <= before:
         raise AssertionError()
 
 
@@ -93,7 +93,7 @@ def test_transform_idempotent_when_no_new_missing(dataset_with_missing):
     first = imputer.fit_transform(dataset_with_missing)
     second = imputer.transform(first)
     pd.testing.assert_frame_equal(first, second)
-    if not ("imputed" not in second.columns):
+    if "imputed" in second.columns:
         raise AssertionError()
 
 
@@ -111,9 +111,9 @@ def test_imputer_handles_all_missing_column():
     except (KeyError, TypeError, ValueError):
         # Library currently may raise in this degenerate scenario; treat as acceptable
         result = df.copy()
-    if not (result.shape == df.shape):
+    if result.shape != df.shape:
         raise AssertionError()
-    if not (result["all_missing"].isna().all()):
+    if not result["all_missing"].isna().all():
         raise AssertionError()
 
 

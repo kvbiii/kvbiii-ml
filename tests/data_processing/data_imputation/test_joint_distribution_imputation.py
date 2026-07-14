@@ -92,14 +92,14 @@ def test_impute_missing_values_basic_functionality(structured_categorical_data):
         threshold_num_observation=5,
     )
 
-    if not (isinstance(result, pd.DataFrame)):
+    if not isinstance(result, pd.DataFrame):
         raise AssertionError()
-    if not (result.shape == original_data.shape):
+    if result.shape != original_data.shape:
         raise AssertionError()
 
     # Should have fewer missing values after imputation
     new_missing_count = result["A"].isnull().sum()
-    if not (new_missing_count <= original_missing_count):
+    if not new_missing_count <= original_missing_count:
         raise AssertionError()
 
 
@@ -141,7 +141,7 @@ def test_impute_missing_values_respects_threshold_parameter():
     # Low threshold should result in more imputation
     missing_high = result_high["target"].isnull().sum()
     missing_low = result_low["target"].isnull().sum()
-    if not (missing_low <= missing_high):
+    if not missing_low <= missing_high:
         raise AssertionError()
 
 
@@ -174,7 +174,7 @@ def test_impute_missing_values_handles_no_eligible_mappings():
     )
 
     # Should not impute when mappings are ambiguous
-    if not (result["ambiguous"].isnull().sum() == original_missing):
+    if result["ambiguous"].isnull().sum() != original_missing:
         raise AssertionError()
 
 
@@ -206,7 +206,7 @@ def test_impute_missing_values_preserves_non_missing_values(
 
     # Check that non-missing values are preserved
     result_non_missing = result.loc[non_missing_mask, "cat_to_impute_1"]
-    if not (original_non_missing.equals(result_non_missing)):
+    if not original_non_missing.equals(result_non_missing):
         raise AssertionError()
 
 
@@ -243,9 +243,9 @@ def test_impute_missing_values_handles_multiple_columns_to_impute():
     new_missing_1 = result["cat1"].isnull().sum()
     new_missing_2 = result["cat2"].isnull().sum()
 
-    if not (new_missing_1 <= original_missing_1):
+    if not new_missing_1 <= original_missing_1:
         raise AssertionError()
-    if not (new_missing_2 <= original_missing_2):
+    if not new_missing_2 <= original_missing_2:
         raise AssertionError()
 
 
@@ -278,7 +278,7 @@ def test_impute_missing_values_handles_multiple_predictor_columns():
     )
 
     new_missing = result["target"].isnull().sum()
-    if not (new_missing <= original_missing):
+    if not new_missing <= original_missing:
         raise AssertionError()
 
 
@@ -309,7 +309,7 @@ def test_impute_missing_values_returns_copy_of_dataframe():
     pd.testing.assert_frame_equal(original_data, original_copy)
 
     # Result should be different object
-    if not (result is not original_data):
+    if result is original_data:
         raise AssertionError()
 
 
@@ -409,7 +409,7 @@ def test_impute_missing_values_handles_single_unique_mapping():
     missing_with_u = data["A"].isnull() & (data["B"] == "u")
     if missing_with_u.any():
         imputed_values = result.loc[missing_with_u, "A"]
-        if not (all(val == "x" for val in imputed_values)):
+        if not all(val == "x" for val in imputed_values):
             raise AssertionError()
 
 

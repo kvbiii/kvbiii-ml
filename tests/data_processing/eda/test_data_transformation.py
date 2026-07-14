@@ -43,12 +43,12 @@ def test_datatransformer_init_creates_instance():
         - Instance methods are available
     """
     transformer = DataTransformer()
-    if not (isinstance(transformer, DataTransformer)):
+    if not isinstance(transformer, DataTransformer):
         raise AssertionError()
-    if not (hasattr(transformer, "optimize_memory")):
+    if not hasattr(transformer, "optimize_memory"):
         raise AssertionError()
     # Only core optimization methods exist in implementation
-    if not (hasattr(transformer, "optimize_memory")):
+    if not hasattr(transformer, "optimize_memory"):
         raise AssertionError()
 
 
@@ -80,25 +80,25 @@ def test_optimize_memory_reduces_numeric_memory_usage(sample_mixed_dataframe):
     new_memory = optimized_df.memory_usage(deep=True).sum()
 
     # Memory should be reduced
-    if not (new_memory < original_memory):
+    if not new_memory < original_memory:
         raise AssertionError()
 
     # Check dtypes were appropriately modified
-    if not (pd.api.types.is_integer_dtype(optimized_df["int64_col"])):
+    if not pd.api.types.is_integer_dtype(optimized_df["int64_col"]):
         raise AssertionError()
-    if not (pd.api.types.is_float_dtype(optimized_df["float64_col"])):
+    if not pd.api.types.is_float_dtype(optimized_df["float64_col"]):
         raise AssertionError()
 
     # Small integer column should be in a smaller type
-    if not (optimized_df["small_int_col"].dtype != np.int64):
+    if optimized_df["small_int_col"].dtype == np.int64:
         raise AssertionError()
 
     # Categorical columns should be preserved or converted
-    if not (isinstance(optimized_df["categorical_col"].dtype, pd.CategoricalDtype)):
+    if not isinstance(optimized_df["categorical_col"].dtype, pd.CategoricalDtype):
         raise AssertionError()
 
     # Dates should be preserved
-    if not (pd.api.types.is_datetime64_dtype(optimized_df["date_col"])):
+    if not pd.api.types.is_datetime64_dtype(optimized_df["date_col"]):
         raise AssertionError()
 
     # Data values should be preserved
@@ -123,7 +123,7 @@ def test_optimize_memory_converts_object_to_categorical(sample_mixed_dataframe):
     transformer = DataTransformer()
 
     # Original is object dtype
-    if not (sample_mixed_dataframe["object_col"].dtype == "object"):
+    if sample_mixed_dataframe["object_col"].dtype != "object":
         raise AssertionError()
 
     # Optimize with object_col specified as categorical
@@ -132,16 +132,16 @@ def test_optimize_memory_converts_object_to_categorical(sample_mixed_dataframe):
     )
 
     # Should now be categorical
-    if not (isinstance(optimized_df["object_col"].dtype, pd.CategoricalDtype)):
+    if not isinstance(optimized_df["object_col"].dtype, pd.CategoricalDtype):
         raise AssertionError()
 
     # Values should be preserved
-    if not (set(optimized_df["object_col"].cat.categories) == set(["X", "Y", "Z"])):
+    if set(optimized_df["object_col"].cat.categories) != set(["X", "Y", "Z"]):
         raise AssertionError()
 
     # Check all values match
     for i, val in enumerate(sample_mixed_dataframe["object_col"]):
-        if not (optimized_df["object_col"].iloc[i] == val):
+        if optimized_df["object_col"].iloc[i] != val:
             raise AssertionError()
 
 
@@ -168,11 +168,11 @@ def test_optimize_memory_verbose_output(sample_mixed_dataframe, capsys):
     captured = capsys.readouterr()
 
     # Check expected phrases in output
-    if not ("Numerical dtypes reduced:" in captured.out):
+    if "Numerical dtypes reduced:" not in captured.out:
         raise AssertionError()
-    if not ("MB" in captured.out):
+    if "MB" not in captured.out:
         raise AssertionError()
-    if not ("reduction" in captured.out):
+    if "reduction" not in captured.out:
         raise AssertionError()
 
     # Date feature generation and other advanced transformations not implemented; skip related assertions

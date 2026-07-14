@@ -87,22 +87,22 @@ def test_optimize_hyperparameters_uses_optuna_correctly(
 
     # Check Optuna was used correctly
     mock_optuna.create_study.assert_called_once()
-    if not (mock_optuna.create_study.call_args[1]["direction"] == "maximize"):
+    if mock_optuna.create_study.call_args[1]["direction"] != "maximize":
         raise AssertionError()
 
     # Check study optimize was called
     mock_study.optimize.assert_called_once()
-    if not (mock_study.optimize.call_args[1]["n_trials"] == 20):
+    if mock_study.optimize.call_args[1]["n_trials"] != 20:
         raise AssertionError()
 
     # Check return value structure
-    if not ("best_params" in result):
+    if "best_params" not in result:
         raise AssertionError()
-    if not ("best_score" in result):
+    if "best_score" not in result:
         raise AssertionError()
-    if not (result["best_params"] == mock_study.best_params):
+    if result["best_params"] != mock_study.best_params:
         raise AssertionError()
-    if not (result["best_score"] == mock_study.best_value):
+    if result["best_score"] != mock_study.best_value:
         raise AssertionError()
 
 
@@ -144,28 +144,28 @@ def test_find_best_hyperparameters_with_grid_search(
 
     # Check GridSearchCV was created correctly
     mock_grid_search.assert_called_once()
-    if not (mock_grid_search.call_args[1]["estimator"] is mock_estimator):
+    if mock_grid_search.call_args[1]["estimator"] is not mock_estimator:
         raise AssertionError()
-    if not (mock_grid_search.call_args[1]["param_grid"] is sample_param_grid):
+    if mock_grid_search.call_args[1]["param_grid"] is not sample_param_grid:
         raise AssertionError()
-    if not (mock_grid_search.call_args[1]["cv"] == 3):
+    if mock_grid_search.call_args[1]["cv"] != 3:
         raise AssertionError()
-    if not (mock_grid_search.call_args[1]["scoring"] == "accuracy"):
+    if mock_grid_search.call_args[1]["scoring"] != "accuracy":
         raise AssertionError()
 
     # Check fit was called
     grid_instance.fit.assert_called_once_with(X, y)
 
     # Check return value structure
-    if not ("best_params" in result):
+    if "best_params" not in result:
         raise AssertionError()
-    if not ("best_score" in result):
+    if "best_score" not in result:
         raise AssertionError()
-    if not ("cv_results" in result):
+    if "cv_results" not in result:
         raise AssertionError()
-    if not (result["best_params"] == grid_instance.best_params_):
+    if result["best_params"] != grid_instance.best_params_:
         raise AssertionError()
-    if not (result["best_score"] == grid_instance.best_score_):
+    if result["best_score"] != grid_instance.best_score_:
         raise AssertionError()
 
 
@@ -208,30 +208,28 @@ def test_find_best_hyperparameters_with_random_search(
 
     # Check RandomizedSearchCV was created correctly
     mock_random_search.assert_called_once()
-    if not (mock_random_search.call_args[1]["estimator"] is mock_estimator):
+    if mock_random_search.call_args[1]["estimator"] is not mock_estimator:
         raise AssertionError()
-    if not (
-        mock_random_search.call_args[1]["param_distributions"] is sample_param_grid
-    ):
+    if mock_random_search.call_args[1]["param_distributions"] is not sample_param_grid:
         raise AssertionError()
-    if not (mock_random_search.call_args[1]["cv"] == 3):
+    if mock_random_search.call_args[1]["cv"] != 3:
         raise AssertionError()
-    if not (mock_random_search.call_args[1]["scoring"] == "accuracy"):
+    if mock_random_search.call_args[1]["scoring"] != "accuracy":
         raise AssertionError()
-    if not (mock_random_search.call_args[1]["n_iter"] == 10):
+    if mock_random_search.call_args[1]["n_iter"] != 10:
         raise AssertionError()
 
     # Check fit was called
     random_instance.fit.assert_called_once_with(X, y)
 
     # Check return value structure
-    if not ("best_params" in result):
+    if "best_params" not in result:
         raise AssertionError()
-    if not ("best_score" in result):
+    if "best_score" not in result:
         raise AssertionError()
-    if not (result["best_params"] == random_instance.best_params_):
+    if result["best_params"] != random_instance.best_params_:
         raise AssertionError()
-    if not (result["best_score"] == random_instance.best_score_):
+    if result["best_score"] != random_instance.best_score_:
         raise AssertionError()
 
 
@@ -267,21 +265,21 @@ def test_evaluate_hyperparameters_uses_cross_validation(
     # Check cross_val_score was called correctly
     mock_cv_score.assert_called_once()
     call_args = mock_cv_score.call_args[0]
-    if not (call_args[0] is mock_estimator):
+    if call_args[0] is not mock_estimator:
         raise AssertionError()
-    if not (call_args[1] is X):
+    if call_args[1] is not X:
         raise AssertionError()
-    if not (call_args[2] is y):
+    if call_args[2] is not y:
         raise AssertionError()
 
     call_kwargs = mock_cv_score.call_args[1]
-    if not (call_kwargs["cv"] == 3):
+    if call_kwargs["cv"] != 3:
         raise AssertionError()
-    if not (call_kwargs["scoring"] == "accuracy"):
+    if call_kwargs["scoring"] != "accuracy":
         raise AssertionError()
 
     # Check returned score is mean of CV scores
-    if not (score == np.mean([0.94, 0.96, 0.95])):
+    if score != np.mean([0.94, 0.96, 0.95]):
         raise AssertionError()
 
 
