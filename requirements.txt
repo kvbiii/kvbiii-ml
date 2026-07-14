@@ -1,6 +1,6 @@
 catboost>=1.2.4
 feature_engine>=1.5.0
-imbalanced-learn>=0.14.0
+imbalanced-learn>=0.14.2
 ipython>=8.15.0
 Jinja2>=3.1.6
 kvbiii_plots>=0.1.0
