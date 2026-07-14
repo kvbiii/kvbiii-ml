@@ -29,6 +29,7 @@ class DummyExplainer:
 
 @pytest.fixture(autouse=True)
 def patch_tree_explainer(monkeypatch):
+    """Replaces shap.TreeExplainer with a lightweight dummy for all tests in this module."""
     monkeypatch.setattr(
         shap_module,
         "shap",
@@ -45,6 +46,8 @@ def patch_tree_explainer(monkeypatch):
 
 
 def test_single_model_path():
+    """Tests that compute_shap_values works for a single (non-ensemble) model."""
+
     class SmallModel:
         def __init__(self):
             self.__class__.__name__ = "RandomForestClassifier"
@@ -52,11 +55,15 @@ def test_single_model_path():
     model = SmallModel()
     X = pd.DataFrame(np.random.randn(5, 3), columns=["a", "b", "c"])
     exp = shap_module.compute_shap_values(model, X)
-    assert hasattr(exp, "values")
-    assert exp.values.shape == (5, 3)
+    if not (hasattr(exp, "values")):
+        raise AssertionError()
+    if not (exp.values.shape == (5, 3)):
+        raise AssertionError()
 
 
 def test_ensemble_model_path_weights():
+    """Tests that compute_shap_values weights sub-model SHAP values by ensemble weights."""
+
     class SubModel:
         __name__ = "RandomForestClassifier"
 
@@ -68,10 +75,13 @@ def test_ensemble_model_path_weights():
     ens = Ensemble()
     X = pd.DataFrame(np.random.randn(4, 2), columns=["f0", "f1"])
     exp = shap_module.compute_shap_values(ens, X)
-    assert exp.values.shape == (4, 2)
+    if not (exp.values.shape == (4, 2)):
+        raise AssertionError()
 
 
 def test_ensemble_uniform_weights_fallback():
+    """Tests that compute_shap_values falls back to uniform weights when none are set."""
+
     class SubModel:
         pass
 
@@ -82,7 +92,8 @@ def test_ensemble_uniform_weights_fallback():
     obj = CVLike()
     X = pd.DataFrame(np.random.randn(3, 2), columns=["f0", "f1"])
     exp = shap_module.compute_shap_values(obj, X)
-    assert exp.values.shape == (3, 2)
+    if not (exp.values.shape == (3, 2)):
+        raise AssertionError()
 
 
 if __name__ == "__main__":

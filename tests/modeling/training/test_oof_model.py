@@ -1,11 +1,13 @@
 """Tests for kvbiii_ml.modeling.training.oof_model module."""
 
-from unittest.mock import MagicMock, Mock
+from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
 import pytest
 from sklearn.base import BaseEstimator
+from sklearn.linear_model import SGDClassifier
+from sklearn.model_selection import KFold
 
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 from kvbiii_ml.modeling.training.oof_model import OOFModel
@@ -35,12 +37,18 @@ def test_oofmodel_init_creates_classification_instance(
         problem_type="classification",
     )
 
-    assert oof.problem_type == "classification"
-    assert oof.cross_validator is cv_trainer
-    assert oof.estimator is logistic_regression_estimator
-    assert callable(oof.eval_metric)
-    assert oof.metric_type in ["preds", "probs"]
-    assert len(oof.fitted_estimators_) == 0
+    if not (oof.problem_type == "classification"):
+        raise AssertionError()
+    if not (oof.cross_validator is cv_trainer):
+        raise AssertionError()
+    if not (oof.estimator is logistic_regression_estimator):
+        raise AssertionError()
+    if not (callable(oof.eval_metric)):
+        raise AssertionError()
+    if not (oof.metric_type in ["preds", "probs"]):
+        raise AssertionError()
+    if not (len(oof.fitted_estimators_) == 0):
+        raise AssertionError()
 
 
 def test_oofmodel_init_creates_regression_instance(
@@ -67,9 +75,12 @@ def test_oofmodel_init_creates_regression_instance(
         problem_type="regression",
     )
 
-    assert oof.problem_type == "regression"
-    assert oof.cross_validator.metric_name == "MAE"
-    assert len(oof.fitted_estimators_) == 0
+    if not (oof.problem_type == "regression"):
+        raise AssertionError()
+    if not (oof.cross_validator.metric_name == "MAE"):
+        raise AssertionError()
+    if not (len(oof.fitted_estimators_) == 0):
+        raise AssertionError()
 
 
 def test_oofmodel_init_raises_error_for_invalid_problem_type(
@@ -155,9 +166,12 @@ def test_oofmodel_fit_executes_cross_validation_and_stores_estimators(
 
     fitted_oof = oof.fit(X, y)
 
-    assert fitted_oof is oof  # Returns self
-    assert len(oof.fitted_estimators_) == kfold_cv.n_splits
-    assert all(isinstance(est, BaseEstimator) for est in oof.fitted_estimators_)
+    if not (fitted_oof is oof):
+        raise AssertionError()
+    if not (len(oof.fitted_estimators_) == kfold_cv.n_splits):
+        raise AssertionError()
+    if not (all(isinstance(est, BaseEstimator) for est in oof.fitted_estimators_)):
+        raise AssertionError()
 
 
 def test_oofmodel_fit_handles_test_data_processing(
@@ -193,7 +207,8 @@ def test_oofmodel_fit_handles_test_data_processing(
 
     oof.fit(X, y, X_test=X_test)
 
-    assert len(oof.fitted_estimators_) == kfold_cv.n_splits
+    if not (len(oof.fitted_estimators_) == kfold_cv.n_splits):
+        raise AssertionError()
 
 
 def test_oofmodel_fit_clears_previous_fitted_estimators(
@@ -232,9 +247,11 @@ def test_oofmodel_fit_clears_previous_fitted_estimators(
     # Second fit should clear and replace estimators
     oof.fit(X, y)
 
-    assert len(oof.fitted_estimators_) == len(first_fit_estimators)
+    if not (len(oof.fitted_estimators_) == len(first_fit_estimators)):
+        raise AssertionError()
     # Estimators should be different instances (newly fitted)
-    assert oof.fitted_estimators_[0] is not first_fit_estimators[0]
+    if not (oof.fitted_estimators_[0] is not first_fit_estimators[0]):
+        raise AssertionError()
 
 
 def test_oofmodel_predict_returns_averaged_classification_predictions(
@@ -269,9 +286,12 @@ def test_oofmodel_predict_returns_averaged_classification_predictions(
     oof.fit(X, y)
     predictions = oof.predict(X)
 
-    assert len(predictions) == len(X)
-    assert predictions.dtype in [np.int32, np.int64]  # Classification predictions
-    assert all(pred in [0, 1] for pred in predictions)  # Binary classification
+    if not (len(predictions) == len(X)):
+        raise AssertionError()
+    if not (predictions.dtype in [np.int32, np.int64]):
+        raise AssertionError()
+    if not (all(pred in [0, 1] for pred in predictions)):
+        raise AssertionError()
 
 
 def test_oofmodel_predict_raises_error_when_not_fitted(
@@ -288,7 +308,7 @@ def test_oofmodel_predict_raises_error_when_not_fitted(
         - RuntimeError is raised when predict called on unfitted model
         - Error message provides clear guidance about required fitting
     """
-    X, y = binary_classification_data
+    X, _y = binary_classification_data
     cv_trainer = CrossValidationTrainer(
         metric_name="Accuracy", problem_type="classification", cv=kfold_cv
     )
@@ -337,9 +357,12 @@ def test_oofmodel_predict_proba_returns_averaged_probabilities(
     oof.fit(X, y)
     probabilities = oof.predict_proba(X)
 
-    assert probabilities.shape == (len(X), 2)  # Binary classification
-    assert np.allclose(probabilities.sum(axis=1), 1.0)  # Probabilities sum to 1
-    assert np.all(probabilities >= 0) and np.all(probabilities <= 1)
+    if not (probabilities.shape == (len(X), 2)):
+        raise AssertionError()
+    if not (np.allclose(probabilities.sum(axis=1), 1.0)):
+        raise AssertionError()
+    if not (np.all(probabilities >= 0) and np.all(probabilities <= 1)):
+        raise AssertionError()
 
 
 def test_oofmodel_predict_proba_raises_error_for_regression(
@@ -356,7 +379,7 @@ def test_oofmodel_predict_proba_raises_error_for_regression(
         - ValueError is raised when predict_proba called for regression
         - Error message explains method is only for classification
     """
-    X, y = regression_data
+    X, _y = regression_data
     cv_trainer = CrossValidationTrainer(
         metric_name="MAE", problem_type="regression", cv=kfold_cv
     )
@@ -388,18 +411,19 @@ def test_oofmodel_order_x_for_estimator_reorders_features_correctly(sample_dataf
     mock_estimator = Mock()
     mock_estimator.feature_names_in_ = ["categorical_1", "numeric_1", "integer_1"]
 
-    reordered_X = OOFModel._order_X_for_estimator(sample_dataframe, mock_estimator)
+    reordered_x = OOFModel._order_X_for_estimator(sample_dataframe, mock_estimator)
 
     expected_order = ["categorical_1", "numeric_1", "integer_1"]
-    assert list(reordered_X.columns) == expected_order
+    if not (list(reordered_x.columns) == expected_order):
+        raise AssertionError()
 
     # Test fallback when no feature names available
     mock_estimator_no_features = Mock(spec=[])  # No feature name attributes
-    result_X = OOFModel._order_X_for_estimator(
+    result_x = OOFModel._order_X_for_estimator(
         sample_dataframe, mock_estimator_no_features
     )
 
-    pd.testing.assert_frame_equal(result_X, sample_dataframe)
+    pd.testing.assert_frame_equal(result_x, sample_dataframe)
 
 
 def test_oofmodel_predict_handles_estimators_without_predict_proba():
@@ -411,14 +435,6 @@ def test_oofmodel_predict_handles_estimators_without_predict_proba():
         - No errors occur with estimators lacking probability prediction
     """
     # Create a more realistic test with actual OOF model and real data
-    from sklearn.linear_model import (
-        SGDClassifier,
-    )  # Doesn't have predict_proba by default
-    from sklearn.model_selection import KFold
-
-    from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
-    from kvbiii_ml.modeling.training.oof_model import OOFModel
-
     # Create balanced test data with sufficient samples for each class in each fold
     X = pd.DataFrame(
         {
@@ -448,10 +464,13 @@ def test_oofmodel_predict_handles_estimators_without_predict_proba():
     oof.fit(X, y)
     predictions = oof.predict(X)
 
-    assert len(predictions) == 10
-    assert isinstance(predictions, np.ndarray)
+    if not (len(predictions) == 10):
+        raise AssertionError()
+    if not (isinstance(predictions, np.ndarray)):
+        raise AssertionError()
     # Should be classification predictions (0 or 1)
-    assert all(pred in [0, 1] for pred in predictions)
+    if not (all(pred in [0, 1] for pred in predictions)):
+        raise AssertionError()
 
 
 def test_oofmodel_integration_with_processors(
@@ -489,8 +508,10 @@ def test_oofmodel_integration_with_processors(
     oof.fit(X, y)
     predictions = oof.predict(X)
 
-    assert len(predictions) == len(X)
-    assert len(oof.fitted_estimators_) == kfold_cv.n_splits
+    if not (len(predictions) == len(X)):
+        raise AssertionError()
+    if not (len(oof.fitted_estimators_) == kfold_cv.n_splits):
+        raise AssertionError()
     # Verify processor was used in cross-validation
     mock_processor.fit_resample.assert_called()
 

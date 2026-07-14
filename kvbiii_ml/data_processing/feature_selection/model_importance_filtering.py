@@ -239,7 +239,7 @@ class ModelImportanceFiltering:
                     with warnings.catch_warnings():
                         warnings.simplefilter("ignore")
                         clone(step).fit(X_current.head(5))
-                except Exception:
+                except (ValueError, TypeError, KeyError, AttributeError, IndexError):
                     continue
             new_steps.append((name, cloned_step))
 
@@ -882,7 +882,8 @@ if __name__ == "__main__":
         )
         summary = selector.run(X, y)
 
-        assert len(summary["selected_features"]) > 0, "no features selected"
+        if not (len(summary["selected_features"]) > 0):
+            raise AssertionError("no features selected")
 
         history_features = set(summary["history"]["removed_feature_name"].dropna())
         non_protected_selected = [
@@ -891,16 +892,18 @@ if __name__ == "__main__":
             if f not in selector.protected_features
         ]
         for feat in non_protected_selected:
-            assert (
-                feat in history_features
-            ), f"selected feature '{feat}' missing from history - never-removed append failed"
+            if not (feat in history_features):
+                raise AssertionError(
+                    f"selected feature '{feat}' missing from history - never-removed append failed"
+                )
 
         if pipeline is not None:
             all_history_features = list(history_features)
             if all_history_features:
-                assert any(
-                    "_PREPROCESS_" in str(f) for f in all_history_features
-                ), "no derived features appear in removal history - pipeline did not expand"
+                if not (any("_PREPROCESS_" in str(f) for f in all_history_features)):
+                    raise AssertionError(
+                        "no derived features appear in removal history - pipeline did not expand"
+                    )
 
         n_selected = len(summary["selected_features"])
         print(f"  {label:<60} selected={n_selected} features\n")

@@ -1,7 +1,5 @@
 """Tests for kvbiii_ml.data_processing.feature_engineering.count_encoding module."""
 
-from unittest.mock import Mock, patch
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -58,9 +56,11 @@ def test_countencoder_init_stores_configuration():
 
     # Test with default parameters
     encoder = CountEncoder(features_names=features, fill_value=0)
-    assert encoder.features_names == features
+    if not (encoder.features_names == features):
+        raise AssertionError()
     encoder = CountEncoder()
-    assert encoder.features_names == []
+    if not (encoder.features_names == []):
+        raise AssertionError()
 
 
 def test_countencoder_fit_computes_count_maps(categorical_data):
@@ -79,14 +79,20 @@ def test_countencoder_fit_computes_count_maps(categorical_data):
     )
     fitted_encoder = encoder.fit(categorical_data)
 
-    assert fitted_encoder is encoder  # Returns self
+    if not (fitted_encoder is encoder):
+        raise AssertionError()
 
     # Check count maps are created
-    assert hasattr(encoder, "count_maps_")
-    assert isinstance(encoder.count_maps_, dict)
-    assert "high_cardinality" in encoder.count_maps_
-    assert "medium_cardinality" in encoder.count_maps_
-    assert "low_cardinality" in encoder.count_maps_
+    if not (hasattr(encoder, "count_maps_")):
+        raise AssertionError()
+    if not (isinstance(encoder.count_maps_, dict)):
+        raise AssertionError()
+    if not ("high_cardinality" in encoder.count_maps_):
+        raise AssertionError()
+    if not ("medium_cardinality" in encoder.count_maps_):
+        raise AssertionError()
+    if not ("low_cardinality" in encoder.count_maps_):
+        raise AssertionError()
 
     # Check counts are computed correctly
     for feature in encoder.features_names:
@@ -94,7 +100,8 @@ def test_countencoder_fit_computes_count_maps(categorical_data):
 
         for category, count in encoder.count_maps_[feature].items():
             if category != np.nan and pd.notna(category):
-                assert count == value_counts[category]
+                if not (count == value_counts[category]):
+                    raise AssertionError()
 
 
 def test_countencoder_transform_replaces_categories_with_counts(categorical_data):
@@ -116,17 +123,20 @@ def test_countencoder_transform_replaces_categories_with_counts(categorical_data
     transformed = encoder.transform(categorical_data)
 
     # Original data should be unchanged
-    assert categorical_data["high_cardinality"].dtype == object
+    if not (categorical_data["high_cardinality"].dtype == object):
+        raise AssertionError()
 
     # Transformed data should have numeric count values
     for col in ["CE_high_cardinality", "CE_medium_cardinality", "CE_low_cardinality"]:
-        assert np.issubdtype(transformed[col].dtype, np.integer)
+        if not (np.issubdtype(transformed[col].dtype, np.integer)):
+            raise AssertionError()
 
     # Counts should match expected values
     feature = "low_cardinality"
     for category, count in categorical_data[feature].value_counts().items():
         category_rows = categorical_data[feature] == category
-        assert (transformed.loc[category_rows, "CE_" + feature] == count).all()
+        if not ((transformed.loc[category_rows, "CE_" + feature] == count).all()):
+            raise AssertionError()
 
     # Non-categorical columns should remain unchanged
     pd.testing.assert_series_equal(transformed["numeric"], categorical_data["numeric"])
@@ -134,33 +144,41 @@ def test_countencoder_transform_replaces_categories_with_counts(categorical_data
 
 
 def test_countencoder_no_normalization_available(categorical_data):
+    """Tests encoding a low-cardinality feature without normalization."""
     encoder = CountEncoder(features_names=["low_cardinality"])
     encoder.fit(categorical_data)
     transformed = encoder.transform(categorical_data)
-    assert "CE_low_cardinality" in transformed.columns
+    if not ("CE_low_cardinality" in transformed.columns):
+        raise AssertionError()
 
 
 def test_countencoder_min_count_not_supported(categorical_data):
+    """Tests encoding a high-cardinality feature without a min_count filter."""
     encoder = CountEncoder(features_names=["high_cardinality"])
     encoder.fit(categorical_data)
     transformed = encoder.transform(categorical_data)
-    assert "CE_high_cardinality" in transformed.columns
+    if not ("CE_high_cardinality" in transformed.columns):
+        raise AssertionError()
 
 
 def test_countencoder_missing_values_replaced_with_fill_value(categorical_data):
+    """Tests that missing categories are encoded with the configured fill_value."""
     encoder = CountEncoder(features_names=["high_cardinality"], fill_value=-1)
     encoder.fit(categorical_data)
     transformed = encoder.transform(categorical_data)
-    assert "CE_high_cardinality" in transformed.columns
+    if not ("CE_high_cardinality" in transformed.columns):
+        raise AssertionError()
 
 
 def test_countencoder_unknown_categories_get_fill_value():
+    """Tests that categories unseen during fit are encoded with fill_value."""
     train = pd.DataFrame({"feature": ["A", "A", "B", "C"]})
     test = pd.DataFrame({"feature": ["A", "Z"]})
     enc = CountEncoder(features_names=["feature"], fill_value=0)
     enc.fit(train)
     out = enc.transform(test)
-    assert out.loc[1, "CE_feature"] == 0
+    if not (out.loc[1, "CE_feature"] == 0):
+        raise AssertionError()
 
 
 def test_countencoder_fit_transform_combines_operations(categorical_data):
@@ -188,10 +206,12 @@ def test_countencoder_fit_transform_combines_operations(categorical_data):
 
 
 def test_countencoder_get_feature_names_returns_new_columns(categorical_data):
+    """Tests that get_feature_names returns the generated CE_-prefixed column names."""
     enc = CountEncoder(features_names=["high_cardinality", "medium_cardinality"])
     enc.fit(categorical_data)
     names = enc.get_feature_names()
-    assert names == ["CE_high_cardinality", "CE_medium_cardinality"]
+    if not (names == ["CE_high_cardinality", "CE_medium_cardinality"]):
+        raise AssertionError()
 
 
 if __name__ == "__main__":

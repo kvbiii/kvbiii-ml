@@ -1,7 +1,6 @@
 """Tests for kvbiii_ml.data_processing.data_imputation.joint_distribution_imputation module."""
 
-import itertools
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -93,12 +92,15 @@ def test_impute_missing_values_basic_functionality(structured_categorical_data):
         threshold_num_observation=5,
     )
 
-    assert isinstance(result, pd.DataFrame)
-    assert result.shape == original_data.shape
+    if not (isinstance(result, pd.DataFrame)):
+        raise AssertionError()
+    if not (result.shape == original_data.shape):
+        raise AssertionError()
 
     # Should have fewer missing values after imputation
     new_missing_count = result["A"].isnull().sum()
-    assert new_missing_count <= original_missing_count
+    if not (new_missing_count <= original_missing_count):
+        raise AssertionError()
 
 
 def test_impute_missing_values_respects_threshold_parameter():
@@ -139,7 +141,8 @@ def test_impute_missing_values_respects_threshold_parameter():
     # Low threshold should result in more imputation
     missing_high = result_high["target"].isnull().sum()
     missing_low = result_low["target"].isnull().sum()
-    assert missing_low <= missing_high
+    if not (missing_low <= missing_high):
+        raise AssertionError()
 
 
 def test_impute_missing_values_handles_no_eligible_mappings():
@@ -171,7 +174,8 @@ def test_impute_missing_values_handles_no_eligible_mappings():
     )
 
     # Should not impute when mappings are ambiguous
-    assert result["ambiguous"].isnull().sum() == original_missing
+    if not (result["ambiguous"].isnull().sum() == original_missing):
+        raise AssertionError()
 
 
 def test_impute_missing_values_preserves_non_missing_values(
@@ -202,7 +206,8 @@ def test_impute_missing_values_preserves_non_missing_values(
 
     # Check that non-missing values are preserved
     result_non_missing = result.loc[non_missing_mask, "cat_to_impute_1"]
-    assert original_non_missing.equals(result_non_missing)
+    if not (original_non_missing.equals(result_non_missing)):
+        raise AssertionError()
 
 
 def test_impute_missing_values_handles_multiple_columns_to_impute():
@@ -238,8 +243,10 @@ def test_impute_missing_values_handles_multiple_columns_to_impute():
     new_missing_1 = result["cat1"].isnull().sum()
     new_missing_2 = result["cat2"].isnull().sum()
 
-    assert new_missing_1 <= original_missing_1
-    assert new_missing_2 <= original_missing_2
+    if not (new_missing_1 <= original_missing_1):
+        raise AssertionError()
+    if not (new_missing_2 <= original_missing_2):
+        raise AssertionError()
 
 
 def test_impute_missing_values_handles_multiple_predictor_columns():
@@ -271,7 +278,8 @@ def test_impute_missing_values_handles_multiple_predictor_columns():
     )
 
     new_missing = result["target"].isnull().sum()
-    assert new_missing <= original_missing
+    if not (new_missing <= original_missing):
+        raise AssertionError()
 
 
 def test_impute_missing_values_returns_copy_of_dataframe():
@@ -301,7 +309,8 @@ def test_impute_missing_values_returns_copy_of_dataframe():
     pd.testing.assert_frame_equal(original_data, original_copy)
 
     # Result should be different object
-    assert result is not original_data
+    if not (result is not original_data):
+        raise AssertionError()
 
 
 @patch(
@@ -400,7 +409,8 @@ def test_impute_missing_values_handles_single_unique_mapping():
     missing_with_u = data["A"].isnull() & (data["B"] == "u")
     if missing_with_u.any():
         imputed_values = result.loc[missing_with_u, "A"]
-        assert all(val == "x" for val in imputed_values)
+        if not (all(val == "x" for val in imputed_values)):
+            raise AssertionError()
 
 
 if __name__ == "__main__":

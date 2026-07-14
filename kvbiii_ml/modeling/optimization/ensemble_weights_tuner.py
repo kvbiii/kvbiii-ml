@@ -69,7 +69,9 @@ class EnsembleWeightTunerCV:
             n_trials=self.n_trials,
         )
         n = len(self.estimators)
-        raw_weights = np.array([study.best_params[f"w{i}"] for i in range(n)], dtype=float)
+        raw_weights = np.array(
+            [study.best_params[f"w{i}"] for i in range(n)], dtype=float
+        )
         self.best_weights = self._normalize_weights(raw_weights)
         return study
 
@@ -126,7 +128,9 @@ class EnsembleWeightTunerCV:
         n = len(self.estimators)
         lo, hi = (-1.0, 1.0) if self.allow_negative_weights else (0.01, 0.99)
         weights = self._normalize_weights(
-            np.array([trial.suggest_float(f"w{i}", lo, hi) for i in range(n)], dtype=float)
+            np.array(
+                [trial.suggest_float(f"w{i}", lo, hi) for i in range(n)], dtype=float
+            )
         )
         blended = self._blend_predictions(preds_list, weights)
         if self.problem_type == "classification" and self.metric_type == "preds":
@@ -161,7 +165,9 @@ class EnsembleWeightTunerCV:
 
         if neg_clf and not is_df:
             eps = 1e-9
-            logits = np.log(np.clip(stacked, eps, 1 - eps) / np.clip(1 - stacked, eps, 1 - eps))
+            logits = np.log(
+                np.clip(stacked, eps, 1 - eps) / np.clip(1 - stacked, eps, 1 - eps)
+            )
             blended = 1.0 / (1.0 + np.exp(-np.einsum("e,es->s", weights, logits)))
         elif neg_clf:
             eps = 1e-12
@@ -174,7 +180,9 @@ class EnsembleWeightTunerCV:
             blended = np.einsum("e,e...->...", weights, stacked)
             if is_df:
                 row_sums = blended.sum(axis=1, keepdims=True)
-                blended = np.clip(blended / np.where(row_sums == 0.0, 1.0, row_sums), 0.0, 1.0)
+                blended = np.clip(
+                    blended / np.where(row_sums == 0.0, 1.0, row_sums), 0.0, 1.0
+                )
                 blended /= np.clip(blended.sum(axis=1, keepdims=True), 1e-12, None)
 
         if is_df:
@@ -222,7 +230,9 @@ class EnsembleWeightTunerCV:
                     else:
                         pred = pd.DataFrame(proba, index=X.iloc[val_idx].index)
                 else:
-                    pred = pd.Series(fitted_est.predict(X_valid), index=X.iloc[val_idx].index)
+                    pred = pd.Series(
+                        fitted_est.predict(X_valid), index=X.iloc[val_idx].index
+                    )
                 est_preds.append(pred)
 
             preds_per_estimator.append(pd.concat(est_preds))
@@ -293,9 +303,15 @@ if __name__ == "__main__":
     y_ser = pd.Series(y_arr)
 
     clf_estimators = [
-        LGBMClassifier(n_estimators=100, num_leaves=15, verbose=-1, random_state=RANDOM_STATE),
-        LGBMClassifier(n_estimators=100, num_leaves=31, verbose=-1, random_state=RANDOM_STATE),
-        LGBMClassifier(n_estimators=100, num_leaves=63, verbose=-1, random_state=RANDOM_STATE),
+        LGBMClassifier(
+            n_estimators=100, num_leaves=15, verbose=-1, random_state=RANDOM_STATE
+        ),
+        LGBMClassifier(
+            n_estimators=100, num_leaves=31, verbose=-1, random_state=RANDOM_STATE
+        ),
+        LGBMClassifier(
+            n_estimators=100, num_leaves=63, verbose=-1, random_state=RANDOM_STATE
+        ),
     ]
     cv_clf = CrossValidationTrainer(
         metric_name="Roc AUC",
@@ -327,9 +343,15 @@ if __name__ == "__main__":
     y_reg_ser = pd.Series(y_reg)
 
     reg_estimators = [
-        LGBMRegressor(n_estimators=100, num_leaves=15, verbose=-1, random_state=RANDOM_STATE),
-        LGBMRegressor(n_estimators=100, num_leaves=31, verbose=-1, random_state=RANDOM_STATE),
-        LGBMRegressor(n_estimators=100, num_leaves=63, verbose=-1, random_state=RANDOM_STATE),
+        LGBMRegressor(
+            n_estimators=100, num_leaves=15, verbose=-1, random_state=RANDOM_STATE
+        ),
+        LGBMRegressor(
+            n_estimators=100, num_leaves=31, verbose=-1, random_state=RANDOM_STATE
+        ),
+        LGBMRegressor(
+            n_estimators=100, num_leaves=63, verbose=-1, random_state=RANDOM_STATE
+        ),
     ]
     cv_reg = CrossValidationTrainer(
         metric_name="RMSE",

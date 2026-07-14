@@ -30,19 +30,19 @@ class SimpleCVProvider:
 
 def _binary_dataset() -> tuple[pd.DataFrame, pd.Series]:
     """Create a binary classification dataset."""
-    X_arr, y_arr = make_classification(
+    x_arr, y_arr = make_classification(
         n_samples=300,
         n_features=8,
         n_informative=5,
         n_redundant=1,
         random_state=17,
     )
-    return pd.DataFrame(X_arr), pd.Series(y_arr)
+    return pd.DataFrame(x_arr), pd.Series(y_arr)
 
 
 def _multiclass_dataset() -> tuple[pd.DataFrame, pd.Series]:
     """Create a multiclass classification dataset."""
-    X_arr, y_arr = make_classification(
+    x_arr, y_arr = make_classification(
         n_samples=360,
         n_features=10,
         n_informative=6,
@@ -50,7 +50,7 @@ def _multiclass_dataset() -> tuple[pd.DataFrame, pd.Series]:
         n_classes=3,
         random_state=17,
     )
-    return pd.DataFrame(X_arr), pd.Series(y_arr)
+    return pd.DataFrame(x_arr), pd.Series(y_arr)
 
 
 def _to_binary_proba(proba: np.ndarray) -> np.ndarray:
@@ -62,7 +62,7 @@ def _to_binary_proba(proba: np.ndarray) -> np.ndarray:
 
 def test_calibrator_binary_returns_estimator() -> None:
     """Ensure the calibrator returns a fitted estimator for binary targets."""
-    X_df, y_ser = _binary_dataset()
+    x_df, y_ser = _binary_dataset()
     cv_trainer = SimpleCVProvider(
         cv=StratifiedKFold(n_splits=3, shuffle=True, random_state=17),
     )
@@ -72,11 +72,12 @@ def test_calibrator_binary_returns_estimator() -> None:
         cross_validator=cv_trainer,
         metric_name="Log Loss",
     )
-    best_estimator = calibrator.fit(X_df, y_ser)
-    proba = best_estimator.predict_proba(X_df.iloc[:12])
-    assert proba.shape[0] == 12
+    best_estimator = calibrator.fit(x_df, y_ser)
+    proba = best_estimator.predict_proba(x_df.iloc[:12])
+    if not (proba.shape[0] == 12):
+        raise AssertionError()
 
-    plot_proba = _to_binary_proba(best_estimator.predict_proba(X_df))
+    plot_proba = _to_binary_proba(best_estimator.predict_proba(x_df))
     if HAS_MATPLOTLIB:
         calibrator.plot_calibration_curves(
             y_true=y_ser,
@@ -87,7 +88,7 @@ def test_calibrator_binary_returns_estimator() -> None:
 
 def test_calibrator_multiclass_returns_estimator() -> None:
     """Ensure the calibrator returns a fitted estimator for multiclass targets."""
-    X_df, y_ser = _multiclass_dataset()
+    x_df, y_ser = _multiclass_dataset()
     cv_trainer = SimpleCVProvider(
         cv=StratifiedKFold(n_splits=3, shuffle=True, random_state=17),
     )
@@ -98,11 +99,12 @@ def test_calibrator_multiclass_returns_estimator() -> None:
         metric_name="Log Loss",
         id2label={0: "A", 1: "B", 2: "C"},
     )
-    best_estimator = calibrator.fit(X_df, y_ser)
-    proba = best_estimator.predict_proba(X_df.iloc[:12])
-    assert proba.shape[0] == 12
+    best_estimator = calibrator.fit(x_df, y_ser)
+    proba = best_estimator.predict_proba(x_df.iloc[:12])
+    if not (proba.shape[0] == 12):
+        raise AssertionError()
 
-    plot_proba = best_estimator.predict_proba(X_df)
+    plot_proba = best_estimator.predict_proba(x_df)
     if HAS_MATPLOTLIB:
         calibrator.plot_calibration_curves(
             y_true=y_ser,
@@ -113,9 +115,9 @@ def test_calibrator_multiclass_returns_estimator() -> None:
 
 def test_calibrator_supports_explicit_validation_split() -> None:
     """Ensure explicit validation inputs are honored."""
-    X_df, y_ser = _binary_dataset()
+    x_df, y_ser = _binary_dataset()
     X_train, X_valid, y_train, y_valid = train_test_split(
-        X_df,
+        x_df,
         y_ser,
         test_size=0.25,
         stratify=y_ser,
@@ -140,7 +142,8 @@ def test_calibrator_supports_explicit_validation_split() -> None:
         model_name="Binary",
     )
     proba = best_estimator.predict_proba(X_valid.iloc[:12])
-    assert proba.shape[0] == 12
+    if not (proba.shape[0] == 12):
+        raise AssertionError()
 
 
 if __name__ == "__main__":

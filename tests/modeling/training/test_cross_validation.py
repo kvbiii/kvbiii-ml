@@ -1,14 +1,12 @@
 """Tests for kvbiii_ml.modeling.training.cross_validation module."""
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.base import BaseEstimator
 from sklearn.model_selection import KFold
 
-from kvbiii_ml.evaluation.metrics import METRICS
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
 
@@ -27,12 +25,18 @@ def test_crossvalidationtrainer_init_creates_instance_with_default_cv(test_setti
         metric_name="Accuracy", problem_type="classification"
     )
 
-    assert trainer.metric_name == "Accuracy"
-    assert trainer.problem_type == "classification"
-    assert isinstance(trainer.cv, KFold)
-    assert trainer.cv.n_splits == 5
-    assert trainer.verbose is True
-    assert len(trainer.processors) == 0
+    if not (trainer.metric_name == "Accuracy"):
+        raise AssertionError()
+    if not (trainer.problem_type == "classification"):
+        raise AssertionError()
+    if not (isinstance(trainer.cv, KFold)):
+        raise AssertionError()
+    if not (trainer.cv.n_splits == 5):
+        raise AssertionError()
+    if not (trainer.verbose is True):
+        raise AssertionError()
+    if not (len(trainer.processors) == 0):
+        raise AssertionError()
 
 
 def test_crossvalidationtrainer_init_accepts_custom_cv_and_processors(
@@ -58,9 +62,12 @@ def test_crossvalidationtrainer_init_accepts_custom_cv_and_processors(
         verbose=False,
     )
 
-    assert trainer.cv is kfold_cv
-    assert trainer.processors == processors
-    assert trainer.verbose is False
+    if not (trainer.cv is kfold_cv):
+        raise AssertionError()
+    if not (trainer.processors == processors):
+        raise AssertionError()
+    if not (trainer.verbose is False):
+        raise AssertionError()
 
 
 def test_crossvalidationtrainer_init_raises_error_for_invalid_problem_type():
@@ -192,15 +199,13 @@ def test_crossvalidationtrainer_apply_processors_handles_fit_transform_processor
 
         trainer = CrossValidationTrainer("Accuracy", "classification")
 
-        train_df, valid_df, test_df, y_train_out, y_valid_out = (
-            trainer._apply_processors(
-                processors=[mock_processor],
-                train_df=sample_dataframe,
-                valid_df=sample_dataframe.copy(),
-                test_df=sample_dataframe.copy(),
-                y_train=sample_series,
-                y_valid=sample_series.copy(),
-            )
+        trainer._apply_processors(
+            processors=[mock_processor],
+            train_df=sample_dataframe,
+            valid_df=sample_dataframe.copy(),
+            test_df=sample_dataframe.copy(),
+            y_train=sample_series,
+            y_valid=sample_series.copy(),
         )
 
         mock_processor.fit_transform.assert_called_once()
@@ -222,23 +227,25 @@ def test_crossvalidationtrainer_apply_processors_handles_fit_resample_processors
         - Target data is updated from resampling
     """
     mock_processor = Mock()
-    resampled_X = sample_dataframe.iloc[:50]  # Simulate resampling to fewer samples
+    resampled_x = sample_dataframe.iloc[:50]  # Simulate resampling to fewer samples
     resampled_y = sample_series.iloc[:50]
-    mock_processor.fit_resample.return_value = (resampled_X, resampled_y)
+    mock_processor.fit_resample.return_value = (resampled_x, resampled_y)
 
     trainer = CrossValidationTrainer("Accuracy", "classification")
 
-    train_df, valid_df, test_df, y_train_out, y_valid_out = trainer._apply_processors(
-        processors=[mock_processor],
-        train_df=sample_dataframe,
-        valid_df=sample_dataframe.copy(),
-        test_df=sample_dataframe.copy(),
-        y_train=sample_series,
-        y_valid=sample_series.copy(),
+    train_df, _valid_df, _test_df, y_train_out, _y_valid_out = (
+        trainer._apply_processors(
+            processors=[mock_processor],
+            train_df=sample_dataframe,
+            valid_df=sample_dataframe.copy(),
+            test_df=sample_dataframe.copy(),
+            y_train=sample_series,
+            y_valid=sample_series.copy(),
+        )
     )
 
     mock_processor.fit_resample.assert_called_once()
-    pd.testing.assert_frame_equal(train_df, resampled_X)
+    pd.testing.assert_frame_equal(train_df, resampled_x)
     pd.testing.assert_series_equal(y_train_out, resampled_y)
 
 
@@ -259,15 +266,20 @@ def test_crossvalidationtrainer_fit_executes_cross_validation_loop(
     X, y = binary_classification_data
     trainer = CrossValidationTrainer("Accuracy", "classification", verbose=False)
 
-    train_scores, valid_scores, test_preds = trainer.fit(
+    train_scores, valid_scores, _test_preds = trainer.fit(
         logistic_regression_estimator, X, y
     )
 
-    assert len(train_scores) == 5  # Default 5-fold CV
-    assert len(valid_scores) == 5
-    assert len(trainer.fitted_estimators_) == 5
-    assert all(isinstance(score, float) for score in train_scores)
-    assert all(isinstance(score, float) for score in valid_scores)
+    if not (len(train_scores) == 5):
+        raise AssertionError()
+    if not (len(valid_scores) == 5):
+        raise AssertionError()
+    if not (len(trainer.fitted_estimators_) == 5):
+        raise AssertionError()
+    if not (all(isinstance(score, float) for score in train_scores)):
+        raise AssertionError()
+    if not (all(isinstance(score, float) for score in valid_scores)):
+        raise AssertionError()
 
 
 def test_crossvalidationtrainer_fit_handles_test_data_averaging(
@@ -288,13 +300,16 @@ def test_crossvalidationtrainer_fit_handles_test_data_averaging(
     X_test = X.iloc[:20]  # Use subset as test data
     trainer = CrossValidationTrainer("Accuracy", "classification", verbose=False)
 
-    train_scores, valid_scores, test_preds = trainer.fit(
+    _train_scores, _valid_scores, test_preds = trainer.fit(
         logistic_regression_estimator, X, y, X_test=X_test
     )
 
-    assert test_preds is not None
-    assert len(test_preds) == len(X_test)
-    assert isinstance(test_preds, np.ndarray)
+    if not (test_preds is not None):
+        raise AssertionError()
+    if not (len(test_preds) == len(X_test)):
+        raise AssertionError()
+    if not (isinstance(test_preds, np.ndarray)):
+        raise AssertionError()
 
 
 def test_crossvalidationtrainer_predict_returns_averaged_predictions(
@@ -317,9 +332,12 @@ def test_crossvalidationtrainer_predict_returns_averaged_predictions(
 
     predictions = trainer.predict(X)
 
-    assert len(predictions) == len(X)
-    assert predictions.dtype in [np.int32, np.int64]  # Classification predictions
-    assert all(pred in [0, 1] for pred in predictions)  # Binary classification
+    if not (len(predictions) == len(X)):
+        raise AssertionError()
+    if not (predictions.dtype in [np.int32, np.int64]):
+        raise AssertionError()
+    if not (all(pred in [0, 1] for pred in predictions)):
+        raise AssertionError()
 
 
 def test_crossvalidationtrainer_predict_raises_error_when_not_fitted():
@@ -356,11 +374,12 @@ def test_crossvalidationtrainer_predict_proba_returns_averaged_probabilities(
 
     probabilities = trainer.predict_proba(X)
 
-    assert probabilities.shape == (len(X), 2)  # Binary classification
-    assert np.allclose(probabilities.sum(axis=1), 1.0)  # Probabilities sum to 1
-    assert np.all(probabilities >= 0) and np.all(
-        probabilities <= 1
-    )  # Valid probability range
+    if not (probabilities.shape == (len(X), 2)):
+        raise AssertionError()
+    if not (np.allclose(probabilities.sum(axis=1), 1.0)):
+        raise AssertionError()
+    if not (np.all(probabilities >= 0) and np.all(probabilities <= 1)):
+        raise AssertionError()
 
 
 def test_crossvalidationtrainer_predict_proba_raises_error_for_regression():
@@ -400,13 +419,19 @@ def test_crossvalidationtrainer_predict_with_confidence_returns_regression_metri
 
     confidence_results = trainer.predict_with_confidence(X)
 
-    assert "prediction" in confidence_results
-    assert "std" in confidence_results
-    assert "ci_95_lower" in confidence_results
-    assert "ci_95_upper" in confidence_results
+    if not ("prediction" in confidence_results):
+        raise AssertionError()
+    if not ("std" in confidence_results):
+        raise AssertionError()
+    if not ("ci_95_lower" in confidence_results):
+        raise AssertionError()
+    if not ("ci_95_upper" in confidence_results):
+        raise AssertionError()
 
-    assert len(confidence_results["prediction"]) == len(X)
-    assert len(confidence_results["std"]) == len(X)
+    if not (len(confidence_results["prediction"]) == len(X)):
+        raise AssertionError()
+    if not (len(confidence_results["std"]) == len(X)):
+        raise AssertionError()
 
 
 def test_crossvalidationtrainer_predict_with_confidence_returns_classification_metrics(
@@ -429,14 +454,21 @@ def test_crossvalidationtrainer_predict_with_confidence_returns_classification_m
 
     confidence_results = trainer.predict_with_confidence(X)
 
-    assert "prediction" in confidence_results
-    assert "confidence" in confidence_results
-    assert "disagreement" in confidence_results
-    assert "proba" in confidence_results
+    if not ("prediction" in confidence_results):
+        raise AssertionError()
+    if not ("confidence" in confidence_results):
+        raise AssertionError()
+    if not ("disagreement" in confidence_results):
+        raise AssertionError()
+    if not ("proba" in confidence_results):
+        raise AssertionError()
 
-    assert len(confidence_results["prediction"]) == len(X)
-    assert len(confidence_results["confidence"]) == len(X)
-    assert confidence_results["proba"].shape == (len(X), 2)  # Binary classification
+    if not (len(confidence_results["prediction"]) == len(X)):
+        raise AssertionError()
+    if not (len(confidence_results["confidence"]) == len(X)):
+        raise AssertionError()
+    if not (confidence_results["proba"].shape == (len(X), 2)):
+        raise AssertionError()
 
 
 def test_crossvalidationtrainer_order_x_for_estimator_reorders_features_correctly(
@@ -456,20 +488,21 @@ def test_crossvalidationtrainer_order_x_for_estimator_reorders_features_correctl
     mock_estimator = Mock(spec=["feature_names_"])
     mock_estimator.feature_names_in_ = ["categorical_1", "numeric_1", "integer_1"]
 
-    reordered_X = CrossValidationTrainer._order_X_for_estimator(
+    reordered_x = CrossValidationTrainer._order_X_for_estimator(
         sample_dataframe, mock_estimator
     )
 
     expected_order = ["categorical_1", "numeric_1", "integer_1"]
-    assert list(reordered_X.columns) == expected_order
+    if not (list(reordered_x.columns) == expected_order):
+        raise AssertionError()
 
     # Test fallback when no feature names available
     mock_estimator_no_features = Mock(spec=[])  # No feature name attributes
-    result_X = CrossValidationTrainer._order_X_for_estimator(
+    result_x = CrossValidationTrainer._order_X_for_estimator(
         sample_dataframe, mock_estimator_no_features
     )
 
-    pd.testing.assert_frame_equal(result_X, sample_dataframe)
+    pd.testing.assert_frame_equal(result_x, sample_dataframe)
 
 
 def test_crossvalidationtrainer_order_x_for_estimator_handles_normalized_feature_names():
@@ -495,9 +528,10 @@ def test_crossvalidationtrainer_order_x_for_estimator_handles_normalized_feature
         "petal_width_(cm)",
     ]
 
-    reordered_X = CrossValidationTrainer._order_X_for_estimator(X, mock_estimator)
+    reordered_x = CrossValidationTrainer._order_X_for_estimator(X, mock_estimator)
 
-    assert list(reordered_X.columns) == list(X.columns)
+    if not (list(reordered_x.columns) == list(X.columns)):
+        raise AssertionError()
 
 
 def test_crossvalidationtrainer_fit_maps_verbose_one_and_includes_train_in_eval_set(
@@ -532,11 +566,17 @@ def test_crossvalidationtrainer_fit_maps_verbose_one_and_includes_train_in_eval_
         mock_fit.side_effect = _fake_fit_and_predict
         trainer.fit(logistic_regression_estimator, X, y)
 
-    assert captured_kwargs
-    assert all(kwargs.get("fit_verbose") is True for kwargs in captured_kwargs)
-    assert all(
-        kwargs.get("include_train_in_eval_set") is True for kwargs in captured_kwargs
-    )
+    if not (captured_kwargs):
+        raise AssertionError()
+    if not (all(kwargs.get("fit_verbose") is True for kwargs in captured_kwargs)):
+        raise AssertionError()
+    if not (
+        all(
+            kwargs.get("include_train_in_eval_set") is True
+            for kwargs in captured_kwargs
+        )
+    ):
+        raise AssertionError()
 
 
 if __name__ == "__main__":

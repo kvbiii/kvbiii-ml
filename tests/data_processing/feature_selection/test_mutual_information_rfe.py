@@ -13,6 +13,7 @@ from kvbiii_ml.data_processing.feature_selection.mutual_information_rfe import (
 
 @pytest.fixture
 def mi_rfe_data():
+    """Provides a synthetic classification dataset for MI-based RFE tests."""
     rng = np.random.default_rng(5)
     X = pd.DataFrame(rng.normal(size=(80, 6)), columns=[f"f{i}" for i in range(6)])
     y = pd.Series(
@@ -22,6 +23,7 @@ def mi_rfe_data():
 
 
 def test_removal_schedule_basic():
+    """Tests that the removal schedule is positive and never removes all features."""
     selector = MutualInformationRecursiveFeatureElimination(
         estimator=LogisticRegression(max_iter=100, solver="liblinear"),
         problem_type="classification",
@@ -31,12 +33,16 @@ def test_removal_schedule_basic():
         verbose=False,
     )
     sched = selector.compute_removal_schedule(10)
-    assert isinstance(sched, list)
-    assert all(n > 0 for n in sched)
-    assert sum(sched) < 10  # never removes all features
+    if not (isinstance(sched, list)):
+        raise AssertionError()
+    if not (all(n > 0 for n in sched)):
+        raise AssertionError()
+    if not (sum(sched) < 10):
+        raise AssertionError()
 
 
 def test_prepare_x_y_categorical_mi_rfe():
+    """Tests that _prepare_X_y_for_mi encodes categorical columns and preserves y."""
     selector = MutualInformationRecursiveFeatureElimination(
         estimator=LogisticRegression(max_iter=50, solver="liblinear"),
         problem_type="classification",
@@ -51,11 +57,14 @@ def test_prepare_x_y_categorical_mi_rfe():
         }
     )
     y = pd.Series([0, 1, 0, 1])
-    Xp, yp = selector._prepare_X_y_for_mi(X, y)
-    assert "discrete_features" in selector.mi_kwargs
+    prepared_x, prepared_y = selector._prepare_X_y_for_mi(X, y)
+    if not ("discrete_features" in selector.mi_kwargs):
+        raise AssertionError()
     # categorical column encoded numerically
-    assert pd.api.types.is_numeric_dtype(Xp["b"])  # now codes
-    assert yp.equals(y)
+    if not (pd.api.types.is_numeric_dtype(prepared_x["b"])):
+        raise AssertionError()
+    if not (prepared_y.equals(y)):
+        raise AssertionError()
 
 
 @pytest.mark.skip(
@@ -91,20 +100,29 @@ def test_run_returns_selected_features(mi_rfe_data):
     # The issue is in the source code where CrossValidationTrainer is called without problem_type
     result = selector.run(X, y)
 
-    assert set(result.keys()) == {
-        "selected_features",
-        "selected_features_names",
-        "history",
-    }
+    if not (
+        set(result.keys())
+        == {
+            "selected_features",
+            "selected_features_names",
+            "history",
+        }
+    ):
+        raise AssertionError()
     history = result["history"]
-    assert not history.empty
-    assert history.iloc[0]["step"] == 0
-    assert len(result["selected_features"]) <= X.shape[1]
+    if not (not history.empty):
+        raise AssertionError()
+    if not (history.iloc[0]["step"] == 0):
+        raise AssertionError()
+    if not (len(result["selected_features"]) <= X.shape[1]):
+        raise AssertionError()
     # Selected features subset of original
-    assert set(result["selected_features"]).issubset(set(X.columns))
+    if not (set(result["selected_features"]).issubset(set(X.columns))):
+        raise AssertionError()
 
 
 def test_select_features_weighted_score_edge():
+    """Tests select_features_weighted_score on a history with improvement then a drop."""
     selector = MutualInformationRecursiveFeatureElimination(
         estimator=LogisticRegression(max_iter=50, solver="liblinear"),
         problem_type="classification",
@@ -145,8 +163,10 @@ def test_select_features_weighted_score_edge():
         ]
     )
     selected, best_metric = selector.select_features_weighted_score(history, alpha=0.8)
-    assert isinstance(selected, list)
-    assert best_metric is not None
+    if not (isinstance(selected, list)):
+        raise AssertionError()
+    if not (best_metric is not None):
+        raise AssertionError()
 
 
 if __name__ == "__main__":

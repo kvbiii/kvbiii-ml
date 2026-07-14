@@ -68,7 +68,9 @@ class CalibratedModel:
                 not "isotonic"/"sigmoid", or calibration_size is not in (0, 1).
         """
         if problem_type != "classification":
-            raise ValueError("CalibratedModel only supports problem_type='classification'.")
+            raise ValueError(
+                "CalibratedModel only supports problem_type='classification'."
+            )
         if calibration_method not in {"isotonic", "sigmoid"}:
             raise ValueError("calibration_method must be 'isotonic' or 'sigmoid'.")
         if not 0.0 < calibration_size < 1.0:
@@ -155,11 +157,15 @@ class CalibratedModel:
             RuntimeError: If called before fit().
         """
         if self.fitted_estimator_ is None:
-            raise RuntimeError("CalibratedModel must be fitted before calling predict_proba().")
+            raise RuntimeError(
+                "CalibratedModel must be fitted before calling predict_proba()."
+            )
 
         X_ord = CrossValidationTrainer._order_X_for_estimator(X, self.fitted_estimator_)
         raw = self._ensure_proba_matrix(self.fitted_estimator_.predict_proba(X_ord))
-        return _apply_calibrator(self.calibrator_, raw, self.classes_, self.calibration_method)
+        return _apply_calibrator(
+            self.calibrator_, raw, self.classes_, self.calibration_method
+        )
 
     @staticmethod
     def _ensure_proba_matrix(probas: np.ndarray) -> np.ndarray:
@@ -230,9 +236,24 @@ if __name__ == "__main__":
     y_ser = pd.Series(y_arr, name="target")
 
     estimators = [
-        LGBMClassifier(n_estimators=200, early_stopping_rounds=ES, verbose=-1, random_state=RANDOM_STATE),
-        CatBoostClassifier(iterations=200, early_stopping_rounds=ES, verbose=0, random_state=RANDOM_STATE + 2),
-        CatBoostClassifier(iterations=200, early_stopping_rounds=ES, verbose=0, random_state=RANDOM_STATE + 3),
+        LGBMClassifier(
+            n_estimators=200,
+            early_stopping_rounds=ES,
+            verbose=-1,
+            random_state=RANDOM_STATE,
+        ),
+        CatBoostClassifier(
+            iterations=200,
+            early_stopping_rounds=ES,
+            verbose=0,
+            random_state=RANDOM_STATE + 2,
+        ),
+        CatBoostClassifier(
+            iterations=200,
+            early_stopping_rounds=ES,
+            verbose=0,
+            random_state=RANDOM_STATE + 3,
+        ),
     ]
     ensemble = EnsembleModel(estimators=estimators, problem_type="classification")
     cv = CrossValidationTrainer(
@@ -250,7 +271,9 @@ if __name__ == "__main__":
     start = time.perf_counter()
     _, valid_scores, _ = cv.fit(calibrated, X_df, y_ser)
     elapsed = time.perf_counter() - start
-    print(f"  Calibrated CV valid: {np.mean(valid_scores):.4f} ± {np.std(valid_scores):.4f}")
+    print(
+        f"  Calibrated CV valid: {np.mean(valid_scores):.4f} ± {np.std(valid_scores):.4f}"
+    )
     print(f"  Time for CV fit: {elapsed:.2f} seconds")
 
     calibrated.fit(X_df, y_ser)

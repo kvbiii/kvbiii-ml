@@ -1,10 +1,11 @@
 """Tests for kvbiii_ml.modeling.optimization.cutoff_tuning module."""
 
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.metrics import f1_score
 
 from kvbiii_ml.modeling.optimization.cutoff_tuning import (
     apply_optimal_cutoff,
@@ -84,19 +85,20 @@ def test_find_optimal_cutoff_binary_classification(binary_classification_predict
     )
 
     # Check returned value is a valid cutoff
-    assert isinstance(optimal_cutoff, float)
-    assert 0 <= optimal_cutoff <= 1
+    if not (isinstance(optimal_cutoff, float)):
+        raise AssertionError()
+    if not (0 <= optimal_cutoff <= 1):
+        raise AssertionError()
 
     # Verify optimal cutoff performance is better than default 0.5
     predictions_default = (y_probas >= 0.5).astype(int)
     predictions_optimal = (y_probas >= optimal_cutoff).astype(int)
 
-    from sklearn.metrics import f1_score
-
     f1_default = f1_score(y_true, predictions_default)
     f1_optimal = f1_score(y_true, predictions_optimal)
 
-    assert f1_optimal >= f1_default
+    if not (f1_optimal >= f1_default):
+        raise AssertionError()
 
 
 @patch("kvbiii_ml.modeling.optimization.cutoff_tuning.roc_curve")
@@ -129,7 +131,8 @@ def test_find_optimal_cutoff_with_roc_optimization(
     mock_roc_curve.assert_called_once()
 
     # Implementation selects threshold at max J-statistic (here 0.6 given array ordering)
-    assert optimal_cutoff == 0.6
+    if not (optimal_cutoff == 0.6):
+        raise AssertionError()
 
 
 def test_evaluate_cutoffs_returns_performance_metrics(
@@ -153,22 +156,34 @@ def test_evaluate_cutoffs_returns_performance_metrics(
     )
 
     # Check return structure
-    assert isinstance(result, pd.DataFrame)
-    assert "cutoff" in result.columns
-    assert "accuracy" in result.columns
-    assert "precision" in result.columns
-    assert "recall" in result.columns
-    assert "f1" in result.columns
+    if not (isinstance(result, pd.DataFrame)):
+        raise AssertionError()
+    if not ("cutoff" in result.columns):
+        raise AssertionError()
+    if not ("accuracy" in result.columns):
+        raise AssertionError()
+    if not ("precision" in result.columns):
+        raise AssertionError()
+    if not ("recall" in result.columns):
+        raise AssertionError()
+    if not ("f1" in result.columns):
+        raise AssertionError()
 
     # Check all cutoffs are evaluated
-    assert len(result) == len(cutoffs)
-    assert set(result["cutoff"]) == set(cutoffs)
+    if not (len(result) == len(cutoffs)):
+        raise AssertionError()
+    if not (set(result["cutoff"]) == set(cutoffs)):
+        raise AssertionError()
 
     # Verify metrics are within valid ranges
-    assert (0 <= result["accuracy"]).all() and (result["accuracy"] <= 1).all()
-    assert (0 <= result["precision"]).all() and (result["precision"] <= 1).all()
-    assert (0 <= result["recall"]).all() and (result["recall"] <= 1).all()
-    assert (0 <= result["f1"]).all() and (result["f1"] <= 1).all()
+    if not ((0 <= result["accuracy"]).all() and (result["accuracy"] <= 1).all()):
+        raise AssertionError()
+    if not ((0 <= result["precision"]).all() and (result["precision"] <= 1).all()):
+        raise AssertionError()
+    if not ((0 <= result["recall"]).all() and (result["recall"] <= 1).all()):
+        raise AssertionError()
+    if not ((0 <= result["f1"]).all() and (result["f1"] <= 1).all()):
+        raise AssertionError()
 
 
 def test_apply_optimal_cutoff_binary_classification(binary_classification_predictions):
@@ -186,8 +201,10 @@ def test_apply_optimal_cutoff_binary_classification(binary_classification_predic
 
     # Test with default cutoff (0.5)
     predictions_default = apply_optimal_cutoff(y_probas)
-    assert set(np.unique(predictions_default)).issubset({0, 1})
-    assert predictions_default.shape == y_true.shape
+    if not (set(np.unique(predictions_default)).issubset({0, 1})):
+        raise AssertionError()
+    if not (predictions_default.shape == y_true.shape):
+        raise AssertionError()
 
     # Test with custom cutoff
     custom_cutoff = 0.7
@@ -216,8 +233,10 @@ def test_apply_optimal_cutoff_multiclass(multi_class_probabilities):
     predictions = np.argmax(y_probas, axis=1)
 
     # Check predictions have expected shape and values
-    assert predictions.shape == y_true.shape
-    assert set(np.unique(predictions)).issubset({0, 1, 2})
+    if not (predictions.shape == y_true.shape):
+        raise AssertionError()
+    if not (set(np.unique(predictions)).issubset({0, 1, 2})):
+        raise AssertionError()
 
     # Check predictions match argmax of probabilities
     expected_predictions = np.argmax(y_probas, axis=1)
@@ -253,12 +272,15 @@ def test_find_optimal_cutoff_with_custom_metric(binary_classification_prediction
     )
 
     # Check returned value is a valid cutoff
-    assert isinstance(optimal_cutoff, float)
-    assert 0 <= optimal_cutoff <= 1
+    if not (isinstance(optimal_cutoff, float)):
+        raise AssertionError()
+    if not (0 <= optimal_cutoff <= 1):
+        raise AssertionError()
 
     # Higher cutoff should generally improve specificity for this metric
     # Any valid cutoff in range acceptable; previous >0.5 assumption removed
-    assert 0 <= optimal_cutoff <= 1
+    if not (0 <= optimal_cutoff <= 1):
+        raise AssertionError()
 
 
 if __name__ == "__main__":

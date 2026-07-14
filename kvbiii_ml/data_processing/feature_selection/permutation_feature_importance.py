@@ -507,7 +507,7 @@ class PermutationRecursiveFeatureElimination:
                     with warnings.catch_warnings():
                         warnings.simplefilter("ignore")
                         clone(step).fit(X_current.head(5))
-                except Exception:
+                except (ValueError, TypeError, KeyError, AttributeError, IndexError):
                     continue
             new_steps.append((name, cloned_step))
 
@@ -894,12 +894,14 @@ if __name__ == "__main__":
         )
         summary = selector.run(X, y)
 
-        assert len(summary["selected_features"]) > 0, "no features selected"
+        if not (len(summary["selected_features"]) > 0):
+            raise AssertionError("no features selected")
         if pipeline is not None:
             removed_names = summary["history"]["removed_feature_name"].dropna().tolist()
-            assert any(
-                "_PREPROCESS_" in str(f) for f in removed_names
-            ), "no derived features appear in removal history - pipeline did not expand"
+            if not (any("_PREPROCESS_" in str(f) for f in removed_names)):
+                raise AssertionError(
+                    "no derived features appear in removal history - pipeline did not expand"
+                )
 
         n_selected = len(summary["selected_features"])
         print(f"  {label:<55} selected={n_selected} features\n")

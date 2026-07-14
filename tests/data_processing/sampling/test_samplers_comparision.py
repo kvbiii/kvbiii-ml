@@ -22,9 +22,12 @@ class TestFoldwiseSampler:
         """
         sampler = FoldwiseSampler()
 
-        assert sampler.strategy == "none"
-        assert sampler.sampler_params == {}
-        assert sampler.sampler is None
+        if not (sampler.strategy == "none"):
+            raise AssertionError()
+        if not (sampler.sampler_params == {}):
+            raise AssertionError()
+        if not (sampler.sampler is None):
+            raise AssertionError()
 
     def test_foldwisesampler_init_custom_parameters(self):
         """Tests FoldwiseSampler initialization with custom parameters.
@@ -36,8 +39,10 @@ class TestFoldwiseSampler:
         params = {"random_state": 42, "sampling_strategy": 0.5}
         sampler = FoldwiseSampler(strategy="random_over", sampler_params=params)
 
-        assert sampler.strategy == "random_over"
-        assert sampler.sampler_params == params
+        if not (sampler.strategy == "random_over"):
+            raise AssertionError()
+        if not (sampler.sampler_params == params):
+            raise AssertionError()
 
     def test_foldwisesampler_init_none_sampler_params(self):
         """Tests FoldwiseSampler initialization with None sampler_params.
@@ -47,7 +52,8 @@ class TestFoldwiseSampler:
         """
         sampler = FoldwiseSampler(strategy="smote", sampler_params=None)
 
-        assert sampler.sampler_params == {}
+        if not (sampler.sampler_params == {}):
+            raise AssertionError()
 
     def test_foldwisesampler_fit_none_strategy(self, binary_classification_data):
         """Tests fit method with 'none' strategy.
@@ -63,7 +69,8 @@ class TestFoldwiseSampler:
 
         sampler.fit(X, y)
 
-        assert sampler.sampler is None
+        if not (sampler.sampler is None):
+            raise AssertionError()
 
     @patch("kvbiii_ml.data_processing.sampling.samplers_comparision.SMOTENC")
     def test_foldwisesampler_fit_smote_strategy(
@@ -85,7 +92,8 @@ class TestFoldwiseSampler:
         sampler.fit(X, y)
 
         mock_smotenc.assert_called_once_with(**params)
-        assert sampler.sampler == mock_smotenc.return_value
+        if not (sampler.sampler == mock_smotenc.return_value):
+            raise AssertionError()
 
     @patch("kvbiii_ml.data_processing.sampling.samplers_comparision.RandomOverSampler")
     def test_foldwisesampler_fit_random_over_strategy(
@@ -107,7 +115,8 @@ class TestFoldwiseSampler:
         sampler.fit(X, y)
 
         mock_ros.assert_called_once_with(**params)
-        assert sampler.sampler == mock_ros.return_value
+        if not (sampler.sampler == mock_ros.return_value):
+            raise AssertionError()
 
     @patch("kvbiii_ml.data_processing.sampling.samplers_comparision.RandomUnderSampler")
     def test_foldwisesampler_fit_random_under_strategy(
@@ -129,7 +138,8 @@ class TestFoldwiseSampler:
         sampler.fit(X, y)
 
         mock_rus.assert_called_once_with(**params)
-        assert sampler.sampler == mock_rus.return_value
+        if not (sampler.sampler == mock_rus.return_value):
+            raise AssertionError()
 
     def test_foldwisesampler_fit_unknown_strategy_raises_error(
         self, binary_classification_data
@@ -165,10 +175,10 @@ class TestFoldwiseSampler:
         X, y = binary_classification_data
         sampler = FoldwiseSampler(strategy="none")
 
-        X_resampled, y_resampled = sampler.fit_resample(X, y)
+        resampled_x, resampled_y = sampler.fit_resample(X, y)
 
-        pd.testing.assert_frame_equal(X_resampled, X)
-        pd.testing.assert_series_equal(y_resampled, y)
+        pd.testing.assert_frame_equal(resampled_x, X)
+        pd.testing.assert_series_equal(resampled_y, y)
 
     def test_foldwisesampler_fit_resample_with_mock_sampler(
         self, binary_classification_data
@@ -188,20 +198,24 @@ class TestFoldwiseSampler:
         # Create mock sampler
         mock_sampler = Mock()
         # Match the number of features in the binary_classification_data fixture
-        resampled_X = np.random.rand(3, X.shape[1])  # Same number of features
+        resampled_x = np.random.rand(3, X.shape[1])  # Same number of features
         resampled_y = np.array([0, 1, 0])
-        mock_sampler.fit_resample.return_value = (resampled_X, resampled_y)
+        mock_sampler.fit_resample.return_value = (resampled_x, resampled_y)
 
         sampler = FoldwiseSampler(strategy="none")
         sampler.sampler = mock_sampler
 
-        X_result, y_result = sampler.fit_resample(X, y)
+        result_x, result_y = sampler.fit_resample(X, y)
 
         mock_sampler.fit_resample.assert_called_once_with(X, y)
-        assert isinstance(X_result, pd.DataFrame)
-        assert isinstance(y_result, pd.Series)
-        assert list(X_result.columns) == list(X.columns)
-        assert y_result.name == y.name
+        if not (isinstance(result_x, pd.DataFrame)):
+            raise AssertionError()
+        if not (isinstance(result_y, pd.Series)):
+            raise AssertionError()
+        if not (list(result_x.columns) == list(X.columns)):
+            raise AssertionError()
+        if not (result_y.name == y.name):
+            raise AssertionError()
 
     def test_foldwisesampler_fit_transform_calls_fit_and_fit_resample(
         self, binary_classification_data
@@ -251,7 +265,7 @@ class TestFoldwiseSampler:
         sampler = FoldwiseSampler(
             strategy="random_over", sampler_params={"random_state": 42}
         )
-        X_result, y_result = sampler.fit_transform(X, y)
+        sampler.fit_transform(X, y)
 
         mock_ros.assert_called_once_with(random_state=42)
         mock_instance.fit_resample.assert_called_once_with(X, y)
@@ -274,11 +288,14 @@ class TestFoldwiseSampler:
         original_name = y.name
 
         sampler = FoldwiseSampler(strategy="none")
-        X_result, y_result = sampler.fit_resample(X, y)
+        result_x, result_y = sampler.fit_resample(X, y)
 
-        assert X_result.columns.tolist() == original_columns
-        assert y_result.name == original_name
-        assert all(X_result.dtypes == X.dtypes)
+        if not (result_x.columns.tolist() == original_columns):
+            raise AssertionError()
+        if not (result_y.name == original_name):
+            raise AssertionError()
+        if not (all(result_x.dtypes == X.dtypes)):
+            raise AssertionError()
 
     def test_foldwisesampler_empty_sampler_params_handling(
         self, binary_classification_data

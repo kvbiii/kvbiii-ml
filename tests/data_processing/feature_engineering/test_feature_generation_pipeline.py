@@ -12,21 +12,27 @@ from kvbiii_ml.data_processing.feature_engineering.feature_generation_pipeline i
 
 
 class DummyAdder:
+    """Minimal fit/transform stub that appends a constant ADDED column."""
+
     def __init__(self):
         self.fitted = False
 
-    def fit(self, _X, _y=None):  # noqa: D401
+    def fit(self, _x, _y=None):
+        """Marks the stub as fitted without learning anything."""
         self.fitted = True
         return self
 
     def transform(self, X):
-        assert self.fitted
+        """Returns a copy of X with a constant ADDED column appended."""
+        if not (self.fitted):
+            raise AssertionError()
         X = X.copy()
         X["ADDED"] = 1
         return X
 
 
 def test_pipeline_basic_flow():
+    """Tests the pipeline's end-to-end fit_transform flow with custom preprocessing."""
     df = pd.DataFrame({"A": ["a", "b", "a", "b"], "B": ["x", "y", "x", "y"]})
 
     def before(df_in: pd.DataFrame) -> pd.DataFrame:
@@ -42,11 +48,14 @@ def test_pipeline_basic_flow():
     )
     transformed = pipe.fit_transform(df, y=pd.Series([0, 1, 0, 1]))
     cross_cols = steps[0].get_feature_names()
-    assert any(col in transformed.columns for col in cross_cols)
-    assert "ADDED" in transformed.columns
+    if not (any(col in transformed.columns for col in cross_cols)):
+        raise AssertionError()
+    if not ("ADDED" in transformed.columns):
+        raise AssertionError()
 
 
 def test_pipeline_transform_reuses_fitted_steps():
+    """Tests that transform reuses steps already fitted during fit."""
     df = pd.DataFrame({"A": ["a", "b"], "B": ["x", "y"]})
     steps = [CrossFeatureGenerator(features_names=[], degree=2)]
     pipe = FeatureGenerationPipeline(
@@ -54,12 +63,18 @@ def test_pipeline_transform_reuses_fitted_steps():
     )
     pipe.fit(df, y=pd.Series([0, 1]))
     out = pipe.transform(df)
-    assert set(out.columns) >= set(df.columns)
+    if not (set(out.columns) >= set(df.columns)):
+        raise AssertionError()
 
 
 def test_pipeline_error_on_missing_fit_method():
+    """Tests that the pipeline raises ValueError when a step lacks a fit method."""
+
     class NoFit:
+        """Preprocessing step stub deliberately missing a fit method."""
+
         def transform(self, X):  # pragma: no cover - negative path
+            """Returns X unchanged."""
             return X
 
     df = pd.DataFrame({"A": [1, 2], "B": [3, 4]})
@@ -71,6 +86,7 @@ def test_pipeline_error_on_missing_fit_method():
 
 
 def test_pipeline_supports_sklearn_preprocessing_transformer():
+    """Tests that the pipeline works with a real sklearn preprocessing transformer."""
     sklearn_preprocessing = pytest.importorskip("sklearn.preprocessing")
     target_encoder = getattr(sklearn_preprocessing, "TargetEncoder", None)
     if target_encoder is None:
@@ -85,14 +101,20 @@ def test_pipeline_supports_sklearn_preprocessing_transformer():
     )
 
     transformed = pipe.fit_transform(df, y=y)
-    assert isinstance(transformed, pd.DataFrame)
-    assert list(transformed.columns) == ["A", "B"]
-    assert transformed.shape == df.shape
+    if not (isinstance(transformed, pd.DataFrame)):
+        raise AssertionError()
+    if not (list(transformed.columns) == ["A", "B"]):
+        raise AssertionError()
+    if not (transformed.shape == df.shape):
+        raise AssertionError()
 
     transformed_test = pipe.transform(df)
-    assert isinstance(transformed_test, pd.DataFrame)
-    assert list(transformed_test.columns) == ["A", "B"]
-    assert transformed_test.shape == df.shape
+    if not (isinstance(transformed_test, pd.DataFrame)):
+        raise AssertionError()
+    if not (list(transformed_test.columns) == ["A", "B"]):
+        raise AssertionError()
+    if not (transformed_test.shape == df.shape):
+        raise AssertionError()
 
 
 if __name__ == "__main__":

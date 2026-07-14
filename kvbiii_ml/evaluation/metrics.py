@@ -61,10 +61,12 @@ def _brier_score(y_true: np.ndarray, y_prob: np.ndarray) -> float:
             return float(brier_score_loss(y_true_arr, y_prob_arr[:, 1]))
         classes = np.unique(y_true_arr)
         return float(
-            np.mean([
-                brier_score_loss((y_true_arr == c).astype(int), y_prob_arr[:, i])
-                for i, c in enumerate(classes)
-            ])
+            np.mean(
+                [
+                    brier_score_loss((y_true_arr == c).astype(int), y_prob_arr[:, i])
+                    for i, c in enumerate(classes)
+                ]
+            )
         )
     return float(brier_score_loss(y_true_arr, y_prob_arr))
 
@@ -100,9 +102,13 @@ METRICS_NAMES: dict[str, MetricFunction] = {
     ),
     "Roc AUC": lambda y_true, y_score: roc_auc_score(
         y_true,
-        y_score[:, 1] if (
-            hasattr(y_score, "ndim") and y_score.ndim == 2 and y_score.shape[1] == 2
-        ) else y_score,
+        (
+            y_score[:, 1]
+            if (
+                hasattr(y_score, "ndim") and y_score.ndim == 2 and y_score.shape[1] == 2
+            )
+            else y_score
+        ),
     ),
     "Roc AUC (Multi-class)": lambda y_true, y_proba: roc_auc_score(
         y_true, y_proba, multi_class="ovr", average="macro"
@@ -124,7 +130,13 @@ METRICS: dict[str, tuple[MetricFunction, str, str]] = {
         (
             "probs"
             if key
-            in ["Roc AUC", "Roc AUC (Multi-class)", "Mean Average Precision", "Log Loss", "Brier Score"]
+            in [
+                "Roc AUC",
+                "Roc AUC (Multi-class)",
+                "Mean Average Precision",
+                "Log Loss",
+                "Brier Score",
+            ]
             else "preds"
         ),
         (

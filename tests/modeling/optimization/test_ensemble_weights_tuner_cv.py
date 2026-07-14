@@ -17,6 +17,7 @@ from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
 @pytest.fixture
 def small_classification_data() -> tuple[pd.DataFrame, pd.Series]:
+    """Provides a small non-linearly-separable binary classification dataset."""
     rng = np.random.default_rng(17)
     X = pd.DataFrame(rng.normal(size=(60, 4)), columns=[f"f{i}" for i in range(4)])
     # Non-linearly separable target to avoid trivial perfect scores
@@ -29,6 +30,7 @@ def small_classification_data() -> tuple[pd.DataFrame, pd.Series]:
 
 @pytest.fixture
 def small_regression_data() -> tuple[pd.DataFrame, pd.Series]:
+    """Provides a small linear regression dataset."""
     rng = np.random.default_rng(42)
     X = pd.DataFrame(rng.normal(size=(50, 5)), columns=[f"r{i}" for i in range(5)])
     y = pd.Series(
@@ -61,10 +63,14 @@ def test_tuner_classification_positive_weights(small_classification_data):
 
     study = tuner.tune(X, y)
 
-    assert study.best_value is not None
-    assert tuner.best_weights is not None
-    assert np.isclose(tuner.best_weights.sum(), 1.0, atol=1e-6)
-    assert np.all(tuner.best_weights >= 0)
+    if not (study.best_value is not None):
+        raise AssertionError()
+    if not (tuner.best_weights is not None):
+        raise AssertionError()
+    if not (np.isclose(tuner.best_weights.sum(), 1.0, atol=1e-6)):
+        raise AssertionError()
+    if not (np.all(tuner.best_weights >= 0)):
+        raise AssertionError()
 
 
 def test_tuner_classification_negative_weights_path(small_classification_data):
@@ -84,11 +90,14 @@ def test_tuner_classification_negative_weights_path(small_classification_data):
         allow_negative_weights=True,
     )
     tuner.tune(X, y)
-    assert tuner.best_weights is not None
+    if not (tuner.best_weights is not None):
+        raise AssertionError()
     l1 = np.sum(np.abs(tuner.best_weights))
-    assert np.isclose(l1, 1.0, atol=1e-6)
+    if not (np.isclose(l1, 1.0, atol=1e-6)):
+        raise AssertionError()
     # Some negative weight likely (not guaranteed) – so only check range
-    assert np.all(np.abs(tuner.best_weights) <= 1.0 + 1e-6)
+    if not (np.all(np.abs(tuner.best_weights) <= 1.0 + 1e-6)):
+        raise AssertionError()
 
 
 def test_tuner_regression_weights(small_regression_data):
@@ -103,27 +112,28 @@ def test_tuner_regression_weights(small_regression_data):
         estimators=estimators, cross_validator=cv_trainer, n_trials=3, seed=5
     )
     tuner.tune(X, y)
-    assert tuner.best_weights is not None
-    assert np.isclose(tuner.best_weights.sum(), 1.0, atol=1e-6)
+    if not (tuner.best_weights is not None):
+        raise AssertionError()
+    if not (np.isclose(tuner.best_weights.sum(), 1.0, atol=1e-6)):
+        raise AssertionError()
 
 
 def test_blend_predictions_shapes_classification_logits():
     """Directly tests _blend_predictions for binary prob case with negative weights (logit averaging)."""
-    from kvbiii_ml.modeling.optimization.ensemble_weights_tuner import (
-        EnsembleWeightTunerCV as Tuner,
-    )
 
     class DummyCV:  # minimal stub
         metric_name = "Roc AUC"
         problem_type = "classification"
 
     dummy = DummyCV()
-    t = Tuner([], dummy, n_trials=1, allow_negative_weights=True)
+    t = EnsembleWeightTunerCV([], dummy, n_trials=1, allow_negative_weights=True)
     preds_list = [np.full(10, 0.7), np.full(10, 0.2)]
     weights = np.array([0.4, -0.6])
     blended = t._blend_predictions(preds_list, weights)
-    assert blended.shape == (10,)
-    assert np.all((blended >= 0.0) & (blended <= 1.0))
+    if not (blended.shape == (10,)):
+        raise AssertionError()
+    if not (np.all((blended >= 0.0) & (blended <= 1.0))):
+        raise AssertionError()
 
 
 def test_blend_predictions_multiclass_probability_normalization():
@@ -142,9 +152,11 @@ def test_blend_predictions_multiclass_probability_normalization():
     ]
     weights = np.array([0.3, 0.7])
     blended = t._blend_predictions(preds_list, weights)
-    assert blended.shape == (6, 3)
+    if not (blended.shape == (6, 3)):
+        raise AssertionError()
     row_sums = blended.sum(axis=1)
-    assert np.allclose(row_sums, 1.0, atol=1e-6)
+    if not (np.allclose(row_sums, 1.0, atol=1e-6)):
+        raise AssertionError()
 
 
 if __name__ == "__main__":

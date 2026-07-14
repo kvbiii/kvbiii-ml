@@ -1,7 +1,5 @@
 """Tests for kvbiii_ml.data_processing.feature_engineering.categorical_cleaner module."""
 
-from unittest.mock import Mock, patch
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -46,7 +44,8 @@ def test_categoricalcleaner_init_stores_configuration():
     """Initialization stores provided feature_groups mapping."""
     groups = {"Not Provided": ["col1", "col2"], "Unknown": ["col3"]}
     cleaner = CategoricalCleaner(groups)
-    assert cleaner.feature_groups == groups
+    if not (cleaner.feature_groups == groups):
+        raise AssertionError()
 
 
 def test_categoricalcleaner_fit_returns_self(messy_categorical_data):
@@ -64,10 +63,12 @@ def test_categoricalcleaner_fit_returns_self(messy_categorical_data):
     )
     result = cleaner.fit(messy_categorical_data)
 
-    assert result is cleaner
+    if not (result is cleaner):
+        raise AssertionError()
 
 
 def test_categoricalcleaner_transform_replaces_placeholders(messy_categorical_data):
+    """Tests that transform replaces configured placeholder tokens with NaN."""
     groups = {"Not Provided": ["messy_spaces"], "a!": ["messy_special"]}
     # Insert placeholder tokens
     messy_categorical_data.loc[0, "messy_spaces"] = "Not Provided"
@@ -75,13 +76,16 @@ def test_categoricalcleaner_transform_replaces_placeholders(messy_categorical_da
     cleaner = CategoricalCleaner(groups)
     cleaner.fit(messy_categorical_data)
     result = cleaner.transform(messy_categorical_data)
-    assert pd.isna(result.loc[0, "messy_spaces"])  # replaced with NaN
-    assert pd.isna(result.loc[1, "messy_special"])  # replaced with NaN
+    if not (pd.isna(result.loc[0, "messy_spaces"])):
+        raise AssertionError()
+    if not (pd.isna(result.loc[1, "messy_special"])):
+        raise AssertionError()
     # Non configured columns unchanged
     pd.testing.assert_series_equal(result["numeric"], messy_categorical_data["numeric"])
 
 
 def test_categoricalcleaner_no_op_for_missing_group(messy_categorical_data):
+    """Tests that transform is a no-op when configured columns don't exist."""
     cleaner = CategoricalCleaner({"Placeholder": ["nonexistent"]})
     cleaner.fit(messy_categorical_data)
     result = cleaner.transform(messy_categorical_data)
@@ -134,16 +138,22 @@ def test_categoricalcleaner_transform_handles_new_features(messy_categorical_dat
     result = cleaner.transform(test_data)
 
     # New column should be in result but unchanged
-    assert "new_column" in result.columns
-    assert result["new_column"].iloc[0] == " NEW "
+    if not ("new_column" in result.columns):
+        raise AssertionError()
+    if not (result["new_column"].iloc[0] == " NEW "):
+        raise AssertionError()
 
     # Configured columns should be cast to category dtype even if no placeholder matches
-    assert str(result["messy_spaces"].dtype) == "category"
-    assert str(result["messy_case"].dtype) == "category"
+    if not (str(result["messy_spaces"].dtype) == "category"):
+        raise AssertionError()
+    if not (str(result["messy_case"].dtype) == "category"):
+        raise AssertionError()
     # Original raw values (with spaces / case) remain since cleaner only replaces placeholders
-    assert set(result["messy_spaces"].cat.categories) == set(
-        messy_categorical_data["messy_spaces"].dropna().unique()
-    )
+    if not (
+        set(result["messy_spaces"].cat.categories)
+        == set(messy_categorical_data["messy_spaces"].dropna().unique())
+    ):
+        raise AssertionError()
 
 
 def test_categoricalcleaner_transform_handles_missing_features(messy_categorical_data):
@@ -164,15 +174,20 @@ def test_categoricalcleaner_transform_handles_missing_features(messy_categorical
     result = cleaner.transform(messy_categorical_data)
 
     # Available features converted to category; values unchanged except dtype
-    assert str(result["messy_spaces"].dtype) == "category"
-    assert " A" in result["messy_spaces"].cat.categories
+    if not (str(result["messy_spaces"].dtype) == "category"):
+        raise AssertionError()
+    if not (" A" in result["messy_spaces"].cat.categories):
+        raise AssertionError()
     # Case not modified by cleaner
-    assert set(result["messy_case"].cat.categories) == set(
-        messy_categorical_data["messy_case"].dropna().unique()
-    )
+    if not (
+        set(result["messy_case"].cat.categories)
+        == set(messy_categorical_data["messy_case"].dropna().unique())
+    ):
+        raise AssertionError()
 
     # Should not add the non-existent feature
-    assert "non_existent_feature" not in result.columns
+    if not ("non_existent_feature" not in result.columns):
+        raise AssertionError()
 
 
 def test_categoricalcleaner_get_feature_names_out_returns_input_features(
@@ -193,11 +208,13 @@ def test_categoricalcleaner_get_feature_names_out_returns_input_features(
     feature_names = cleaner.get_feature_names_out()
 
     # Implementation returns pd.Index
-    assert list(feature_names) == list(messy_categorical_data.columns)
+    if not (list(feature_names) == list(messy_categorical_data.columns)):
+        raise AssertionError()
 
     # Should ignore input parameter
     feature_names_with_param = cleaner.get_feature_names_out(["ignored"])
-    assert list(feature_names_with_param) == list(messy_categorical_data.columns)
+    if not (list(feature_names_with_param) == list(messy_categorical_data.columns)):
+        raise AssertionError()
 
 
 if __name__ == "__main__":

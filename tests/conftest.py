@@ -1,13 +1,12 @@
 """Centralized test configuration and fixtures for kvbiii-ml package."""
 
-from unittest.mock import MagicMock, Mock
+from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
 import pytest
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.model_selection import KFold
 

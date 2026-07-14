@@ -3,24 +3,7 @@ import itertools
 import numpy as np
 import pandas as pd
 
-try:
-    from kvbiii_plots.eda.multivariate_plots import MultivariatePlots
-except ImportError:
-
-    class MultivariatePlots:
-        """Fallback plotter used when optional plotting dependency is unavailable."""
-
-        def __init__(self, *_: object, **__: object) -> None:
-            """Initialize a no-op fallback plotter."""
-
-        def heatmap(self, *_: object, **__: object) -> None:
-            """No-op heatmap method matching the optional dependency interface."""
-            return None
-
-        def show(self, *_: object, **__: object) -> None:
-            """No-op show method matching common plotting interfaces."""
-            return None
-
+from kvbiii_plots.eda.multivariate_plots import MultivariatePlots
 
 multivariate_plots = MultivariatePlots()
 

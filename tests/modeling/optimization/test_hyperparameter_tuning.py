@@ -1,11 +1,10 @@
 """Tests for kvbiii_ml.modeling.optimization.hyperparameter_tuning module."""
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.base import BaseEstimator
 
 from kvbiii_ml.modeling.optimization.hyperparameter_tuning import (
     evaluate_hyperparameters,
@@ -88,17 +87,23 @@ def test_optimize_hyperparameters_uses_optuna_correctly(
 
     # Check Optuna was used correctly
     mock_optuna.create_study.assert_called_once()
-    assert mock_optuna.create_study.call_args[1]["direction"] == "maximize"
+    if not (mock_optuna.create_study.call_args[1]["direction"] == "maximize"):
+        raise AssertionError()
 
     # Check study optimize was called
     mock_study.optimize.assert_called_once()
-    assert mock_study.optimize.call_args[1]["n_trials"] == 20
+    if not (mock_study.optimize.call_args[1]["n_trials"] == 20):
+        raise AssertionError()
 
     # Check return value structure
-    assert "best_params" in result
-    assert "best_score" in result
-    assert result["best_params"] == mock_study.best_params
-    assert result["best_score"] == mock_study.best_value
+    if not ("best_params" in result):
+        raise AssertionError()
+    if not ("best_score" in result):
+        raise AssertionError()
+    if not (result["best_params"] == mock_study.best_params):
+        raise AssertionError()
+    if not (result["best_score"] == mock_study.best_value):
+        raise AssertionError()
 
 
 @patch("kvbiii_ml.modeling.optimization.hyperparameter_tuning.GridSearchCV")
@@ -139,20 +144,29 @@ def test_find_best_hyperparameters_with_grid_search(
 
     # Check GridSearchCV was created correctly
     mock_grid_search.assert_called_once()
-    assert mock_grid_search.call_args[1]["estimator"] is mock_estimator
-    assert mock_grid_search.call_args[1]["param_grid"] is sample_param_grid
-    assert mock_grid_search.call_args[1]["cv"] == 3
-    assert mock_grid_search.call_args[1]["scoring"] == "accuracy"
+    if not (mock_grid_search.call_args[1]["estimator"] is mock_estimator):
+        raise AssertionError()
+    if not (mock_grid_search.call_args[1]["param_grid"] is sample_param_grid):
+        raise AssertionError()
+    if not (mock_grid_search.call_args[1]["cv"] == 3):
+        raise AssertionError()
+    if not (mock_grid_search.call_args[1]["scoring"] == "accuracy"):
+        raise AssertionError()
 
     # Check fit was called
     grid_instance.fit.assert_called_once_with(X, y)
 
     # Check return value structure
-    assert "best_params" in result
-    assert "best_score" in result
-    assert "cv_results" in result
-    assert result["best_params"] == grid_instance.best_params_
-    assert result["best_score"] == grid_instance.best_score_
+    if not ("best_params" in result):
+        raise AssertionError()
+    if not ("best_score" in result):
+        raise AssertionError()
+    if not ("cv_results" in result):
+        raise AssertionError()
+    if not (result["best_params"] == grid_instance.best_params_):
+        raise AssertionError()
+    if not (result["best_score"] == grid_instance.best_score_):
+        raise AssertionError()
 
 
 @patch("kvbiii_ml.modeling.optimization.hyperparameter_tuning.RandomizedSearchCV")
@@ -194,20 +208,31 @@ def test_find_best_hyperparameters_with_random_search(
 
     # Check RandomizedSearchCV was created correctly
     mock_random_search.assert_called_once()
-    assert mock_random_search.call_args[1]["estimator"] is mock_estimator
-    assert mock_random_search.call_args[1]["param_distributions"] is sample_param_grid
-    assert mock_random_search.call_args[1]["cv"] == 3
-    assert mock_random_search.call_args[1]["scoring"] == "accuracy"
-    assert mock_random_search.call_args[1]["n_iter"] == 10
+    if not (mock_random_search.call_args[1]["estimator"] is mock_estimator):
+        raise AssertionError()
+    if not (
+        mock_random_search.call_args[1]["param_distributions"] is sample_param_grid
+    ):
+        raise AssertionError()
+    if not (mock_random_search.call_args[1]["cv"] == 3):
+        raise AssertionError()
+    if not (mock_random_search.call_args[1]["scoring"] == "accuracy"):
+        raise AssertionError()
+    if not (mock_random_search.call_args[1]["n_iter"] == 10):
+        raise AssertionError()
 
     # Check fit was called
     random_instance.fit.assert_called_once_with(X, y)
 
     # Check return value structure
-    assert "best_params" in result
-    assert "best_score" in result
-    assert result["best_params"] == random_instance.best_params_
-    assert result["best_score"] == random_instance.best_score_
+    if not ("best_params" in result):
+        raise AssertionError()
+    if not ("best_score" in result):
+        raise AssertionError()
+    if not (result["best_params"] == random_instance.best_params_):
+        raise AssertionError()
+    if not (result["best_score"] == random_instance.best_score_):
+        raise AssertionError()
 
 
 @patch("kvbiii_ml.modeling.optimization.hyperparameter_tuning.cross_val_score")
@@ -242,16 +267,22 @@ def test_evaluate_hyperparameters_uses_cross_validation(
     # Check cross_val_score was called correctly
     mock_cv_score.assert_called_once()
     call_args = mock_cv_score.call_args[0]
-    assert call_args[0] is mock_estimator
-    assert call_args[1] is X
-    assert call_args[2] is y
+    if not (call_args[0] is mock_estimator):
+        raise AssertionError()
+    if not (call_args[1] is X):
+        raise AssertionError()
+    if not (call_args[2] is y):
+        raise AssertionError()
 
     call_kwargs = mock_cv_score.call_args[1]
-    assert call_kwargs["cv"] == 3
-    assert call_kwargs["scoring"] == "accuracy"
+    if not (call_kwargs["cv"] == 3):
+        raise AssertionError()
+    if not (call_kwargs["scoring"] == "accuracy"):
+        raise AssertionError()
 
     # Check returned score is mean of CV scores
-    assert score == np.mean([0.94, 0.96, 0.95])
+    if not (score == np.mean([0.94, 0.96, 0.95])):
+        raise AssertionError()
 
 
 if __name__ == "__main__":

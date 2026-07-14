@@ -1,11 +1,9 @@
 """Tests for kvbiii_ml.data_processing.feature_engineering.target_encoding module."""
 
-from unittest.mock import Mock, patch
-
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.model_selection import BaseCrossValidator, KFold
+from sklearn.model_selection import KFold
 
 from kvbiii_ml.data_processing.feature_engineering.target_encoding import (
     TargetEncodingFeatureGenerator,
@@ -54,10 +52,14 @@ def test_targetencodingfeaturegenerator_init_creates_instance_with_default_param
     features = ["category1", "category2"]
     generator = TargetEncodingFeatureGenerator(features_names=features)
 
-    assert generator.features_names == features
-    assert generator.aggregation == "mean"
-    assert generator.smooth == 10
-    assert isinstance(generator.cv, KFold)
+    if not (generator.features_names == features):
+        raise AssertionError()
+    if not (generator.aggregation == "mean"):
+        raise AssertionError()
+    if not (generator.smooth == 10):
+        raise AssertionError()
+    if not (isinstance(generator.cv, KFold)):
+        raise AssertionError()
 
 
 def test_targetencodingfeaturegenerator_init_accepts_custom_parameters():
@@ -76,9 +78,12 @@ def test_targetencodingfeaturegenerator_init_accepts_custom_parameters():
         features_names=features, aggregation="median", smooth=5, cv=custom_cv
     )
 
-    assert generator.aggregation == "median"
-    assert generator.smooth == 5
-    assert generator.cv is custom_cv
+    if not (generator.aggregation == "median"):
+        raise AssertionError()
+    if not (generator.smooth == 5):
+        raise AssertionError()
+    if not (generator.cv is custom_cv):
+        raise AssertionError()
 
 
 def test_targetencodingfeaturegenerator_validate_init_params_raises_error_for_invalid_features():
@@ -120,7 +125,8 @@ def test_targetencodingfeaturegenerator_validate_init_params_raises_error_for_in
         generator = TargetEncodingFeatureGenerator(
             features_names=features, aggregation=valid_agg
         )
-        assert generator.aggregation == valid_agg
+        if not (generator.aggregation == valid_agg):
+            raise AssertionError()
 
 
 def test_targetencodingfeaturegenerator_validate_init_params_raises_error_for_invalid_smooth():
@@ -146,7 +152,8 @@ def test_targetencodingfeaturegenerator_validate_init_params_raises_error_for_in
         generator = TargetEncodingFeatureGenerator(
             features_names=features, smooth=valid_smooth
         )
-        assert generator.smooth == valid_smooth
+        if not (generator.smooth == valid_smooth):
+            raise AssertionError()
 
 
 def test_targetencodingfeaturegenerator_validate_init_params_accepts_none_cv():
@@ -160,7 +167,8 @@ def test_targetencodingfeaturegenerator_validate_init_params_accepts_none_cv():
     features = ["category"]
     generator = TargetEncodingFeatureGenerator(features_names=features, cv=None)
 
-    assert generator.cv is None
+    if not (generator.cv is None):
+        raise AssertionError()
 
 
 def test_targetencodingfeaturegenerator_validate_init_params_raises_error_for_invalid_cv():
@@ -182,7 +190,8 @@ def test_targetencodingfeaturegenerator_validate_init_params_raises_error_for_in
     # Test valid CV is accepted
     valid_cv = KFold(n_splits=3)
     generator = TargetEncodingFeatureGenerator(features_names=features, cv=valid_cv)
-    assert generator.cv is valid_cv
+    if not (generator.cv is valid_cv):
+        raise AssertionError()
 
 
 def test_targetencodingfeaturegenerator_fit_processes_features_with_mean_aggregation(
@@ -205,11 +214,15 @@ def test_targetencodingfeaturegenerator_fit_processes_features_with_mean_aggrega
 
     fitted_generator = generator.fit(X, y)
 
-    assert fitted_generator is generator  # Returns self
+    if not (fitted_generator is generator):
+        raise AssertionError()
     # Check that encoding mappings are created
-    assert hasattr(generator, "group_stats_")
-    assert "category_a" in generator.group_stats_
-    assert "category_b" in generator.group_stats_
+    if not (hasattr(generator, "group_stats_")):
+        raise AssertionError()
+    if not ("category_a" in generator.group_stats_):
+        raise AssertionError()
+    if not ("category_b" in generator.group_stats_):
+        raise AssertionError()
 
 
 def test_targetencodingfeaturegenerator_fit_handles_cross_validation_splits(
@@ -236,7 +249,8 @@ def test_targetencodingfeaturegenerator_fit_handles_cross_validation_splits(
 
     # Verify CV was used (implementation dependent)
     # This is a basic check that fit completed successfully with CV
-    assert generator.cv is cv
+    if not (generator.cv is cv):
+        raise AssertionError()
 
 
 def test_targetencodingfeaturegenerator_fit_applies_smoothing_correctly(
@@ -289,17 +303,21 @@ def test_targetencodingfeaturegenerator_transform_generates_encoded_features(
     )
 
     generator.fit(X, y)
-    X_transformed = generator.transform(X)
+    transformed_x = generator.transform(X)
 
-    assert isinstance(X_transformed, pd.DataFrame)
-    assert X_transformed.shape[0] == X.shape[0]  # Same number of rows
+    if not (isinstance(transformed_x, pd.DataFrame)):
+        raise AssertionError()
+    if not (transformed_x.shape[0] == X.shape[0]):
+        raise AssertionError()
 
     # Check that new encoded features are added (with TE_ prefix)
     expected_te_features = ["TE_MEAN_category_a", "TE_MEAN_category_b"]
     for te_feature in expected_te_features:
-        if te_feature in X_transformed.columns:
-            assert pd.api.types.is_numeric_dtype(X_transformed[te_feature])
-            assert np.all(np.isfinite(X_transformed[te_feature]))
+        if te_feature in transformed_x.columns:
+            if not (pd.api.types.is_numeric_dtype(transformed_x[te_feature])):
+                raise AssertionError()
+            if not (np.all(np.isfinite(transformed_x[te_feature]))):
+                raise AssertionError()
 
 
 def test_targetencodingfeaturegenerator_transform_raises_error_when_not_fitted():
@@ -342,11 +360,13 @@ def test_targetencodingfeaturegenerator_transform_handles_unseen_categories(
         }
     )
 
-    X_transformed = generator.transform(X_test)
+    transformed_x = generator.transform(X_test)
 
     # Should not raise error and return valid results
-    assert isinstance(X_transformed, pd.DataFrame)
-    assert len(X_transformed) == len(X_test)
+    if not (isinstance(transformed_x, pd.DataFrame)):
+        raise AssertionError()
+    if not (len(transformed_x) == len(X_test)):
+        raise AssertionError()
 
 
 def test_targetencodingfeaturegenerator_fit_transform_combines_fit_and_transform(
@@ -366,17 +386,20 @@ def test_targetencodingfeaturegenerator_fit_transform_combines_fit_and_transform
 
     # Test fit_transform
     generator1 = TargetEncodingFeatureGenerator(features_names=["category_a"])
-    X_transformed_1 = generator1.fit_transform(X, y)
+    transformed_x_1 = generator1.fit_transform(X, y)
 
     # Test separate fit and transform
     generator2 = TargetEncodingFeatureGenerator(features_names=["category_a"])
     generator2.fit(X, y)
-    X_transformed_2 = generator2.transform(X)
+    transformed_x_2 = generator2.transform(X)
 
     # Results should be similar (may not be exactly equal due to randomness in CV)
-    assert X_transformed_1.shape == X_transformed_2.shape
-    assert isinstance(X_transformed_1, pd.DataFrame)
-    assert isinstance(X_transformed_2, pd.DataFrame)
+    if not (transformed_x_1.shape == transformed_x_2.shape):
+        raise AssertionError()
+    if not (isinstance(transformed_x_1, pd.DataFrame)):
+        raise AssertionError()
+    if not (isinstance(transformed_x_2, pd.DataFrame)):
+        raise AssertionError()
 
 
 def test_targetencodingfeaturegenerator_different_aggregations_produce_different_results(
@@ -421,7 +444,10 @@ def test_targetencodingfeaturegenerator_different_aggregations_produce_different
         median_values, nunique_values, equal_nan=True
     )
 
-    assert different_mean_median or different_mean_nunique or different_median_nunique
+    if not (
+        different_mean_median or different_mean_nunique or different_median_nunique
+    ):
+        raise AssertionError()
 
 
 def test_targetencodingfeaturegenerator_handles_missing_feature_names(
@@ -451,7 +477,8 @@ def test_targetencodingfeaturegenerator_handles_missing_feature_names(
     # Test that existing features work normally
     generator_valid = TargetEncodingFeatureGenerator(features_names=["category_a"])
     generator_valid.fit(X, y)  # Should work without error
-    assert hasattr(generator_valid, "group_stats_")
+    if not (hasattr(generator_valid, "group_stats_")):
+        raise AssertionError()
 
 
 if __name__ == "__main__":

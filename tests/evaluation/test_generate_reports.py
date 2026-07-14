@@ -1,16 +1,14 @@
 """Tests for kvbiii_ml.evaluation.generate_reports module."""
 
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import numpy as np
-import pandas as pd
 import pytest
 
 from kvbiii_ml.evaluation.generate_reports import (
     generate_classification_report,
     generate_regression_report,
     plot_confusion_matrix,
-    plot_precision_recall_curve,
     plot_regression_error,
     plot_roc_curve,
 )
@@ -99,13 +97,20 @@ def test_generate_classification_report_creates_comprehensive_report(
     mock_roc_auc.assert_called_once()
 
     # Check report structure
-    assert "classification_report" in report
-    assert "confusion_matrix" in report
-    assert "roc_auc" in report
-    assert "accuracy" in report
-    assert "precision" in report
-    assert "recall" in report
-    assert "f1" in report
+    if not ("classification_report" in report):
+        raise AssertionError()
+    if not ("confusion_matrix" in report):
+        raise AssertionError()
+    if not ("roc_auc" in report):
+        raise AssertionError()
+    if not ("accuracy" in report):
+        raise AssertionError()
+    if not ("precision" in report):
+        raise AssertionError()
+    if not ("recall" in report):
+        raise AssertionError()
+    if not ("f1" in report):
+        raise AssertionError()
 
     # Test without probabilities
     mock_roc_auc.reset_mock()
@@ -115,7 +120,8 @@ def test_generate_classification_report_creates_comprehensive_report(
 
     # ROC AUC shouldn't be called or included
     mock_roc_auc.assert_not_called()
-    assert "roc_auc" not in report_no_proba
+    if not ("roc_auc" not in report_no_proba):
+        raise AssertionError()
 
 
 @patch("kvbiii_ml.evaluation.generate_reports.mean_squared_error")
@@ -158,15 +164,22 @@ def test_generate_regression_report_includes_common_metrics(
     mock_explained_variance.assert_called_once()
 
     # Check report structure
-    assert "mse" in report
-    assert "rmse" in report
-    assert "mae" in report
-    assert "r2" in report
-    assert "explained_variance" in report
-    assert "mape" in report
+    if not ("mse" in report):
+        raise AssertionError()
+    if not ("rmse" in report):
+        raise AssertionError()
+    if not ("mae" in report):
+        raise AssertionError()
+    if not ("r2" in report):
+        raise AssertionError()
+    if not ("explained_variance" in report):
+        raise AssertionError()
+    if not ("mape" in report):
+        raise AssertionError()
 
     # Check RMSE calculation
-    assert report["rmse"] == 5.0  # sqrt(25)
+    if not (report["rmse"] == 5.0):
+        raise AssertionError()
 
 
 @patch("kvbiii_ml.evaluation.generate_reports.plt")
@@ -199,17 +212,22 @@ def test_plot_confusion_matrix_visualization(mock_plt, classification_data):
 
     # Check heatmap or similar function was called
     # This will differ based on implementation (imshow, matshow, etc.)
-    assert (
+    if not (
         mock_plt.imshow.called or mock_plt.matshow.called or mock_plt.pcolormesh.called
-    )
+    ):
+        raise AssertionError()
 
     # Check labels were set
-    assert mock_plt.xlabel.called
-    assert mock_plt.ylabel.called
-    assert mock_plt.title.called
+    if not (mock_plt.xlabel.called):
+        raise AssertionError()
+    if not (mock_plt.ylabel.called):
+        raise AssertionError()
+    if not (mock_plt.title.called):
+        raise AssertionError()
 
     # Check show was called
-    assert mock_plt.show.called
+    if not (mock_plt.show.called):
+        raise AssertionError()
 
 
 @patch("kvbiii_ml.evaluation.generate_reports.plt")
@@ -279,17 +297,22 @@ def test_plot_regression_error_visualization(mock_plt, regression_data):
     plot_regression_error(y_true, y_pred, figsize=(15, 10))
 
     # Check plots were created
-    assert mock_plt.figure.call_count >= 1
-    assert mock_plt.subplot.call_count >= 3  # At least 3 subplots
+    if not (mock_plt.figure.call_count >= 1):
+        raise AssertionError()
+    if not (mock_plt.subplot.call_count >= 3):
+        raise AssertionError()
 
     # Check scatter plot for actual vs predicted
-    assert mock_plt.scatter.call_count >= 1
+    if not (mock_plt.scatter.call_count >= 1):
+        raise AssertionError()
 
     # Check histogram for error distribution
-    assert mock_plt.hist.call_count >= 1
+    if not (mock_plt.hist.call_count >= 1):
+        raise AssertionError()
 
     # Check plots were shown
-    assert mock_plt.show.called
+    if not (mock_plt.show.called):
+        raise AssertionError()
 
 
 if __name__ == "__main__":

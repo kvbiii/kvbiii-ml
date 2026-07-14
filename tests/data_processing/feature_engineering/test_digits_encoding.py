@@ -1,5 +1,3 @@
-import pytest
-
 """Tests for digits encoding feature generation."""
 
 import numpy as np
@@ -33,9 +31,11 @@ def test_transform_handles_nan_rows_with_fill_value() -> None:
     digit_columns = _digit_columns(transformed)
     missing_rows = test["num"].isna()
 
-    assert digit_columns
+    if not (digit_columns):
+        raise AssertionError()
     for column in digit_columns:
-        assert transformed.loc[missing_rows, column].eq(-1).all()
+        if not (transformed.loc[missing_rows, column].eq(-1).all()):
+            raise AssertionError()
 
 
 def test_fit_transform_handles_nan_rows_with_fill_value() -> None:
@@ -53,9 +53,11 @@ def test_fit_transform_handles_nan_rows_with_fill_value() -> None:
     digit_columns = _digit_columns(transformed)
     missing_rows = frame["num"].isna()
 
-    assert digit_columns
+    if not (digit_columns):
+        raise AssertionError()
     for column in digit_columns:
-        assert transformed.loc[missing_rows, column].eq(-1).all()
+        if not (transformed.loc[missing_rows, column].eq(-1).all()):
+            raise AssertionError()
 
 
 if __name__ == "__main__":

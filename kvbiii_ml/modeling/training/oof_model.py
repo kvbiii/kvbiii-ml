@@ -132,7 +132,9 @@ def _fit_calibrator(
             else LogisticRegression(C=1.0, solver="lbfgs", max_iter=1000)
         )
 
-    def _fit_one(p: np.ndarray, y: np.ndarray) -> IsotonicRegression | LogisticRegression:
+    def _fit_one(
+        p: np.ndarray, y: np.ndarray
+    ) -> IsotonicRegression | LogisticRegression:
         cal = _make_cal()
         cal.fit(p.reshape(-1, 1) if method == "sigmoid" else p, y)
         return cal
@@ -172,9 +174,14 @@ def _apply_calibrator(
     Returns:
         np.ndarray: Calibrated probabilities of shape (n_samples, n_classes), rows sum to 1.
     """
-    def _apply_one(cal: IsotonicRegression | LogisticRegression, p: np.ndarray) -> np.ndarray:
+
+    def _apply_one(
+        cal: IsotonicRegression | LogisticRegression, p: np.ndarray
+    ) -> np.ndarray:
         return (
-            cal.predict_proba(p.reshape(-1, 1))[:, 1] if method == "sigmoid" else cal.predict(p)
+            cal.predict_proba(p.reshape(-1, 1))[:, 1]
+            if method == "sigmoid"
+            else cal.predict(p)
         )
 
     if len(classes) == 2:
@@ -185,9 +192,9 @@ def _apply_calibrator(
         )
         return np.column_stack([1 - p_cal, p_cal])
 
-    cal_matrix = np.column_stack([
-        _apply_one(cal, raw_probas[:, i]) for i, cal in enumerate(calibrator)
-    ])
+    cal_matrix = np.column_stack(
+        [_apply_one(cal, raw_probas[:, i]) for i, cal in enumerate(calibrator)]
+    )
     cal_matrix = cal_matrix / np.clip(
         cal_matrix.sum(axis=1, keepdims=True), _PROBA_SUM_FLOOR, None
     )
@@ -223,7 +230,9 @@ def _collect_oof_probas(
         cross_validator.fitted_estimators_,
         cross_validator.fitted_pipelines_,
     ):
-        X_val = CrossValidationTrainer._transform_with_pipeline(fold_pipeline, X.iloc[val_idx])
+        X_val = CrossValidationTrainer._transform_with_pipeline(
+            fold_pipeline, X.iloc[val_idx]
+        )
         X_val = CrossValidationTrainer._order_X_for_estimator(X_val, est)
         probas = est.predict_proba(X_val)
         if probas.ndim == 1:
@@ -268,9 +277,13 @@ class OOFModel:
                 Only used when calibrate=True. Defaults to "isotonic".
         """
         if problem_type not in {"classification", "regression"}:
-            raise ValueError("problem_type must be either 'classification' or 'regression'.")
+            raise ValueError(
+                "problem_type must be either 'classification' or 'regression'."
+            )
         if calibrate and problem_type != "classification":
-            raise ValueError("calibrate=True is only supported for problem_type='classification'.")
+            raise ValueError(
+                "calibrate=True is only supported for problem_type='classification'."
+            )
 
         self.estimator = estimator
         self.cross_validator = cross_validator
@@ -388,12 +401,18 @@ class OOFModel:
             ValueError: If called for a regression problem.
         """
         if self.problem_type != "classification":
-            raise ValueError("predict_proba is only available for classification problems.")
+            raise ValueError(
+                "predict_proba is only available for classification problems."
+            )
         if not self.fitted_estimators_:
-            raise RuntimeError("OOFModel must be fitted before calling predict_proba().")
+            raise RuntimeError(
+                "OOFModel must be fitted before calling predict_proba()."
+            )
 
         if self.calibrate and self.fitted_estimator_ is not None:
-            X_ord = CrossValidationTrainer._order_X_for_estimator(X, self.fitted_estimator_)
+            X_ord = CrossValidationTrainer._order_X_for_estimator(
+                X, self.fitted_estimator_
+            )
             raw = self.fitted_estimator_.predict_proba(X_ord)
             if raw.ndim == 1:
                 raw = np.column_stack([1 - raw, raw])

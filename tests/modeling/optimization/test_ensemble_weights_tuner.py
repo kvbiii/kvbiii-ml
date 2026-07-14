@@ -1,13 +1,10 @@
 """Tests for EnsembleWeightTunerCV class in ensemble_weights_tuner module."""
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 import optuna
 import pandas as pd
-import pytest
-from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.model_selection import KFold
 
 from kvbiii_ml.modeling.optimization.ensemble_weights_tuner import EnsembleWeightTunerCV
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
@@ -38,12 +35,18 @@ class TestEnsembleWeightTunerCV:
             estimators=[logistic_regression_estimator], cross_validator=cross_validator
         )
 
-        assert len(tuner.estimators) == 1
-        assert tuner.cross_validator == cross_validator
-        assert tuner.n_trials == 50
-        assert tuner.seed == 17
-        assert tuner.allow_negative_weights == False
-        assert tuner.best_weights is None
+        if not (len(tuner.estimators) == 1):
+            raise AssertionError()
+        if not (tuner.cross_validator == cross_validator):
+            raise AssertionError()
+        if not (tuner.n_trials == 50):
+            raise AssertionError()
+        if not (tuner.seed == 17):
+            raise AssertionError()
+        if not (tuner.allow_negative_weights == False):
+            raise AssertionError()
+        if not (tuner.best_weights is None):
+            raise AssertionError()
 
     def test_ensembleweighttuner_init_custom_parameters(
         self, logistic_regression_estimator, kfold_cv
@@ -71,10 +74,14 @@ class TestEnsembleWeightTunerCV:
             allow_negative_weights=True,
         )
 
-        assert len(tuner.estimators) == 2
-        assert tuner.n_trials == 100
-        assert tuner.seed == 42
-        assert tuner.allow_negative_weights == True
+        if not (len(tuner.estimators) == 2):
+            raise AssertionError()
+        if not (tuner.n_trials == 100):
+            raise AssertionError()
+        if not (tuner.seed == 42):
+            raise AssertionError()
+        if not (tuner.allow_negative_weights == True):
+            raise AssertionError()
 
     def test_ensembleweighttuner_check_x_dataframe_passthrough(self, sample_dataframe):
         """Tests check_X method with DataFrame input.
@@ -88,8 +95,10 @@ class TestEnsembleWeightTunerCV:
         """
         result = EnsembleWeightTunerCV.check_X(sample_dataframe)
 
-        assert result is sample_dataframe
-        assert isinstance(result, pd.DataFrame)
+        if not (result is sample_dataframe):
+            raise AssertionError()
+        if not (isinstance(result, pd.DataFrame)):
+            raise AssertionError()
 
     def test_ensembleweighttuner_check_x_array_conversion(self):
         """Tests check_X method with numpy array input.
@@ -101,8 +110,10 @@ class TestEnsembleWeightTunerCV:
         array_input = np.array([[1, 2], [3, 4], [5, 6]])
         result = EnsembleWeightTunerCV.check_X(array_input)
 
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape == (3, 2)
+        if not (isinstance(result, pd.DataFrame)):
+            raise AssertionError()
+        if not (result.shape == (3, 2)):
+            raise AssertionError()
         np.testing.assert_array_equal(result.values, array_input)
 
     def test_ensembleweighttuner_check_y_series_passthrough(self, sample_series):
@@ -117,8 +128,10 @@ class TestEnsembleWeightTunerCV:
         """
         result = EnsembleWeightTunerCV.check_y(sample_series)
 
-        assert result is sample_series
-        assert isinstance(result, pd.Series)
+        if not (result is sample_series):
+            raise AssertionError()
+        if not (isinstance(result, pd.Series)):
+            raise AssertionError()
 
     def test_ensembleweighttuner_check_y_array_conversion(self):
         """Tests check_y method with numpy array input.
@@ -130,8 +143,10 @@ class TestEnsembleWeightTunerCV:
         array_input = np.array([1, 0, 1, 0, 1])
         result = EnsembleWeightTunerCV.check_y(array_input)
 
-        assert isinstance(result, pd.Series)
-        assert len(result) == 5
+        if not (isinstance(result, pd.Series)):
+            raise AssertionError()
+        if not (len(result) == 5):
+            raise AssertionError()
         np.testing.assert_array_equal(result.values, array_input)
 
     def test_ensembleweighttuner_create_study_configuration(
@@ -160,12 +175,14 @@ class TestEnsembleWeightTunerCV:
 
         study = tuner._create_study()
 
-        assert isinstance(study, optuna.study.Study)
-        assert (
-            study.direction == optuna.study.StudyDirection.MAXIMIZE
-        )  # ROC AUC is maximized
-        assert isinstance(study.sampler, optuna.samplers.TPESampler)
-        assert isinstance(study.pruner, optuna.pruners.HyperbandPruner)
+        if not (isinstance(study, optuna.study.Study)):
+            raise AssertionError()
+        if not (study.direction == optuna.study.StudyDirection.MAXIMIZE):
+            raise AssertionError()
+        if not (isinstance(study.sampler, optuna.samplers.TPESampler)):
+            raise AssertionError()
+        if not (isinstance(study.pruner, optuna.pruners.HyperbandPruner)):
+            raise AssertionError()
 
     def test_ensembleweighttuner_blend_predictions_1d_regression(
         self, logistic_regression_estimator, kfold_cv
@@ -225,7 +242,8 @@ class TestEnsembleWeightTunerCV:
 
         result = tuner._blend_predictions(preds_list, weights)
 
-        assert result.shape == (2, 2)
+        if not (result.shape == (2, 2)):
+            raise AssertionError()
         # Check that probabilities sum to 1
         np.testing.assert_array_almost_equal(result.sum(axis=1), [1.0, 1.0])
 
@@ -260,8 +278,10 @@ class TestEnsembleWeightTunerCV:
 
         result = tuner._objective(mock_trial, y_true, preds_list)
 
-        assert isinstance(result, float)
-        assert result >= 0  # MSE is non-negative
+        if not (isinstance(result, float)):
+            raise AssertionError()
+        if not (result >= 0):
+            raise AssertionError()
 
     def test_ensembleweighttuner_objective_classification_probabilities(
         self, logistic_regression_estimator, kfold_cv
@@ -297,8 +317,10 @@ class TestEnsembleWeightTunerCV:
 
         result = tuner._objective(mock_trial, y_true, preds_list)
 
-        assert isinstance(result, float)
-        assert 0 <= result <= 1  # ROC AUC is between 0 and 1
+        if not (isinstance(result, float)):
+            raise AssertionError()
+        if not (0 <= result <= 1):
+            raise AssertionError()
 
     def test_ensembleweighttuner_objective_negative_weights_allowed(
         self, logistic_regression_estimator, kfold_cv
@@ -332,7 +354,8 @@ class TestEnsembleWeightTunerCV:
 
         result = tuner._objective(mock_trial, y_true, preds_list)
 
-        assert isinstance(result, float)
+        if not (isinstance(result, float)):
+            raise AssertionError()
 
     @patch("kvbiii_ml.modeling.optimization.ensemble_weights_tuner.optuna.create_study")
     def test_ensembleweighttuner_tune_integration(
@@ -385,9 +408,12 @@ class TestEnsembleWeightTunerCV:
 
         study = tuner.tune(X, y)
 
-        assert tuner.best_weights is not None
-        assert len(tuner.best_weights) == 2
-        assert study == mock_study
+        if not (tuner.best_weights is not None):
+            raise AssertionError()
+        if not (len(tuner.best_weights) == 2):
+            raise AssertionError()
+        if not (study == mock_study):
+            raise AssertionError()
         mock_study.optimize.assert_called_once()
 
     def test_ensembleweighttuner_perform_cv_output_format(
@@ -420,11 +446,16 @@ class TestEnsembleWeightTunerCV:
 
         y_true, preds_list = tuner._perform_cv(X, y)
 
-        assert isinstance(y_true, np.ndarray)
-        assert isinstance(preds_list, list)
-        assert len(preds_list) == 1  # One estimator
-        assert len(y_true) > 0
-        assert len(preds_list[0]) == len(y_true)
+        if not (isinstance(y_true, np.ndarray)):
+            raise AssertionError()
+        if not (isinstance(preds_list, list)):
+            raise AssertionError()
+        if not (len(preds_list) == 1):
+            raise AssertionError()
+        if not (len(y_true) > 0):
+            raise AssertionError()
+        if not (len(preds_list[0]) == len(y_true)):
+            raise AssertionError()
 
     def test_ensembleweighttuner_weight_normalization_positive_only(
         self, logistic_regression_estimator, kfold_cv
@@ -443,7 +474,7 @@ class TestEnsembleWeightTunerCV:
             metric_name="Accuracy", problem_type="classification", cv=kfold_cv
         )
 
-        tuner = EnsembleWeightTunerCV(
+        EnsembleWeightTunerCV(
             estimators=[logistic_regression_estimator, logistic_regression_estimator],
             cross_validator=cross_validator,
             allow_negative_weights=False,
@@ -453,8 +484,10 @@ class TestEnsembleWeightTunerCV:
         weights = np.array([0.3, 0.7])
         normalized = weights / weights.sum()
 
-        assert np.allclose(normalized.sum(), 1.0)
-        assert all(w >= 0 for w in normalized)
+        if not (np.allclose(normalized.sum(), 1.0)):
+            raise AssertionError()
+        if not (all(w >= 0 for w in normalized)):
+            raise AssertionError()
 
     def test_ensembleweighttuner_weight_normalization_with_negatives(
         self, logistic_regression_estimator, kfold_cv
@@ -473,7 +506,7 @@ class TestEnsembleWeightTunerCV:
             metric_name="MSE", problem_type="regression", cv=kfold_cv
         )
 
-        tuner = EnsembleWeightTunerCV(
+        EnsembleWeightTunerCV(
             estimators=[logistic_regression_estimator, logistic_regression_estimator],
             cross_validator=cross_validator,
             allow_negative_weights=True,
@@ -484,7 +517,8 @@ class TestEnsembleWeightTunerCV:
         l1_norm = np.sum(np.abs(weights))
         normalized = weights / l1_norm
 
-        assert np.allclose(np.sum(np.abs(normalized)), 1.0)
+        if not (np.allclose(np.sum(np.abs(normalized)), 1.0)):
+            raise AssertionError()
 
     def test_ensembleweighttuner_empty_estimators_list_handling(self, kfold_cv):
         """Tests handling of empty estimators list.
@@ -502,7 +536,8 @@ class TestEnsembleWeightTunerCV:
 
         tuner = EnsembleWeightTunerCV(estimators=[], cross_validator=cross_validator)
 
-        assert len(tuner.estimators) == 0
+        if not (len(tuner.estimators) == 0):
+            raise AssertionError()
 
     def test_ensembleweighttuner_single_estimator_handling(
         self, binary_classification_data, logistic_regression_estimator, kfold_cv
@@ -538,11 +573,14 @@ class TestEnsembleWeightTunerCV:
             return_value=(np.array([0, 1, 0]), [np.array([0.2, 0.8, 0.3])])
         )
 
-        study = tuner.tune(X, y)
+        tuner.tune(X, y)
 
-        assert tuner.best_weights is not None
-        assert len(tuner.best_weights) == 1
-        assert np.allclose(tuner.best_weights.sum(), 1.0)
+        if not (tuner.best_weights is not None):
+            raise AssertionError()
+        if not (len(tuner.best_weights) == 1):
+            raise AssertionError()
+        if not (np.allclose(tuner.best_weights.sum(), 1.0)):
+            raise AssertionError()
 
 
 if __name__ == "__main__":
