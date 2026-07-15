@@ -1,6 +1,4 @@
 import gc
-from importlib import import_module
-from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -57,18 +55,18 @@ def _compute_single_model_shap(model: object, X: pd.DataFrame) -> shap.Explanati
             "interpretation, making SHAP values uninterpretable."
         )
 
-    X_ordered = _order_X_for_estimator(X, model)
+    x_ordered = _order_x_for_estimator(X, model)
     explainer = shap.TreeExplainer(model, feature_perturbation="tree_path_dependent")
 
     try:
-        return explainer(X_ordered)
+        return explainer(x_ordered)
     except AttributeError:
-        return explainer(X_ordered.values)
+        return explainer(x_ordered.values)
     finally:
         gc.collect()
 
 
-def _order_X_for_estimator(X: pd.DataFrame, estimator: BaseEstimator) -> pd.DataFrame:
+def _order_x_for_estimator(X: pd.DataFrame, estimator: BaseEstimator) -> pd.DataFrame:
     """Reorder columns to match the estimator's expected feature order.
 
     Args:
