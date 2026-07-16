@@ -397,7 +397,7 @@ def test_oofmodel_predict_proba_raises_error_for_regression(
 
 
 def test_oofmodel_order_x_for_estimator_reorders_features_correctly(sample_dataframe):
-    """Tests _order_X_for_estimator method reorders features to match estimator expectations.
+    """Tests _order_x_for_estimator method reorders features to match estimator expectations.
 
     Args:
         sample_dataframe (pd.DataFrame): Sample feature data with multiple columns
@@ -411,7 +411,7 @@ def test_oofmodel_order_x_for_estimator_reorders_features_correctly(sample_dataf
     mock_estimator = Mock()
     mock_estimator.feature_names_in_ = ["categorical_1", "numeric_1", "integer_1"]
 
-    reordered_x = OOFModel._order_X_for_estimator(sample_dataframe, mock_estimator)
+    reordered_x = OOFModel._order_x_for_estimator(sample_dataframe, mock_estimator)
 
     expected_order = ["categorical_1", "numeric_1", "integer_1"]
     if list(reordered_x.columns) != expected_order:
@@ -419,7 +419,7 @@ def test_oofmodel_order_x_for_estimator_reorders_features_correctly(sample_dataf
 
     # Test fallback when no feature names available
     mock_estimator_no_features = Mock(spec=[])  # No feature name attributes
-    result_x = OOFModel._order_X_for_estimator(
+    result_x = OOFModel._order_x_for_estimator(
         sample_dataframe, mock_estimator_no_features
     )
 

@@ -8,7 +8,7 @@ from typing import Iterable
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator
+from sklearn.base import BaseEstimator, clone
 from sklearn.calibration import calibration_curve
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
@@ -368,13 +368,13 @@ class ClassificationCalibrator:
         if self._fitted_full_estimator is None:
             raise RuntimeError("Call fit() before predict_proba().")
 
-        X_proc = CrossValidationTrainer._transform_with_pipeline(
+        x_proc = CrossValidationTrainer._transform_with_pipeline(
             self._fitted_full_pipeline, X
         )
-        X_ord = CrossValidationTrainer._order_X_for_estimator(
-            X_proc, self._fitted_full_estimator
+        x_ord = CrossValidationTrainer._order_x_for_estimator(
+            x_proc, self._fitted_full_estimator
         )
-        raw = self._fitted_full_estimator.predict_proba(X_ord)
+        raw = self._fitted_full_estimator.predict_proba(x_ord)
         if raw.ndim == 1:
             raw = np.column_stack([1 - raw, raw])
         best_method_key = (
@@ -484,11 +484,9 @@ class ClassificationCalibrator:
             eval_set (list[tuple] | None): Validation data for early stopping. X values
                 are raw and are transformed through the pipeline automatically. Defaults to None.
         """
-        from sklearn.base import clone as sklearn_clone
-
         pipeline = self.cross_validator.preprocessing_pipeline
-        fitted_pipeline = sklearn_clone(pipeline) if pipeline is not None else None
-        X_proc = (
+        fitted_pipeline = clone(pipeline) if pipeline is not None else None
+        x_proc = (
             fitted_pipeline.fit_transform(X, y) if fitted_pipeline is not None else X
         )
         self._fitted_full_pipeline = fitted_pipeline
@@ -508,7 +506,7 @@ class ClassificationCalibrator:
         if X_valid is None:
             _disable_early_stopping(final_est)
         self._fitted_full_estimator = BaseTrainer.fit_estimator(
-            final_est, X_proc, y, X_valid, y_valid
+            final_est, x_proc, y, X_valid, y_valid
         )
 
     @staticmethod
@@ -567,13 +565,14 @@ class ClassificationCalibrator:
 
 
 if __name__ == "__main__":
+    import time
+
     import numpy as np
     import pandas as pd
     from lightgbm import LGBMClassifier
-    from xgboost import XGBClassifier
     from catboost import CatBoostClassifier
     from sklearn.datasets import make_classification
-    from sklearn.model_selection import StratifiedKFold
+    from sklearn.model_selection import StratifiedKFold, train_test_split
     from sklearn.pipeline import Pipeline
 
     from kvbiii_ml.data_processing.preprocessing.outlier_handling.winsorizer_trimmer import (
@@ -590,7 +589,7 @@ if __name__ == "__main__":
 
     def _make_clf_data(n_classes: int = 2) -> tuple[pd.DataFrame, pd.Series]:
         """Generate synthetic classification dataset."""
-        X_arr, y_arr = make_classification(
+        x_arr, y_arr = make_classification(
             n_samples=N_SAMPLES,
             n_features=N_FEATURES,
             n_informative=6,
@@ -599,7 +598,7 @@ if __name__ == "__main__":
             n_clusters_per_class=1,
             random_state=RANDOM_STATE,
         )
-        return pd.DataFrame(X_arr, columns=FEATURE_NAMES), pd.Series(
+        return pd.DataFrame(x_arr, columns=FEATURE_NAMES), pd.Series(
             y_arr, name="target"
         )
 
@@ -632,138 +631,144 @@ if __name__ == "__main__":
             verbose=False,
         )
 
-    print("=" * 75)
-    print("Scenario 1: Binary + LightGBM + preprocessing pipeline")
-    print("=" * 75)
-    X_bin, y_bin = _make_clf_data(n_classes=2)
-    lgbm_bin = LGBMClassifier(
-        n_estimators=200,
-        early_stopping_rounds=ES,
-        verbose=-1,
-        random_state=RANDOM_STATE,
-    )
-    cv_1 = _build_cv("Log Loss", _build_pipeline())
-    cal_1 = ClassificationCalibrator(estimator=lgbm_bin, cross_validator=cv_1)
-    cal_1.fit(X_bin, y_bin)
-    print(f"Best method: {cal_1.best_method_}")
-    print(cal_1.calibration_scores_df_)
-    print("Passing best_estimator_ to cross_validator.fit():")
-    _, valid_s, _ = cv_1.fit(cal_1.best_estimator_, X_bin, y_bin)
-    print(f"  Calibrated CV valid: {np.mean(valid_s):.4f} ± {np.std(valid_s):.4f}")
-    cal_1.plot_calibration_curves()
-
-    print("\n" + "=" * 75)
-    print("Scenario 2: Binary + CatBoost with categorical dtype columns")
-    print("=" * 75)
-    try:
-        rng = np.random.RandomState(RANDOM_STATE)
-        X_cat = X_bin.copy()
-        X_cat["cat_feat"] = pd.Categorical(rng.choice(["A", "B", "C"], size=N_SAMPLES))
-        cat_cb = CatBoostClassifier(
-            iterations=200,
-            early_stopping_rounds=ES,
-            verbose=0,
-            random_state=RANDOM_STATE,
-        )
-        cv_2 = _build_cv("Log Loss")
-        for label, est, X_in in [
-            ("LightGBM", lgbm_bin, X_bin),
-            ("CatBoost", cat_cb, X_cat),
-        ]:
-            cal_2 = ClassificationCalibrator(estimator=est, cross_validator=cv_2)
-            cal_2.fit(X_in, y_bin)
-            print(f"  {label} - best: {cal_2.best_method_}")
-            print(cal_2.calibration_scores_df_)
-    except ImportError:
-        print("  CatBoost not installed; skipping CatBoost sub-scenario.")
-
-    print("\n" + "=" * 75)
-    print("Scenario 3: EnsembleModel - black-box calibration")
-    print("=" * 75)
-    estimators = [
-        LGBMClassifier(
+    def _run_demo() -> None:
+        """Run the ClassificationCalibrator demo scenarios."""
+        print("=" * 75)
+        print("Scenario 1: Binary + LightGBM + preprocessing pipeline")
+        print("=" * 75)
+        x_bin, y_bin = _make_clf_data(n_classes=2)
+        lgbm_bin = LGBMClassifier(
             n_estimators=200,
             early_stopping_rounds=ES,
             verbose=-1,
             random_state=RANDOM_STATE,
-        ),
-        # XGBClassifier(
-        #     n_estimators=200,
-        #     early_stopping_rounds=ES,
-        #     verbosity=0,
-        #     random_state=RANDOM_STATE + 1,
-        # ),
-        CatBoostClassifier(
-            iterations=200,
-            early_stopping_rounds=ES,
-            verbose=0,
-            random_state=RANDOM_STATE + 2,
-        ),
-        CatBoostClassifier(
-            iterations=200,
-            early_stopping_rounds=ES,
-            verbose=0,
-            random_state=RANDOM_STATE + 2,
-        ),
-        CatBoostClassifier(
-            iterations=200,
-            early_stopping_rounds=ES,
-            verbose=0,
-            random_state=RANDOM_STATE + 2,
-        ),
-        CatBoostClassifier(
-            iterations=200,
-            early_stopping_rounds=ES,
-            verbose=0,
-            random_state=RANDOM_STATE + 2,
-        ),
-    ]
-    ensemble = EnsembleModel(estimators=estimators, problem_type="classification")
-    cv_3 = _build_cv("Log Loss")
-    cal_3 = ClassificationCalibrator(
-        estimator=ensemble, cross_validator=cv_3, selection_metric_name="ECE"
-    )
-    cal_3.fit(X_bin, y_bin)
-    print(f"  best_method_: {cal_3.best_method_}")
-    print(
-        f"  best_estimator_ is CalibratedModel: {isinstance(cal_3.best_estimator_, CalibratedModel)}"
-    )
-    print(cal_3.calibration_scores_df_)
-    import time
+        )
+        cv_1 = _build_cv("Log Loss", _build_pipeline())
+        cal_1 = ClassificationCalibrator(estimator=lgbm_bin, cross_validator=cv_1)
+        cal_1.fit(x_bin, y_bin)
+        print(f"Best method: {cal_1.best_method_}")
+        print(cal_1.calibration_scores_df_)
+        print("Passing best_estimator_ to cross_validator.fit():")
+        _, valid_s, _ = cv_1.fit(cal_1.best_estimator_, x_bin, y_bin)
+        print(f"  Calibrated CV valid: {np.mean(valid_s):.4f} ± {np.std(valid_s):.4f}")
+        cal_1.plot_calibration_curves()
 
-    start = time.perf_counter()
-    _, valid_s_3, _ = cv_3.fit(cal_3.best_estimator_, X_bin, y_bin)
-    print(
-        f"  Time for CV fit with best_estimator_: {time.perf_counter() - start:.2f} seconds"
-    )
-    print(f"  Calibrated CV valid: {np.mean(valid_s_3):.4f} ± {np.std(valid_s_3):.4f}")
-    cal_3.plot_calibration_curves()
+        print("\n" + "=" * 75)
+        print("Scenario 2: Binary + CatBoost with categorical dtype columns")
+        print("=" * 75)
+        try:
+            rng = np.random.RandomState(RANDOM_STATE)
+            x_cat = x_bin.copy()
+            x_cat["cat_feat"] = pd.Categorical(
+                rng.choice(["A", "B", "C"], size=N_SAMPLES)
+            )
+            cat_cb = CatBoostClassifier(
+                iterations=200,
+                early_stopping_rounds=ES,
+                verbose=0,
+                random_state=RANDOM_STATE,
+            )
+            cv_2 = _build_cv("Log Loss")
+            for label, est, x_in in [
+                ("LightGBM", lgbm_bin, x_bin),
+                ("CatBoost", cat_cb, x_cat),
+            ]:
+                cal_2 = ClassificationCalibrator(estimator=est, cross_validator=cv_2)
+                cal_2.fit(x_in, y_bin)
+                print(f"  {label} - best: {cal_2.best_method_}")
+                print(cal_2.calibration_scores_df_)
+        except ImportError:
+            print("  CatBoost not installed; skipping CatBoost sub-scenario.")
 
-    print("\n" + "=" * 75)
-    print(
-        "Scenario 4: Multiclass + LightGBM + eval_set for early stopping on final refit"
-    )
-    print("=" * 75)
-    X_mc, y_mc = _make_clf_data(n_classes=3)
-    lgbm_mc = LGBMClassifier(
-        n_estimators=200,
-        early_stopping_rounds=ES,
-        verbose=-1,
-        random_state=RANDOM_STATE,
-    )
-    cv_4 = _build_cv("Brier Score", _build_pipeline())
-    cal_4 = ClassificationCalibrator(estimator=lgbm_mc, cross_validator=cv_4)
-    from sklearn.model_selection import train_test_split
+        print("\n" + "=" * 75)
+        print("Scenario 3: EnsembleModel - black-box calibration")
+        print("=" * 75)
+        estimators = [
+            LGBMClassifier(
+                n_estimators=200,
+                early_stopping_rounds=ES,
+                verbose=-1,
+                random_state=RANDOM_STATE,
+            ),
+            # XGBClassifier(
+            #     n_estimators=200,
+            #     early_stopping_rounds=ES,
+            #     verbosity=0,
+            #     random_state=RANDOM_STATE + 1,
+            # ),
+            CatBoostClassifier(
+                iterations=200,
+                early_stopping_rounds=ES,
+                verbose=0,
+                random_state=RANDOM_STATE + 2,
+            ),
+            CatBoostClassifier(
+                iterations=200,
+                early_stopping_rounds=ES,
+                verbose=0,
+                random_state=RANDOM_STATE + 2,
+            ),
+            CatBoostClassifier(
+                iterations=200,
+                early_stopping_rounds=ES,
+                verbose=0,
+                random_state=RANDOM_STATE + 2,
+            ),
+            CatBoostClassifier(
+                iterations=200,
+                early_stopping_rounds=ES,
+                verbose=0,
+                random_state=RANDOM_STATE + 2,
+            ),
+        ]
+        ensemble = EnsembleModel(estimators=estimators, problem_type="classification")
+        cv_3 = _build_cv("Log Loss")
+        cal_3 = ClassificationCalibrator(
+            estimator=ensemble, cross_validator=cv_3, selection_metric_name="ECE"
+        )
+        cal_3.fit(x_bin, y_bin)
+        print(f"  best_method_: {cal_3.best_method_}")
+        print(
+            f"  best_estimator_ is CalibratedModel: {isinstance(cal_3.best_estimator_, CalibratedModel)}"
+        )
+        print(cal_3.calibration_scores_df_)
 
-    X_tr, X_val, y_tr, y_val = train_test_split(
-        X_mc, y_mc, test_size=0.2, random_state=RANDOM_STATE, stratify=y_mc
-    )
-    cal_4.fit(X_tr, y_tr, eval_set=[(X_val, y_val)])
-    print(f"  best_method_: {cal_4.best_method_}")
-    print(cal_4.calibration_scores_df_)
-    print("Passing best_estimator_ to cross_validator.fit():")
-    _, valid_s_mc, _ = cv_4.fit(cal_4.best_estimator_, X_mc, y_mc)
-    print(
-        f"  Calibrated CV valid: {np.mean(valid_s_mc):.4f} ± {np.std(valid_s_mc):.4f}"
-    )
-    cal_4.plot_calibration_curves()
+        start = time.perf_counter()
+        _, valid_s_3, _ = cv_3.fit(cal_3.best_estimator_, x_bin, y_bin)
+        print(
+            f"  Time for CV fit with best_estimator_: {time.perf_counter() - start:.2f} seconds"
+        )
+        print(
+            f"  Calibrated CV valid: {np.mean(valid_s_3):.4f} ± {np.std(valid_s_3):.4f}"
+        )
+        cal_3.plot_calibration_curves()
+
+        print("\n" + "=" * 75)
+        print(
+            "Scenario 4: Multiclass + LightGBM + eval_set for early stopping on final refit"
+        )
+        print("=" * 75)
+        x_mc, y_mc = _make_clf_data(n_classes=3)
+        lgbm_mc = LGBMClassifier(
+            n_estimators=200,
+            early_stopping_rounds=ES,
+            verbose=-1,
+            random_state=RANDOM_STATE,
+        )
+        cv_4 = _build_cv("Brier Score", _build_pipeline())
+        cal_4 = ClassificationCalibrator(estimator=lgbm_mc, cross_validator=cv_4)
+
+        x_tr, x_val, y_tr, y_val = train_test_split(
+            x_mc, y_mc, test_size=0.2, random_state=RANDOM_STATE, stratify=y_mc
+        )
+        cal_4.fit(x_tr, y_tr, eval_set=[(x_val, y_val)])
+        print(f"  best_method_: {cal_4.best_method_}")
+        print(cal_4.calibration_scores_df_)
+        print("Passing best_estimator_ to cross_validator.fit():")
+        _, valid_s_mc, _ = cv_4.fit(cal_4.best_estimator_, x_mc, y_mc)
+        print(
+            f"  Calibrated CV valid: {np.mean(valid_s_mc):.4f} ± {np.std(valid_s_mc):.4f}"
+        )
+        cal_4.plot_calibration_curves()
+
+    _run_demo()

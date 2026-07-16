@@ -61,7 +61,7 @@ class EnsembleWeightTunerCV:
         Returns:
             optuna.study.Study: Completed study. Best weights stored in ``self.best_weights``.
         """
-        X, y = self.check_X(X), self.check_y(y)
+        X, y = self.check_x(X), self.check_y(y)
         y_true, preds_list = self._perform_cv(X, y)
         study = self._create_study()
         study.optimize(
@@ -240,7 +240,7 @@ class EnsembleWeightTunerCV:
         return y_valid_true, preds_per_estimator
 
     @staticmethod
-    def check_X(X: pd.DataFrame | np.ndarray | list | dict) -> pd.DataFrame:
+    def check_x(X: pd.DataFrame | np.ndarray | list | dict) -> pd.DataFrame:
         """Ensure feature input is a pandas DataFrame.
 
         Args:
@@ -278,95 +278,99 @@ if __name__ == "__main__":
     N_FEATURES = 10
     FEATURE_NAMES = [f"feature_{i}" for i in range(N_FEATURES)]
 
-    preprocessing_pipeline = Pipeline(
-        [
-            (
-                "winsorizer",
-                WinsorizerWithOriginal(
-                    variables=FEATURE_NAMES,
-                    capping_method="gaussian",
-                    tail="right",
+    def _run_demo() -> None:
+        """Run EnsembleWeightTunerCV for both classification and regression."""
+        preprocessing_pipeline = Pipeline(
+            [
+                (
+                    "winsorizer",
+                    WinsorizerWithOriginal(
+                        variables=FEATURE_NAMES,
+                        capping_method="gaussian",
+                        tail="right",
+                    ),
                 ),
+            ]
+        )
+
+        print("=== Binary classification ===")
+        x_arr, y_arr = make_classification(
+            n_samples=N_SAMPLES,
+            n_features=N_FEATURES,
+            n_informative=5,
+            n_redundant=2,
+            random_state=RANDOM_STATE,
+        )
+        x_df = pd.DataFrame(x_arr, columns=FEATURE_NAMES)
+        y_ser = pd.Series(y_arr)
+
+        clf_estimators = [
+            LGBMClassifier(
+                n_estimators=100, num_leaves=15, verbose=-1, random_state=RANDOM_STATE
+            ),
+            LGBMClassifier(
+                n_estimators=100, num_leaves=31, verbose=-1, random_state=RANDOM_STATE
+            ),
+            LGBMClassifier(
+                n_estimators=100, num_leaves=63, verbose=-1, random_state=RANDOM_STATE
             ),
         ]
-    )
+        cv_clf = CrossValidationTrainer(
+            metric_name="Roc AUC",
+            problem_type="classification",
+            cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE),
+            preprocessing_pipeline=preprocessing_pipeline,
+            verbose=False,
+        )
+        tuner_clf = EnsembleWeightTunerCV(
+            estimators=clf_estimators,
+            cross_validator=cv_clf,
+            n_trials=50,
+            seed=RANDOM_STATE,
+            allow_negative_weights=False,
+        )
+        clf_study = tuner_clf.tune(x_df, y_ser)
+        print("Best trial value:", clf_study.best_value)
+        print("Best weights:", tuner_clf.best_weights)
 
-    print("=== Binary classification ===")
-    X_arr, y_arr = make_classification(
-        n_samples=N_SAMPLES,
-        n_features=N_FEATURES,
-        n_informative=5,
-        n_redundant=2,
-        random_state=RANDOM_STATE,
-    )
-    X_df = pd.DataFrame(X_arr, columns=FEATURE_NAMES)
-    y_ser = pd.Series(y_arr)
+        print("\n=== Regression ===")
+        x_reg, y_reg = make_regression(
+            n_samples=N_SAMPLES,
+            n_features=N_FEATURES,
+            n_informative=5,
+            noise=0.1,
+            random_state=RANDOM_STATE,
+        )
+        x_reg_df = pd.DataFrame(x_reg, columns=FEATURE_NAMES)
+        y_reg_ser = pd.Series(y_reg)
 
-    clf_estimators = [
-        LGBMClassifier(
-            n_estimators=100, num_leaves=15, verbose=-1, random_state=RANDOM_STATE
-        ),
-        LGBMClassifier(
-            n_estimators=100, num_leaves=31, verbose=-1, random_state=RANDOM_STATE
-        ),
-        LGBMClassifier(
-            n_estimators=100, num_leaves=63, verbose=-1, random_state=RANDOM_STATE
-        ),
-    ]
-    cv_clf = CrossValidationTrainer(
-        metric_name="Roc AUC",
-        problem_type="classification",
-        cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE),
-        preprocessing_pipeline=preprocessing_pipeline,
-        verbose=False,
-    )
-    tuner_clf = EnsembleWeightTunerCV(
-        estimators=clf_estimators,
-        cross_validator=cv_clf,
-        n_trials=50,
-        seed=RANDOM_STATE,
-        allow_negative_weights=False,
-    )
-    clf_study = tuner_clf.tune(X_df, y_ser)
-    print("Best trial value:", clf_study.best_value)
-    print("Best weights:", tuner_clf.best_weights)
+        reg_estimators = [
+            LGBMRegressor(
+                n_estimators=100, num_leaves=15, verbose=-1, random_state=RANDOM_STATE
+            ),
+            LGBMRegressor(
+                n_estimators=100, num_leaves=31, verbose=-1, random_state=RANDOM_STATE
+            ),
+            LGBMRegressor(
+                n_estimators=100, num_leaves=63, verbose=-1, random_state=RANDOM_STATE
+            ),
+        ]
+        cv_reg = CrossValidationTrainer(
+            metric_name="RMSE",
+            problem_type="regression",
+            cv=KFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE),
+            preprocessing_pipeline=preprocessing_pipeline,
+            verbose=False,
+        )
+        tuner_reg = EnsembleWeightTunerCV(
+            estimators=reg_estimators,
+            cross_validator=cv_reg,
+            n_trials=30,
+            seed=RANDOM_STATE,
+            allow_negative_weights=False,
+        )
+        reg_study = tuner_reg.tune(x_reg_df, y_reg_ser)
+        print("Best trial value:", reg_study.best_value)
+        print("Best weights:", tuner_reg.best_weights)
 
-    print("\n=== Regression ===")
-    X_reg, y_reg = make_regression(
-        n_samples=N_SAMPLES,
-        n_features=N_FEATURES,
-        n_informative=5,
-        noise=0.1,
-        random_state=RANDOM_STATE,
-    )
-    X_reg_df = pd.DataFrame(X_reg, columns=FEATURE_NAMES)
-    y_reg_ser = pd.Series(y_reg)
-
-    reg_estimators = [
-        LGBMRegressor(
-            n_estimators=100, num_leaves=15, verbose=-1, random_state=RANDOM_STATE
-        ),
-        LGBMRegressor(
-            n_estimators=100, num_leaves=31, verbose=-1, random_state=RANDOM_STATE
-        ),
-        LGBMRegressor(
-            n_estimators=100, num_leaves=63, verbose=-1, random_state=RANDOM_STATE
-        ),
-    ]
-    cv_reg = CrossValidationTrainer(
-        metric_name="RMSE",
-        problem_type="regression",
-        cv=KFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE),
-        preprocessing_pipeline=preprocessing_pipeline,
-        verbose=False,
-    )
-    tuner_reg = EnsembleWeightTunerCV(
-        estimators=reg_estimators,
-        cross_validator=cv_reg,
-        n_trials=30,
-        seed=RANDOM_STATE,
-        allow_negative_weights=False,
-    )
-    reg_study = tuner_reg.tune(X_reg_df, y_reg_ser)
-    print("Best trial value:", reg_study.best_value)
-    print("Best weights:", tuner_reg.best_weights)
+    _run_demo()

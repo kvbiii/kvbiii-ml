@@ -126,7 +126,7 @@ class MutualInformationFiltering:
             random_state=self.mi_kwargs.get("random_state"),
         )
 
-    def _prepare_X_y_for_mi(
+    def _prepare_x_y_for_mi(
         self, X: pd.DataFrame, y: pd.Series | np.ndarray
     ) -> tuple[pd.DataFrame, pd.Series | np.ndarray]:
         """Validate inputs and encode categorical features for MI computation.
@@ -142,7 +142,7 @@ class MutualInformationFiltering:
         if not isinstance(y, (pd.Series, np.ndarray)):
             raise ValueError("y must be a pandas Series or numpy array.")
 
-        X_prepared, discrete_features_mask = (
+        x_prepared, discrete_features_mask = (
             DataAnalyzer._prepare_features_for_mutual_information(X)
         )
 
@@ -151,35 +151,43 @@ class MutualInformationFiltering:
         else:
             self.mi_kwargs["discrete_features"] = discrete_features_mask
 
-        return X_prepared, y
+        return x_prepared, y
 
 
 if __name__ == "__main__":
-    # Minimal usage example
-    rng = np.random.default_rng(17)
-    X_demo = pd.DataFrame(
-        {
-            "num1": rng.normal(size=100),
-            "num2": rng.normal(size=100),
-            "cat": pd.Series(rng.choice(["A", "B", "C"], size=100), dtype="category"),
-        }
-    )
-    y_demo = pd.Series(
-        (X_demo["num1"] + rng.normal(scale=0.1, size=100) > 0).astype(int)
-    )
 
-    # Example 1: nominal threshold
-    mif = MutualInformationFiltering(
-        problem_type="classification", threshold=0.01, verbose=True
-    )
-    X_sel = mif.fit_transform(X_demo, y_demo)
-    print("Selected features:", mif.selected_features_)
-    print("Transformed shape:", X_sel.shape)
+    def _run_demo() -> None:
+        """Run MutualInformationFiltering on a small synthetic dataset."""
+        # Minimal usage example
+        rng = np.random.default_rng(17)
+        x_demo = pd.DataFrame(
+            {
+                "num1": rng.normal(size=100),
+                "num2": rng.normal(size=100),
+                "cat": pd.Series(
+                    rng.choice(["A", "B", "C"], size=100), dtype="category"
+                ),
+            }
+        )
+        y_demo = pd.Series(
+            (x_demo["num1"] + rng.normal(scale=0.1, size=100) > 0).astype(int)
+        )
 
-    # Example 2: keep top-k features (prints implied nominal threshold)
-    mif_topk = MutualInformationFiltering(
-        problem_type="classification", keep_top_k=2, verbose=True
-    )
-    X_sel_topk = mif_topk.fit_transform(X_demo, y_demo)
-    print("Selected (top-k) features:", mif_topk.selected_features_)
-    print("Border MI threshold:", mif_topk.threshold_border_)
+        # Example 1: nominal threshold
+        mif = MutualInformationFiltering(
+            problem_type="classification", threshold=0.01, verbose=True
+        )
+        x_sel = mif.fit_transform(x_demo, y_demo)
+        print("Selected features:", mif.selected_features_)
+        print("Transformed shape:", x_sel.shape)
+
+        # Example 2: keep top-k features (prints implied nominal threshold)
+        mif_topk = MutualInformationFiltering(
+            problem_type="classification", keep_top_k=2, verbose=True
+        )
+        x_sel_topk = mif_topk.fit_transform(x_demo, y_demo)
+        print("Selected (top-k) features:", mif_topk.selected_features_)
+        print("Border MI threshold:", mif_topk.threshold_border_)
+        print("Transformed shape:", x_sel_topk.shape)
+
+    _run_demo()

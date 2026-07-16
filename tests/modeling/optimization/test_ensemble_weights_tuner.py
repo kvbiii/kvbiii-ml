@@ -84,7 +84,7 @@ class TestEnsembleWeightTunerCV:
             raise AssertionError()
 
     def test_ensembleweighttuner_check_x_dataframe_passthrough(self, sample_dataframe):
-        """Tests check_X method with DataFrame input.
+        """Tests check_x method with DataFrame input.
 
         Args:
             sample_dataframe (pd.DataFrame): Test DataFrame fixture
@@ -93,7 +93,7 @@ class TestEnsembleWeightTunerCV:
             - DataFrame input is returned unchanged
             - Same object reference is maintained
         """
-        result = EnsembleWeightTunerCV.check_X(sample_dataframe)
+        result = EnsembleWeightTunerCV.check_x(sample_dataframe)
 
         if result is not sample_dataframe:
             raise AssertionError()
@@ -101,14 +101,14 @@ class TestEnsembleWeightTunerCV:
             raise AssertionError()
 
     def test_ensembleweighttuner_check_x_array_conversion(self):
-        """Tests check_X method with numpy array input.
+        """Tests check_x method with numpy array input.
 
         Asserts:
             - Numpy array is converted to DataFrame
             - Data content is preserved
         """
         array_input = np.array([[1, 2], [3, 4], [5, 6]])
-        result = EnsembleWeightTunerCV.check_X(array_input)
+        result = EnsembleWeightTunerCV.check_x(array_input)
 
         if not isinstance(result, pd.DataFrame):
             raise AssertionError()

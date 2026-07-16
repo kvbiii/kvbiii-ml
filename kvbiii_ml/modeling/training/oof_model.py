@@ -230,11 +230,11 @@ def _collect_oof_probas(
         cross_validator.fitted_estimators_,
         cross_validator.fitted_pipelines_,
     ):
-        X_val = CrossValidationTrainer._transform_with_pipeline(
+        x_val = CrossValidationTrainer._transform_with_pipeline(
             fold_pipeline, X.iloc[val_idx]
         )
-        X_val = CrossValidationTrainer._order_X_for_estimator(X_val, est)
-        probas = est.predict_proba(X_val)
+        x_val = CrossValidationTrainer._order_x_for_estimator(x_val, est)
+        probas = est.predict_proba(x_val)
         if probas.ndim == 1:
             probas = np.column_stack([1 - probas, probas])
         if oof_probas is None:
@@ -373,11 +373,11 @@ class OOFModel:
 
         preds = []
         for est in self.fitted_estimators_:
-            X_ord = CrossValidationTrainer._order_X_for_estimator(X, est)
+            x_ord = CrossValidationTrainer._order_x_for_estimator(X, est)
             if self.problem_type == "classification" and hasattr(est, "predict_proba"):
-                preds.append(est.predict_proba(X_ord))
+                preds.append(est.predict_proba(x_ord))
             else:
-                preds.append(est.predict(X_ord))
+                preds.append(est.predict(x_ord))
 
         avg = np.asarray(preds, dtype=float).mean(axis=0)
         if self.problem_type == "classification":
@@ -410,10 +410,10 @@ class OOFModel:
             )
 
         if self.calibrate and self.fitted_estimator_ is not None:
-            X_ord = CrossValidationTrainer._order_X_for_estimator(
+            x_ord = CrossValidationTrainer._order_x_for_estimator(
                 X, self.fitted_estimator_
             )
-            raw = self.fitted_estimator_.predict_proba(X_ord)
+            raw = self.fitted_estimator_.predict_proba(x_ord)
             if raw.ndim == 1:
                 raw = np.column_stack([1 - raw, raw])
             return _apply_calibrator(
@@ -421,7 +421,7 @@ class OOFModel:
             )
 
         probs = [
-            est.predict_proba(CrossValidationTrainer._order_X_for_estimator(X, est))
+            est.predict_proba(CrossValidationTrainer._order_x_for_estimator(X, est))
             for est in self.fitted_estimators_
         ]
         return np.asarray(probs, dtype=float).mean(axis=0)
@@ -455,45 +455,53 @@ if __name__ == "__main__":
     from sklearn.model_selection import KFold
     from lightgbm import LGBMClassifier
 
-    X_arr, y_arr = make_classification(
-        n_samples=300, n_features=10, n_informative=5, n_redundant=2, random_state=17
-    )
-    X_df = pd.DataFrame(X_arr, columns=[f"f{i}" for i in range(10)])
-    y_ser = pd.Series(y_arr)
+    def _run_demo() -> None:
+        """Run OOFModel with and without calibration on a synthetic dataset."""
+        x_arr, y_arr = make_classification(
+            n_samples=300,
+            n_features=10,
+            n_informative=5,
+            n_redundant=2,
+            random_state=17,
+        )
+        x_df = pd.DataFrame(x_arr, columns=[f"f{i}" for i in range(10)])
+        y_ser = pd.Series(y_arr)
 
-    cv = CrossValidationTrainer(
-        metric_name="Accuracy",
-        problem_type="classification",
-        cv=KFold(n_splits=5, shuffle=True, random_state=17),
-        verbose=False,
-    )
+        cv = CrossValidationTrainer(
+            metric_name="Accuracy",
+            problem_type="classification",
+            cv=KFold(n_splits=5, shuffle=True, random_state=17),
+            verbose=False,
+        )
 
-    print("=== OOFModel without calibration ===")
-    oof = OOFModel(
-        estimator=LR(max_iter=1000, solver="liblinear", random_state=17),
-        cross_validator=cv,
-        problem_type="classification",
-    )
-    oof.fit(X_df, y_ser)
-    print("Fitted estimators:", len(oof.fitted_estimators_))
-    print("predict_proba shape:", oof.predict_proba(X_df).shape)
+        print("=== OOFModel without calibration ===")
+        oof = OOFModel(
+            estimator=LR(max_iter=1000, solver="liblinear", random_state=17),
+            cross_validator=cv,
+            problem_type="classification",
+        )
+        oof.fit(x_df, y_ser)
+        print("Fitted estimators:", len(oof.fitted_estimators_))
+        print("predict_proba shape:", oof.predict_proba(x_df).shape)
 
-    print("\n=== OOFModel with isotonic calibration ===")
-    cv_cal = CrossValidationTrainer(
-        metric_name="Log Loss",
-        problem_type="classification",
-        cv=KFold(n_splits=5, shuffle=True, random_state=17),
-        verbose=False,
-    )
-    oof_cal = OOFModel(
-        estimator=LGBMClassifier(n_estimators=50, verbose=-1, random_state=17),
-        cross_validator=cv_cal,
-        problem_type="classification",
-        calibrate=True,
-        calibration_method="isotonic",
-    )
-    oof_cal.fit(X_df, y_ser)
-    print("Fitted estimators:", len(oof_cal.fitted_estimators_))
-    print("predict_proba shape:", oof_cal.predict_proba(X_df).shape)
-    print("calibrator_:", type(oof_cal.calibrator_).__name__)
-    print("fitted_estimator_ type:", type(oof_cal.fitted_estimator_).__name__)
+        print("\n=== OOFModel with isotonic calibration ===")
+        cv_cal = CrossValidationTrainer(
+            metric_name="Log Loss",
+            problem_type="classification",
+            cv=KFold(n_splits=5, shuffle=True, random_state=17),
+            verbose=False,
+        )
+        oof_cal = OOFModel(
+            estimator=LGBMClassifier(n_estimators=50, verbose=-1, random_state=17),
+            cross_validator=cv_cal,
+            problem_type="classification",
+            calibrate=True,
+            calibration_method="isotonic",
+        )
+        oof_cal.fit(x_df, y_ser)
+        print("Fitted estimators:", len(oof_cal.fitted_estimators_))
+        print("predict_proba shape:", oof_cal.predict_proba(x_df).shape)
+        print("calibrator_:", type(oof_cal.calibrator_).__name__)
+        print("fitted_estimator_ type:", type(oof_cal.fitted_estimator_).__name__)
+
+    _run_demo()

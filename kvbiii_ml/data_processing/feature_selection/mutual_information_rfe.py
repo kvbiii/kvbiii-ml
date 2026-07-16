@@ -203,12 +203,12 @@ class MutualInformationRecursiveFeatureElimination:
         Returns:
             pd.DataFrame: Dataframe with categorical/object columns converted to codes.
         """
-        X_converted = X.copy()
-        for col in X_converted.select_dtypes(include=["category"]).columns:
-            X_converted[col] = (
-                X_converted[col].cat.codes.astype("object").astype("category")
+        x_converted = X.copy()
+        for col in x_converted.select_dtypes(include=["category"]).columns:
+            x_converted[col] = (
+                x_converted[col].cat.codes.astype("object").astype("category")
             )
-        return X_converted
+        return x_converted
 
     def _compute_mi_scores(
         self, X: pd.DataFrame, y: pd.Series | np.ndarray
@@ -222,7 +222,7 @@ class MutualInformationRecursiveFeatureElimination:
             random_state=self.mi_kwargs.get("random_state"),
         )
 
-    def _prepare_X_y_for_mi(
+    def _prepare_x_y_for_mi(
         self, X: pd.DataFrame, y: pd.Series | np.ndarray
     ) -> tuple[pd.DataFrame, pd.Series | np.ndarray]:
         """Validate types and convert categorical features before MI.
@@ -240,7 +240,7 @@ class MutualInformationRecursiveFeatureElimination:
         if not isinstance(y, (pd.Series, np.ndarray)):
             raise ValueError("y must be a pandas Series or numpy array.")
 
-        X_prepared, discrete_features_mask = (
+        x_prepared, discrete_features_mask = (
             DataAnalyzer._prepare_features_for_mutual_information(X)
         )
 
@@ -249,7 +249,7 @@ class MutualInformationRecursiveFeatureElimination:
         else:
             self.mi_kwargs["discrete_features"] = discrete_features_mask
 
-        return X_prepared, y
+        return x_prepared, y
 
     def _cross_val_base_metric(
         self, X: pd.DataFrame, y: pd.Series, current_features: list[str]

@@ -114,7 +114,7 @@ class CalibratedModel:
 
         self.classes_ = np.unique(y.to_numpy())
 
-        X_fit, X_cal, y_fit, y_cal = train_test_split(
+        x_fit, x_cal, y_fit, y_cal = train_test_split(
             X,
             y,
             test_size=self.calibration_size,
@@ -123,9 +123,9 @@ class CalibratedModel:
         )
 
         holdout_estimator = BaseTrainer.fit_estimator(
-            deepcopy(self.estimator), X_fit, y_fit, X_cal, y_cal
+            deepcopy(self.estimator), x_fit, y_fit, x_cal, y_cal
         )
-        cal_probas = self._ensure_proba_matrix(holdout_estimator.predict_proba(X_cal))
+        cal_probas = self._ensure_proba_matrix(holdout_estimator.predict_proba(x_cal))
         self.calibrator_ = _fit_calibrator(
             cal_probas, y_cal.to_numpy(), self.calibration_method, self.classes_
         )
@@ -161,8 +161,8 @@ class CalibratedModel:
                 "CalibratedModel must be fitted before calling predict_proba()."
             )
 
-        X_ord = CrossValidationTrainer._order_X_for_estimator(X, self.fitted_estimator_)
-        raw = self._ensure_proba_matrix(self.fitted_estimator_.predict_proba(X_ord))
+        x_ord = CrossValidationTrainer._order_x_for_estimator(X, self.fitted_estimator_)
+        raw = self._ensure_proba_matrix(self.fitted_estimator_.predict_proba(x_ord))
         return _apply_calibrator(
             self.calibrator_, raw, self.classes_, self.calibration_method
         )
@@ -223,60 +223,68 @@ if __name__ == "__main__":
     ES = 30
     FEATURE_NAMES = [f"feature_{i}" for i in range(N_FEATURES)]
 
-    X_arr, y_arr = make_classification(
-        n_samples=N_SAMPLES,
-        n_features=N_FEATURES,
-        n_informative=6,
-        n_redundant=2,
-        n_classes=2,
-        n_clusters_per_class=1,
-        random_state=RANDOM_STATE,
-    )
-    X_df = pd.DataFrame(X_arr, columns=FEATURE_NAMES)
-    y_ser = pd.Series(y_arr, name="target")
-
-    estimators = [
-        LGBMClassifier(
-            n_estimators=200,
-            early_stopping_rounds=ES,
-            verbose=-1,
+    def _run_demo() -> None:
+        """Run CalibratedModel(EnsembleModel) inside a CrossValidationTrainer."""
+        x_arr, y_arr = make_classification(
+            n_samples=N_SAMPLES,
+            n_features=N_FEATURES,
+            n_informative=6,
+            n_redundant=2,
+            n_classes=2,
+            n_clusters_per_class=1,
             random_state=RANDOM_STATE,
-        ),
-        CatBoostClassifier(
-            iterations=200,
-            early_stopping_rounds=ES,
-            verbose=0,
-            random_state=RANDOM_STATE + 2,
-        ),
-        CatBoostClassifier(
-            iterations=200,
-            early_stopping_rounds=ES,
-            verbose=0,
-            random_state=RANDOM_STATE + 3,
-        ),
-    ]
-    ensemble = EnsembleModel(estimators=estimators, problem_type="classification")
-    cv = CrossValidationTrainer(
-        problem_type="classification",
-        metric_name="Log Loss",
-        cv=StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=RANDOM_STATE),
-        verbose=False,
-    )
+        )
+        x_df = pd.DataFrame(x_arr, columns=FEATURE_NAMES)
+        y_ser = pd.Series(y_arr, name="target")
 
-    calibrated = CalibratedModel(
-        estimator=ensemble, calibration_method="isotonic", seed=RANDOM_STATE
-    )
+        estimators = [
+            LGBMClassifier(
+                n_estimators=200,
+                early_stopping_rounds=ES,
+                verbose=-1,
+                random_state=RANDOM_STATE,
+            ),
+            CatBoostClassifier(
+                iterations=200,
+                early_stopping_rounds=ES,
+                verbose=0,
+                random_state=RANDOM_STATE + 2,
+            ),
+            CatBoostClassifier(
+                iterations=200,
+                early_stopping_rounds=ES,
+                verbose=0,
+                random_state=RANDOM_STATE + 3,
+            ),
+        ]
+        ensemble = EnsembleModel(estimators=estimators, problem_type="classification")
+        cv = CrossValidationTrainer(
+            problem_type="classification",
+            metric_name="Log Loss",
+            cv=StratifiedKFold(
+                n_splits=N_FOLDS, shuffle=True, random_state=RANDOM_STATE
+            ),
+            verbose=False,
+        )
 
-    print("=== CalibratedModel(EnsembleModel) inside CrossValidationTrainer ===")
-    start = time.perf_counter()
-    _, valid_scores, _ = cv.fit(calibrated, X_df, y_ser)
-    elapsed = time.perf_counter() - start
-    print(
-        f"  Calibrated CV valid: {np.mean(valid_scores):.4f} ± {np.std(valid_scores):.4f}"
-    )
-    print(f"  Time for CV fit: {elapsed:.2f} seconds")
+        calibrated = CalibratedModel(
+            estimator=ensemble, calibration_method="isotonic", seed=RANDOM_STATE
+        )
 
-    calibrated.fit(X_df, y_ser)
-    print(f"  predict_proba shape: {calibrated.predict_proba(X_df).shape}")
-    print(f"  calibrator_ type: {type(calibrated.calibrator_).__name__}")
-    print(f"  fitted_estimator_ type: {type(calibrated.fitted_estimator_).__name__}")
+        print("=== CalibratedModel(EnsembleModel) inside CrossValidationTrainer ===")
+        start = time.perf_counter()
+        _, valid_scores, _ = cv.fit(calibrated, x_df, y_ser)
+        elapsed = time.perf_counter() - start
+        print(
+            f"  Calibrated CV valid: {np.mean(valid_scores):.4f} ± {np.std(valid_scores):.4f}"
+        )
+        print(f"  Time for CV fit: {elapsed:.2f} seconds")
+
+        calibrated.fit(x_df, y_ser)
+        print(f"  predict_proba shape: {calibrated.predict_proba(x_df).shape}")
+        print(f"  calibrator_ type: {type(calibrated.calibrator_).__name__}")
+        print(
+            f"  fitted_estimator_ type: {type(calibrated.fitted_estimator_).__name__}"
+        )
+
+    _run_demo()

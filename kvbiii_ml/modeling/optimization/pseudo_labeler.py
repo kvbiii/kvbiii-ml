@@ -110,7 +110,7 @@ class PseudoLabelGenerator:
         self.classes_: np.ndarray | None = None
         self.thresholds_: dict[int | str, float] = {}
         self.pseudo_labels_df_: pd.DataFrame = pd.DataFrame()
-        self._X_train: pd.DataFrame | None = None
+        self._x_train: pd.DataFrame | None = None
         self._y_train: pd.Series | None = None
         self._unlabeled_probas: np.ndarray | None = None
 
@@ -119,7 +119,7 @@ class PseudoLabelGenerator:
         estimator: BaseEstimator,
         X_train: pd.DataFrame,
         y_train: pd.Series,
-        X_unlabeled: pd.DataFrame,
+        x_unlabeled: pd.DataFrame,
     ) -> "PseudoLabelGenerator":
         """Fit the model via CV, compute thresholds, and generate pseudo labels.
 
@@ -127,7 +127,7 @@ class PseudoLabelGenerator:
             estimator (BaseEstimator): Unfitted estimator to train.
             X_train (pd.DataFrame): Labeled training features.
             y_train (pd.Series): Labeled training target.
-            X_unlabeled (pd.DataFrame): Unlabeled features to pseudo-label.
+            x_unlabeled (pd.DataFrame): Unlabeled features to pseudo-label.
 
         Returns:
             PseudoLabelGenerator: Fitted self.
@@ -136,16 +136,16 @@ class PseudoLabelGenerator:
             X_train = pd.DataFrame(X_train)
         if not isinstance(y_train, pd.Series):
             y_train = pd.Series(np.asarray(y_train))
-        if not isinstance(X_unlabeled, pd.DataFrame):
-            X_unlabeled = pd.DataFrame(X_unlabeled)
+        if not isinstance(x_unlabeled, pd.DataFrame):
+            x_unlabeled = pd.DataFrame(x_unlabeled)
 
-        self._X_train = X_train
+        self._x_train = X_train
         self._y_train = y_train
         self.classes_ = np.unique(y_train)
 
         self.cross_validator.fit(estimator, X_train, y_train)
 
-        self._unlabeled_probas = self.cross_validator.predict_proba(X_unlabeled)
+        self._unlabeled_probas = self.cross_validator.predict_proba(x_unlabeled)
         if self._unlabeled_probas.ndim == 1:
             self._unlabeled_probas = np.column_stack(
                 [1 - self._unlabeled_probas, self._unlabeled_probas]
@@ -170,7 +170,7 @@ class PseudoLabelGenerator:
             argmax_indices, max_confidences
         )
 
-        self.pseudo_labels_df_ = X_unlabeled.copy()
+        self.pseudo_labels_df_ = x_unlabeled.copy()
         self.pseudo_labels_df_["_pseudo_label"] = np.where(
             selected_mask, pseudo_labels, np.nan
         )
@@ -199,30 +199,30 @@ class PseudoLabelGenerator:
         Raises:
             RuntimeError: If called before fit().
         """
-        if self._X_train is None:
+        if self._x_train is None:
             raise RuntimeError("Call fit() before get_augmented_dataset().")
 
         feature_cols = [
             c for c in self.pseudo_labels_df_.columns if not c.startswith("_")
         ]
-        X_pseudo = self.pseudo_labels_df_[feature_cols].reset_index(drop=True)
+        x_pseudo = self.pseudo_labels_df_[feature_cols].reset_index(drop=True)
         y_pseudo = self.pseudo_labels_df_["_pseudo_label"].reset_index(drop=True)
         w_pseudo = self.pseudo_labels_df_["_confidence"].reset_index(drop=True)
 
-        X_combined = pd.concat(
-            [self._X_train.reset_index(drop=True), X_pseudo], ignore_index=True
+        x_combined = pd.concat(
+            [self._x_train.reset_index(drop=True), x_pseudo], ignore_index=True
         )
         y_combined = pd.concat(
             [self._y_train.reset_index(drop=True), y_pseudo], ignore_index=True
         )
         w_combined = pd.concat(
             [
-                pd.Series(np.ones(len(self._X_train)), name="_weight", dtype=float),
+                pd.Series(np.ones(len(self._x_train)), name="_weight", dtype=float),
                 w_pseudo.rename("_weight"),
             ],
             ignore_index=True,
         )
-        return X_combined, y_combined, w_combined
+        return x_combined, y_combined, w_combined
 
     def plot_pseudo_label_stats(self) -> None:
         """Visualise pseudo-label confidence distributions and class composition.
@@ -602,7 +602,7 @@ if __name__ == "__main__":
 
     def _make_data(n: int, n_classes: int, seed: int) -> tuple[pd.DataFrame, pd.Series]:
         """Generate synthetic classification dataset with deliberate noise for realism."""
-        X_arr, y_arr = make_classification(
+        x_arr, y_arr = make_classification(
             n_samples=n,
             n_features=N_FEATURES,
             n_informative=4,
@@ -612,7 +612,7 @@ if __name__ == "__main__":
             flip_y=0.05,
             random_state=seed,
         )
-        return pd.DataFrame(X_arr, columns=FEATURE_NAMES), pd.Series(
+        return pd.DataFrame(x_arr, columns=FEATURE_NAMES), pd.Series(
             y_arr, name="target"
         )
 
@@ -648,7 +648,7 @@ if __name__ == "__main__":
         estimator: BaseEstimator,
         X_train: pd.DataFrame,
         y_train: pd.Series,
-        X_unlabeled: pd.DataFrame,
+        x_unlabeled: pd.DataFrame,
         threshold_method: str,
         metric: str,
         pipeline: Pipeline | None = None,
@@ -663,12 +663,12 @@ if __name__ == "__main__":
         gen = PseudoLabelGenerator(
             cross_validator=cv, threshold_method=threshold_method, **kwargs
         )
-        gen.fit(estimator, X_train, y_train, X_unlabeled)
-        X_aug, y_aug, w_aug = gen.get_augmented_dataset()
+        gen.fit(estimator, X_train, y_train, x_unlabeled)
+        x_aug, y_aug, _w_aug = gen.get_augmented_dataset()
 
         print(f"  Original labeled    : {len(X_train):,}")
-        print(f"  Pseudo-labeled      : {len(X_aug) - len(X_train):,}")
-        print(f"  Total for retraining: {len(X_aug):,}")
+        print(f"  Pseudo-labeled      : {len(x_aug) - len(X_train):,}")
+        print(f"  Total for retraining: {len(x_aug):,}")
         print()
 
         cv_retrain = _build_cv(metric, pipeline)
@@ -678,7 +678,7 @@ if __name__ == "__main__":
             verbose=-1,
             random_state=RANDOM_STATE,
         )
-        _, valid_aug, _ = cv_retrain.fit(lgbm_retrain, X_aug, y_aug)
+        _, valid_aug, _ = cv_retrain.fit(lgbm_retrain, x_aug, y_aug)
         print(
             f"  Baseline CV valid   : {np.mean(cv.valid_scores_):.4f} ± {np.std(cv.valid_scores_):.4f}"
         )
@@ -688,45 +688,49 @@ if __name__ == "__main__":
         print()
         gen.plot_pseudo_label_stats()
 
-    lgbm = LGBMClassifier(
-        n_estimators=200,
-        early_stopping_rounds=ES,
-        verbose=-1,
-        random_state=RANDOM_STATE,
-    )
+    def _run_demo() -> None:
+        """Run the pseudo-labeling scenario(s) on synthetic data."""
+        lgbm = LGBMClassifier(
+            n_estimators=200,
+            early_stopping_rounds=ES,
+            verbose=-1,
+            random_state=RANDOM_STATE,
+        )
 
-    # print("\n>>> Scenario 1: Binary + auto threshold + preprocessing pipeline")
-    X_tr, y_tr = _make_data(N_LABELED, n_classes=2, seed=RANDOM_STATE)
-    X_unl, _ = _make_data(N_UNLABELED, n_classes=2, seed=RANDOM_STATE + 99)
-    # _run_scenario(
-    #     "Binary + LightGBM + auto threshold + pipeline",
-    #     lgbm, X_tr, y_tr, X_unl,
-    #     threshold_method="auto", metric="Log Loss",
-    #     pipeline=_build_pipeline(), threshold_percentile=80.0,
-    # )
+        # print("\n>>> Scenario 1: Binary + auto threshold + preprocessing pipeline")
+        x_tr, y_tr = _make_data(N_LABELED, n_classes=2, seed=RANDOM_STATE)
+        x_unl, _ = _make_data(N_UNLABELED, n_classes=2, seed=RANDOM_STATE + 99)
+        # _run_scenario(
+        #     "Binary + LightGBM + auto threshold + pipeline",
+        #     lgbm, x_tr, y_tr, x_unl,
+        #     threshold_method="auto", metric="Log Loss",
+        #     pipeline=_build_pipeline(), threshold_percentile=80.0,
+        # )
 
-    print("\n>>> Scenario 2: Binary + top_k threshold (top 20%)")
-    _run_scenario(
-        "Binary + LightGBM + top_k threshold",
-        lgbm,
-        X_tr,
-        y_tr,
-        X_unl,
-        threshold_method="top_k",
-        metric="Log Loss",
-        top_k_pct=0.20,
-    )
+        print("\n>>> Scenario 2: Binary + top_k threshold (top 20%)")
+        _run_scenario(
+            "Binary + LightGBM + top_k threshold",
+            lgbm,
+            x_tr,
+            y_tr,
+            x_unl,
+            threshold_method="top_k",
+            metric="Log Loss",
+            top_k_pct=0.20,
+        )
 
-    # print("\n>>> Scenario 3: Multiclass + auto threshold")
-    # X_tr_mc, y_tr_mc = _make_data(N_LABELED, n_classes=3, seed=RANDOM_STATE)
-    # X_unl_mc, _ = _make_data(N_UNLABELED, n_classes=3, seed=RANDOM_STATE + 99)
-    # _run_scenario(
-    #     "Multiclass (3 classes) + LightGBM + auto threshold",
-    #     lgbm,
-    #     X_tr_mc,
-    #     y_tr_mc,
-    #     X_unl_mc,
-    #     threshold_method="auto",
-    #     metric="Log Loss",
-    #     threshold_percentile=75.0,
-    # )
+        # print("\n>>> Scenario 3: Multiclass + auto threshold")
+        # x_tr_mc, y_tr_mc = _make_data(N_LABELED, n_classes=3, seed=RANDOM_STATE)
+        # x_unl_mc, _ = _make_data(N_UNLABELED, n_classes=3, seed=RANDOM_STATE + 99)
+        # _run_scenario(
+        #     "Multiclass (3 classes) + LightGBM + auto threshold",
+        #     lgbm,
+        #     x_tr_mc,
+        #     y_tr_mc,
+        #     x_unl_mc,
+        #     threshold_method="auto",
+        #     metric="Log Loss",
+        #     threshold_percentile=75.0,
+        # )
+
+    _run_demo()

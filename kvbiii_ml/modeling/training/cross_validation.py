@@ -177,17 +177,17 @@ class CrossValidationTrainer(BaseTrainer):
                 Defaults to None.
 
         Returns:
-            tuple: (X_train_out, X_valid_out, X_test_out, fitted_pipeline) where
+            tuple: (x_train_out, x_valid_out, x_test_out, fitted_pipeline) where
                 fitted_pipeline is the cloned and fitted Pipeline for this fold, or None.
         """
         if pipeline is None:
             return X_train, X_valid, X_test, None
 
         fitted = clone(pipeline)
-        X_train_out = fitted.fit_transform(X_train, y_train)
-        X_valid_out = fitted.transform(X_valid) if X_valid is not None else None
-        X_test_out = fitted.transform(X_test) if X_test is not None else None
-        return X_train_out, X_valid_out, X_test_out, fitted
+        x_train_out = fitted.fit_transform(X_train, y_train)
+        x_valid_out = fitted.transform(X_valid) if X_valid is not None else None
+        x_test_out = fitted.transform(X_test) if X_test is not None else None
+        return x_train_out, x_valid_out, x_test_out, fitted
 
     @staticmethod
     def _transform_with_pipeline(
@@ -261,7 +261,7 @@ class CrossValidationTrainer(BaseTrainer):
             X_train, X_valid = X.iloc[train_idx].copy(), X.iloc[valid_idx].copy()
             y_train, y_valid = y.iloc[train_idx], y.iloc[valid_idx]
 
-            X_train_proc, X_valid_proc, X_test_proc, fitted_pipeline = (
+            x_train_proc, x_valid_proc, x_test_proc, fitted_pipeline = (
                 self._apply_pipeline(
                     active_pipeline,
                     X_train,
@@ -275,12 +275,12 @@ class CrossValidationTrainer(BaseTrainer):
             y_train_pred, y_valid_pred, y_test_pred, fitted_estimator = (
                 self.fit_and_predict(
                     estimator_fold,
-                    X_train_proc,
+                    x_train_proc,
                     y_train,
-                    X_valid_proc,
+                    x_valid_proc,
                     y_valid,
                     self.metric_type,
-                    X_test=X_test_proc,
+                    X_test=x_test_proc,
                     verbose=self.verbose,
                 )
             )
@@ -335,15 +335,15 @@ class CrossValidationTrainer(BaseTrainer):
         for fitted_estimator, fold_pipeline in zip(
             self.fitted_estimators_, self.fitted_pipelines_
         ):
-            X_proc = self._transform_with_pipeline(fold_pipeline, X)
-            X_ordered = self._order_X_for_estimator(X_proc, fitted_estimator)
+            x_proc = self._transform_with_pipeline(fold_pipeline, X)
+            x_ordered = self._order_x_for_estimator(x_proc, fitted_estimator)
             if self.problem_type == "classification":
                 if hasattr(fitted_estimator, "predict_proba"):
-                    preds.append(fitted_estimator.predict_proba(X_ordered))
+                    preds.append(fitted_estimator.predict_proba(x_ordered))
                 else:
-                    preds.append(fitted_estimator.predict(X_ordered))
+                    preds.append(fitted_estimator.predict(x_ordered))
             else:
-                preds.append(fitted_estimator.predict(X_ordered))
+                preds.append(fitted_estimator.predict(x_ordered))
 
         preds_arr = np.asarray(preds, dtype=float)
         avg = preds_arr.mean(axis=0)
@@ -380,9 +380,9 @@ class CrossValidationTrainer(BaseTrainer):
         for fitted_estimator, fold_pipeline in zip(
             self.fitted_estimators_, self.fitted_pipelines_
         ):
-            X_proc = self._transform_with_pipeline(fold_pipeline, X)
-            X_ordered = self._order_X_for_estimator(X_proc, fitted_estimator)
-            probs.append(fitted_estimator.predict_proba(X_ordered))
+            x_proc = self._transform_with_pipeline(fold_pipeline, X)
+            x_ordered = self._order_x_for_estimator(x_proc, fitted_estimator)
+            probs.append(fitted_estimator.predict_proba(x_ordered))
 
         return np.asarray(probs, dtype=float).mean(axis=0)
 
@@ -414,9 +414,9 @@ class CrossValidationTrainer(BaseTrainer):
             for est, fold_pipeline in zip(
                 self.fitted_estimators_, self.fitted_pipelines_
             ):
-                X_proc = self._transform_with_pipeline(fold_pipeline, X)
-                X_ordered = self._order_X_for_estimator(X_proc, est)
-                fold_preds.append(np.asarray(est.predict(X_ordered), dtype=float))
+                x_proc = self._transform_with_pipeline(fold_pipeline, X)
+                x_ordered = self._order_x_for_estimator(x_proc, est)
+                fold_preds.append(np.asarray(est.predict(x_ordered), dtype=float))
             preds = np.vstack(fold_preds)
             mean_pred = preds.mean(axis=0)
             std_pred = preds.std(axis=0, ddof=0)
@@ -429,13 +429,13 @@ class CrossValidationTrainer(BaseTrainer):
 
         probs = []
         for est, fold_pipeline in zip(self.fitted_estimators_, self.fitted_pipelines_):
-            X_proc = self._transform_with_pipeline(fold_pipeline, X)
-            X_ordered = self._order_X_for_estimator(X_proc, est)
+            x_proc = self._transform_with_pipeline(fold_pipeline, X)
+            x_ordered = self._order_x_for_estimator(x_proc, est)
             if not hasattr(est, "predict_proba"):
                 raise ValueError(
                     "All fold estimators must implement predict_proba for classification confidence."
                 )
-            p = np.asarray(est.predict_proba(X_ordered), dtype=float)
+            p = np.asarray(est.predict_proba(x_ordered), dtype=float)
             if p.ndim == 1:
                 p = np.column_stack([1 - p, p])
             probs.append(p)
@@ -453,7 +453,7 @@ class CrossValidationTrainer(BaseTrainer):
         }
 
     @staticmethod
-    def _order_X_for_estimator(
+    def _order_x_for_estimator(
         X: pd.DataFrame, estimator: BaseEstimator
     ) -> pd.DataFrame:
         """Reorder columns to match an estimator's expected feature order.
@@ -515,7 +515,7 @@ if __name__ == "__main__":
     def _make_clf_data(n_classes: int) -> tuple[pd.DataFrame, pd.Series]:
         """Generate synthetic classification dataset with numerical and categorical features."""
         rng = np.random.RandomState(RANDOM_STATE)
-        X_num, y_arr = make_classification(
+        x_num, y_arr = make_classification(
             n_samples=N_SAMPLES,
             n_features=N_FEATURES,
             n_informative=6,
@@ -524,7 +524,7 @@ if __name__ == "__main__":
             n_clusters_per_class=1,
             random_state=RANDOM_STATE,
         )
-        df = pd.DataFrame(X_num, columns=[f"num_{i}" for i in range(N_FEATURES)])
+        df = pd.DataFrame(x_num, columns=[f"num_{i}" for i in range(N_FEATURES)])
         df["cat_1"] = pd.Categorical(rng.choice(["A", "B", "C", "D"], size=N_SAMPLES))
         df["cat_2"] = pd.Categorical(rng.choice(["X", "Y", "Z"], size=N_SAMPLES))
         return df, pd.Series(y_arr, name="target")
@@ -532,13 +532,13 @@ if __name__ == "__main__":
     def _make_reg_data() -> tuple[pd.DataFrame, pd.Series]:
         """Generate synthetic regression dataset with numerical and categorical features."""
         rng = np.random.RandomState(RANDOM_STATE)
-        X_num, y_arr = make_regression(
+        x_num, y_arr = make_regression(
             n_samples=N_SAMPLES,
             n_features=N_FEATURES,
             n_informative=6,
             random_state=RANDOM_STATE,
         )
-        df = pd.DataFrame(X_num, columns=[f"num_{i}" for i in range(N_FEATURES)])
+        df = pd.DataFrame(x_num, columns=[f"num_{i}" for i in range(N_FEATURES)])
         df["cat_1"] = pd.Categorical(rng.choice(["A", "B", "C", "D"], size=N_SAMPLES))
         df["cat_2"] = pd.Categorical(rng.choice(["X", "Y", "Z"], size=N_SAMPLES))
         return df, pd.Series(y_arr, name="target")
@@ -564,72 +564,78 @@ if __name__ == "__main__":
         _, valid_s, _ = trainer.fit(estimator, X, y)
         print(f"  {label:<50} valid={np.mean(valid_s):.4f} ± {np.std(valid_s):.4f}")
 
-    _winsorizer = Winsorizer(
-        capping_method="iqr", tail="both", fold=3.0, missing_values="ignore"
-    )
-    _mean_encoder = MeanEncoder(variables=CAT_FEATURES, missing_values="ignore")
-    _imputer = MeanMedianImputer(imputation_method="median")
-    _categorial_aligner = CategoricalAligner(categorical_features=CAT_FEATURES)
-    _pipe_steps = [
-        ("imputer", _imputer),
-        ("winsorizer", _winsorizer),
-        ("mean_encoder", _mean_encoder),
-        ("categorical_aligner", _categorial_aligner),
-    ]
-    clf_pipeline = Pipeline(_pipe_steps)
-    reg_pipeline = Pipeline(_pipe_steps)
+    def _run_demo() -> None:
+        """Run CrossValidationTrainer across the demo scenario matrix."""
+        _winsorizer = Winsorizer(
+            capping_method="iqr", tail="both", fold=3.0, missing_values="ignore"
+        )
+        _mean_encoder = MeanEncoder(variables=CAT_FEATURES, missing_values="ignore")
+        _imputer = MeanMedianImputer(imputation_method="median")
+        _categorial_aligner = CategoricalAligner(categorical_features=CAT_FEATURES)
+        _pipe_steps = [
+            ("imputer", _imputer),
+            ("winsorizer", _winsorizer),
+            ("mean_encoder", _mean_encoder),
+            ("categorical_aligner", _categorial_aligner),
+        ]
+        clf_pipeline = Pipeline(_pipe_steps)
+        reg_pipeline = Pipeline(_pipe_steps)
 
-    X_bin, y_bin = _make_clf_data(n_classes=2)
-    X_multi, y_multi = _make_clf_data(n_classes=3)
-    X_reg, y_reg = _make_reg_data()
+        x_bin, y_bin = _make_clf_data(n_classes=2)
+        x_multi, y_multi = _make_clf_data(n_classes=3)
+        x_reg, y_reg = _make_reg_data()
 
-    X_bin_cat = X_bin.assign(**{c: X_bin[c].astype(str) for c in CAT_FEATURES})
-    X_multi_cat = X_multi.assign(**{c: X_multi[c].astype(str) for c in CAT_FEATURES})
-    X_reg_cat = X_reg.assign(**{c: X_reg[c].astype(str) for c in CAT_FEATURES})
+        x_bin_cat = x_bin.assign(**{c: x_bin[c].astype(str) for c in CAT_FEATURES})
+        x_multi_cat = x_multi.assign(
+            **{c: x_multi[c].astype(str) for c in CAT_FEATURES}
+        )
+        x_reg_cat = x_reg.assign(**{c: x_reg[c].astype(str) for c in CAT_FEATURES})
 
-    ES = EARLY_STOPPING_ROUNDS
-    _N, _RS = 300, RANDOM_STATE
-    _lgbm_clf = LGBMClassifier(
-        n_estimators=_N,
-        early_stopping_rounds=ES,
-        verbose=-1,
-        random_state=_RS,
-    )
-    _lgbm_reg = LGBMRegressor(
-        n_estimators=_N,
-        early_stopping_rounds=ES,
-        verbose=-1,
-        random_state=_RS,
-    )
+        es = EARLY_STOPPING_ROUNDS
+        _n, _rs = 300, RANDOM_STATE
+        _lgbm_clf = LGBMClassifier(
+            n_estimators=_n,
+            early_stopping_rounds=es,
+            verbose=-1,
+            random_state=_rs,
+        )
+        _lgbm_reg = LGBMRegressor(
+            n_estimators=_n,
+            early_stopping_rounds=es,
+            verbose=-1,
+            random_state=_rs,
+        )
 
-    print("=" * 70)
-    print("CrossValidationTrainer - test matrix (3 folds, LGBM only)")
-    print("=" * 70)
+        print("=" * 70)
+        print("CrossValidationTrainer - test matrix (3 folds, LGBM only)")
+        print("=" * 70)
 
-    _run_scenario(
-        "LightGBM | binary classification",
-        _lgbm_clf,
-        X_bin_cat,
-        y_bin,
-        "Balanced Accuracy",
-        "classification",
-        clf_pipeline,
-    )
-    _run_scenario(
-        "LightGBM | multiclass classification",
-        _lgbm_clf,
-        X_multi_cat,
-        y_multi,
-        "Balanced Accuracy",
-        "classification",
-        clf_pipeline,
-    )
-    _run_scenario(
-        "LightGBM | regression",
-        _lgbm_reg,
-        X_reg_cat,
-        y_reg,
-        "RMSE",
-        "regression",
-        reg_pipeline,
-    )
+        _run_scenario(
+            "LightGBM | binary classification",
+            _lgbm_clf,
+            x_bin_cat,
+            y_bin,
+            "Balanced Accuracy",
+            "classification",
+            clf_pipeline,
+        )
+        _run_scenario(
+            "LightGBM | multiclass classification",
+            _lgbm_clf,
+            x_multi_cat,
+            y_multi,
+            "Balanced Accuracy",
+            "classification",
+            clf_pipeline,
+        )
+        _run_scenario(
+            "LightGBM | regression",
+            _lgbm_reg,
+            x_reg_cat,
+            y_reg,
+            "RMSE",
+            "regression",
+            reg_pipeline,
+        )
+
+    _run_demo()

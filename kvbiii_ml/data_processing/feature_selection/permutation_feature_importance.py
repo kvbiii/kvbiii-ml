@@ -359,8 +359,8 @@ class PermutationRecursiveFeatureElimination:
             return None
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            X_probe = clone(pipeline).fit_transform(X.head(10), y.head(10))
-        return X_probe.dtypes if isinstance(X_probe, pd.DataFrame) else None
+            x_probe = clone(pipeline).fit_transform(X.head(10), y.head(10))
+        return x_probe.dtypes if isinstance(x_probe, pd.DataFrame) else None
 
     @staticmethod
     def _build_raw_to_derived(
@@ -444,12 +444,12 @@ class PermutationRecursiveFeatureElimination:
             return self.metric_fn(pd.Series(y), pred)
 
         fold_importances: list[pd.Series] = []
-        for fold_idx, (est, X_val, y_val) in enumerate(fold_data):
+        for fold_idx, (est, x_val, y_val) in enumerate(fold_data):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 result = permutation_importance(
                     est,
-                    X_val,
+                    x_val,
                     y_val,
                     scoring=_scorer,
                     n_repeats=self.n_repeats,
@@ -457,7 +457,7 @@ class PermutationRecursiveFeatureElimination:
                     random_state=self.random_state + fold_idx,
                 )
             fold_importances.append(
-                pd.Series(result.importances_mean, index=X_val.columns)
+                pd.Series(result.importances_mean, index=x_val.columns)
             )
 
         return pd.DataFrame(fold_importances).mean().to_dict()
@@ -467,7 +467,7 @@ class PermutationRecursiveFeatureElimination:
         preprocessor: Pipeline | None,
         current_raw_features: list[str],
         current_processed_features: list[str],
-        X_current: pd.DataFrame | None = None,
+        x_current: pd.DataFrame | None = None,
     ) -> Pipeline | None:
         """Clone the pipeline, restricting each step and appending a feature selector.
 
@@ -481,7 +481,7 @@ class PermutationRecursiveFeatureElimination:
             preprocessor (Pipeline | None): Original preprocessing pipeline.
             current_raw_features (list[str]): Raw columns still active.
             current_processed_features (list[str]): Processed columns the model should see.
-            X_current (pd.DataFrame | None): Representative sample used to trial-fit steps
+            x_current (pd.DataFrame | None): Representative sample used to trial-fit steps
                 with auto-detected variables. Defaults to None.
 
         Returns:
@@ -502,11 +502,11 @@ class PermutationRecursiveFeatureElimination:
                 if not filtered:
                     continue
                 cloned_step.set_params(variables=filtered)
-            elif params.get("variables") is None and X_current is not None:
+            elif params.get("variables") is None and x_current is not None:
                 try:
                     with warnings.catch_warnings():
                         warnings.simplefilter("ignore")
-                        clone(step).fit(X_current.head(5))
+                        clone(step).fit(x_current.head(5))
                 except (ValueError, TypeError, KeyError, AttributeError, IndexError):
                     continue
             new_steps.append((name, cloned_step))
@@ -816,7 +816,7 @@ if __name__ == "__main__":
     def _make_clf_data(n_classes: int) -> tuple[pd.DataFrame, pd.Series]:
         """Generate classification dataset with numerical and categorical features."""
         rng = np.random.default_rng(RANDOM_STATE)
-        X_num, y_arr = make_classification(
+        x_num, y_arr = make_classification(
             n_samples=N_SAMPLES,
             n_features=N_FEATURES,
             n_informative=7,
@@ -825,7 +825,7 @@ if __name__ == "__main__":
             n_clusters_per_class=1,
             random_state=RANDOM_STATE,
         )
-        df = pd.DataFrame(X_num, columns=NUM_FEATURES)
+        df = pd.DataFrame(x_num, columns=NUM_FEATURES)
         df["cat_1"] = pd.Categorical(rng.choice(["A", "B", "C", "D"], size=N_SAMPLES))
         df["cat_2"] = pd.Categorical(rng.choice(["X", "Y", "Z"], size=N_SAMPLES))
         return df, pd.Series(y_arr, name="target")
@@ -833,13 +833,13 @@ if __name__ == "__main__":
     def _make_reg_data() -> tuple[pd.DataFrame, pd.Series]:
         """Generate regression dataset with numerical and categorical features."""
         rng = np.random.default_rng(RANDOM_STATE)
-        X_num, y_arr = make_regression(
+        x_num, y_arr = make_regression(
             n_samples=N_SAMPLES,
             n_features=N_FEATURES,
             n_informative=7,
             random_state=RANDOM_STATE,
         )
-        df = pd.DataFrame(X_num, columns=NUM_FEATURES)
+        df = pd.DataFrame(x_num, columns=NUM_FEATURES)
         df["cat_1"] = pd.Categorical(rng.choice(["A", "B", "C", "D"], size=N_SAMPLES))
         df["cat_2"] = pd.Categorical(rng.choice(["X", "Y", "Z"], size=N_SAMPLES))
         return df, pd.Series(y_arr, name="target")
@@ -906,187 +906,193 @@ if __name__ == "__main__":
         n_selected = len(summary["selected_features"])
         print(f"  {label:<55} selected={n_selected} features\n")
 
-    _lgbm_clf = LGBMClassifier(
-        n_estimators=200,
-        early_stopping_rounds=ES,
-        verbose=-1,
-        random_state=RANDOM_STATE,
-    )
-    _lgbm_reg = LGBMRegressor(
-        n_estimators=200,
-        early_stopping_rounds=ES,
-        verbose=-1,
-        random_state=RANDOM_STATE,
-    )
+    def _run_demo() -> None:
+        """Run PermutationRecursiveFeatureElimination across the demo scenario matrix."""
+        lgbm_clf = LGBMClassifier(
+            n_estimators=200,
+            early_stopping_rounds=ES,
+            verbose=-1,
+            random_state=RANDOM_STATE,
+        )
+        lgbm_reg = LGBMRegressor(
+            n_estimators=200,
+            early_stopping_rounds=ES,
+            verbose=-1,
+            random_state=RANDOM_STATE,
+        )
 
-    X_bin, y_bin = _make_clf_data(n_classes=2)
-    X_multi, y_multi = _make_clf_data(n_classes=3)
-    X_reg, y_reg = _make_reg_data()
+        x_bin, y_bin = _make_clf_data(n_classes=2)
+        x_multi, y_multi = _make_clf_data(n_classes=3)
+        x_reg, y_reg = _make_reg_data()
 
-    X_bin_cat = X_bin.assign(**{c: X_bin[c].astype(str) for c in CAT_FEATURES})
-    X_multi_cat = X_multi.assign(**{c: X_multi[c].astype(str) for c in CAT_FEATURES})
-    X_reg_cat = X_reg.assign(**{c: X_reg[c].astype(str) for c in CAT_FEATURES})
+        x_bin_cat = x_bin.assign(**{c: x_bin[c].astype(str) for c in CAT_FEATURES})
+        x_multi_cat = x_multi.assign(
+            **{c: x_multi[c].astype(str) for c in CAT_FEATURES}
+        )
+        x_reg_cat = x_reg.assign(**{c: x_reg[c].astype(str) for c in CAT_FEATURES})
 
-    clf_pipeline = _build_pipeline(CAT_FEATURES, NUM_FEATURES)
-    reg_pipeline = _build_pipeline(CAT_FEATURES, NUM_FEATURES)
+        clf_pipeline = _build_pipeline(CAT_FEATURES, NUM_FEATURES)
+        reg_pipeline = _build_pipeline(CAT_FEATURES, NUM_FEATURES)
 
-    print("=" * 75)
-    print(
-        "PermutationRecursiveFeatureElimination - full test matrix (3 folds, 5 steps)"
-    )
-    print("=" * 75)
+        print("=" * 75)
+        print(
+            "PermutationRecursiveFeatureElimination - full test matrix (3 folds, 5 steps)"
+        )
+        print("=" * 75)
 
-    _run_rfe(
-        "LightGBM | binary classification",
-        _lgbm_clf,
-        X_bin_cat,
-        y_bin,
-        "Balanced Accuracy",
-        "classification",
-        clf_pipeline,
-    )
-    _run_rfe(
-        "LightGBM | regression",
-        _lgbm_reg,
-        X_reg_cat,
-        y_reg,
-        "RMSE",
-        "regression",
-        reg_pipeline,
-    )
-    _run_rfe(
-        "LightGBM | regression (no pipeline)",
-        _lgbm_reg,
-        X_reg_cat[NUM_FEATURES],
-        y_reg,
-        "RMSE",
-        "regression",
-        None,
-    )
+        _run_rfe(
+            "LightGBM | binary classification",
+            lgbm_clf,
+            x_bin_cat,
+            y_bin,
+            "Balanced Accuracy",
+            "classification",
+            clf_pipeline,
+        )
+        _run_rfe(
+            "LightGBM | regression",
+            lgbm_reg,
+            x_reg_cat,
+            y_reg,
+            "RMSE",
+            "regression",
+            reg_pipeline,
+        )
+        _run_rfe(
+            "LightGBM | regression (no pipeline)",
+            lgbm_reg,
+            x_reg_cat[NUM_FEATURES],
+            y_reg,
+            "RMSE",
+            "regression",
+            None,
+        )
 
-    _xgb_clf = XGBClassifier(
-        n_estimators=200,
-        early_stopping_rounds=ES,
-        verbosity=0,
-        random_state=RANDOM_STATE,
-    )
-    _xgb_reg = XGBRegressor(
-        n_estimators=200,
-        early_stopping_rounds=ES,
-        verbosity=0,
-        random_state=RANDOM_STATE,
-    )
-    _run_rfe(
-        "XGBoost | binary classification",
-        _xgb_clf,
-        X_bin_cat,
-        y_bin,
-        "Balanced Accuracy",
-        "classification",
-        clf_pipeline,
-    )
-    _run_rfe(
-        "XGBoost | multiclass classification",
-        _xgb_clf,
-        X_multi_cat,
-        y_multi,
-        "Balanced Accuracy",
-        "classification",
-        clf_pipeline,
-    )
-    _run_rfe(
-        "XGBoost | regression",
-        _xgb_reg,
-        X_reg_cat,
-        y_reg,
-        "RMSE",
-        "regression",
-        reg_pipeline,
-    )
+        xgb_clf = XGBClassifier(
+            n_estimators=200,
+            early_stopping_rounds=ES,
+            verbosity=0,
+            random_state=RANDOM_STATE,
+        )
+        xgb_reg = XGBRegressor(
+            n_estimators=200,
+            early_stopping_rounds=ES,
+            verbosity=0,
+            random_state=RANDOM_STATE,
+        )
+        _run_rfe(
+            "XGBoost | binary classification",
+            xgb_clf,
+            x_bin_cat,
+            y_bin,
+            "Balanced Accuracy",
+            "classification",
+            clf_pipeline,
+        )
+        _run_rfe(
+            "XGBoost | multiclass classification",
+            xgb_clf,
+            x_multi_cat,
+            y_multi,
+            "Balanced Accuracy",
+            "classification",
+            clf_pipeline,
+        )
+        _run_rfe(
+            "XGBoost | regression",
+            xgb_reg,
+            x_reg_cat,
+            y_reg,
+            "RMSE",
+            "regression",
+            reg_pipeline,
+        )
 
-    _cat_clf = CatBoostClassifier(
-        n_estimators=200,
-        early_stopping_rounds=ES,
-        verbose=0,
-        random_state=RANDOM_STATE,
-        cat_features=CAT_FEATURES,
-    )
-    _cat_multi = CatBoostClassifier(
-        n_estimators=200,
-        early_stopping_rounds=ES,
-        verbose=0,
-        random_state=RANDOM_STATE,
-        cat_features=CAT_FEATURES,
-        loss_function="MultiClass",
-    )
-    _cat_reg = CatBoostRegressor(
-        n_estimators=200,
-        early_stopping_rounds=ES,
-        verbose=0,
-        random_state=RANDOM_STATE,
-        cat_features=CAT_FEATURES,
-    )
-    _run_rfe(
-        "CatBoost | binary classification",
-        _cat_clf,
-        X_bin_cat,
-        y_bin,
-        "Balanced Accuracy",
-        "classification",
-        clf_pipeline,
-    )
-    _run_rfe(
-        "CatBoost | multiclass classification",
-        _cat_multi,
-        X_multi_cat,
-        y_multi,
-        "Balanced Accuracy",
-        "classification",
-        clf_pipeline,
-    )
-    _run_rfe(
-        "CatBoost | regression",
-        _cat_reg,
-        X_reg_cat,
-        y_reg,
-        "RMSE",
-        "regression",
-        reg_pipeline,
-    )
+        cat_clf = CatBoostClassifier(
+            n_estimators=200,
+            early_stopping_rounds=ES,
+            verbose=0,
+            random_state=RANDOM_STATE,
+            cat_features=CAT_FEATURES,
+        )
+        cat_multi = CatBoostClassifier(
+            n_estimators=200,
+            early_stopping_rounds=ES,
+            verbose=0,
+            random_state=RANDOM_STATE,
+            cat_features=CAT_FEATURES,
+            loss_function="MultiClass",
+        )
+        cat_reg = CatBoostRegressor(
+            n_estimators=200,
+            early_stopping_rounds=ES,
+            verbose=0,
+            random_state=RANDOM_STATE,
+            cat_features=CAT_FEATURES,
+        )
+        _run_rfe(
+            "CatBoost | binary classification",
+            cat_clf,
+            x_bin_cat,
+            y_bin,
+            "Balanced Accuracy",
+            "classification",
+            clf_pipeline,
+        )
+        _run_rfe(
+            "CatBoost | multiclass classification",
+            cat_multi,
+            x_multi_cat,
+            y_multi,
+            "Balanced Accuracy",
+            "classification",
+            clf_pipeline,
+        )
+        _run_rfe(
+            "CatBoost | regression",
+            cat_reg,
+            x_reg_cat,
+            y_reg,
+            "RMSE",
+            "regression",
+            reg_pipeline,
+        )
 
-    ensemble_clf = EnsembleModel(
-        estimators=[_lgbm_clf, _xgb_clf, _cat_clf], problem_type="classification"
-    )
-    _run_rfe(
-        "Ensemble (LGBM + XGB + CatBoost) | binary classification",
-        ensemble_clf,
-        X_bin_cat,
-        y_bin,
-        "Balanced Accuracy",
-        "classification",
-        clf_pipeline,
-    )
-    ensemble_reg = EnsembleModel(
-        estimators=[_lgbm_reg, _xgb_reg, _cat_reg], problem_type="regression"
-    )
-    _run_rfe(
-        "Ensemble (LGBM + XGB + CatBoost) | regression",
-        ensemble_reg,
-        X_reg_cat,
-        y_reg,
-        "RMSE",
-        "regression",
-        reg_pipeline,
-    )
-    ensemble_multi = EnsembleModel(
-        estimators=[_lgbm_clf, _xgb_clf, _cat_multi], problem_type="classification"
-    )
-    _run_rfe(
-        "Ensemble (LGBM + XGB + CatBoost MultiClass) | multiclass classification",
-        ensemble_multi,
-        X_multi_cat,
-        y_multi,
-        "Balanced Accuracy",
-        "classification",
-        clf_pipeline,
-    )
+        ensemble_clf = EnsembleModel(
+            estimators=[lgbm_clf, xgb_clf, cat_clf], problem_type="classification"
+        )
+        _run_rfe(
+            "Ensemble (LGBM + XGB + CatBoost) | binary classification",
+            ensemble_clf,
+            x_bin_cat,
+            y_bin,
+            "Balanced Accuracy",
+            "classification",
+            clf_pipeline,
+        )
+        ensemble_reg = EnsembleModel(
+            estimators=[lgbm_reg, xgb_reg, cat_reg], problem_type="regression"
+        )
+        _run_rfe(
+            "Ensemble (LGBM + XGB + CatBoost) | regression",
+            ensemble_reg,
+            x_reg_cat,
+            y_reg,
+            "RMSE",
+            "regression",
+            reg_pipeline,
+        )
+        ensemble_multi = EnsembleModel(
+            estimators=[lgbm_clf, xgb_clf, cat_multi], problem_type="classification"
+        )
+        _run_rfe(
+            "Ensemble (LGBM + XGB + CatBoost MultiClass) | multiclass classification",
+            ensemble_multi,
+            x_multi_cat,
+            y_multi,
+            "Balanced Accuracy",
+            "classification",
+            clf_pipeline,
+        )
+
+    _run_demo()

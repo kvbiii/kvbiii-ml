@@ -181,11 +181,11 @@ class EnsembleModel(BaseEstimator):
         """
         meta_features = []
         for estimator in self.fitted_estimators_:
-            X_ordered = self._order_X_for_estimator(X, estimator)
+            x_ordered = self._order_x_for_estimator(X, estimator)
             if self.problem_type == "classification":
-                feat = estimator.predict_proba(X_ordered)
+                feat = estimator.predict_proba(x_ordered)
             else:
-                feat = estimator.predict(X_ordered).reshape(-1, 1)
+                feat = estimator.predict(x_ordered).reshape(-1, 1)
             meta_features.append(feat)
         return np.hstack(meta_features)
 
@@ -281,11 +281,11 @@ class EnsembleModel(BaseEstimator):
         try:
             for idx, estimator in enumerate(self.fitted_estimators_):
                 try:
-                    X_ordered = self._order_X_for_estimator(X, estimator)
+                    x_ordered = self._order_x_for_estimator(X, estimator)
                     if self.problem_type == "classification":
-                        estimator_predictions = estimator.predict_proba(X_ordered)
+                        estimator_predictions = estimator.predict_proba(x_ordered)
                     else:
-                        estimator_predictions = estimator.predict(X_ordered)
+                        estimator_predictions = estimator.predict(x_ordered)
                     predictions.append(estimator_predictions)
                     successful_indices.append(idx)
                 except (ValueError, AttributeError, TypeError):
@@ -338,8 +338,8 @@ class EnsembleModel(BaseEstimator):
         try:
             for idx, estimator in enumerate(self.fitted_estimators_):
                 try:
-                    X_ordered = self._order_X_for_estimator(X, estimator)
-                    estimator_predictions = estimator.predict_proba(X_ordered)
+                    x_ordered = self._order_x_for_estimator(X, estimator)
+                    estimator_predictions = estimator.predict_proba(x_ordered)
                     estimator_predictions = self._prepare_probabilities(
                         estimator_predictions
                     )
@@ -407,14 +407,14 @@ class EnsembleModel(BaseEstimator):
 
         predictions = []
         for estimator in self.fitted_estimators_:
-            X_ordered = self._order_X_for_estimator(X, estimator)
+            x_ordered = self._order_x_for_estimator(X, estimator)
             if self.problem_type == "classification":
-                estimator_predictions = estimator.predict_proba(X_ordered)
+                estimator_predictions = estimator.predict_proba(x_ordered)
                 estimator_predictions = self._prepare_probabilities(
                     estimator_predictions
                 )
             else:
-                estimator_predictions = estimator.predict(X_ordered)
+                estimator_predictions = estimator.predict(x_ordered)
             predictions.append(estimator_predictions)
         predictions = np.array(predictions)
         if self.problem_type == "regression":
@@ -455,7 +455,7 @@ class EnsembleModel(BaseEstimator):
                 "proba": mean_proba,
             }
 
-    def _order_X_for_estimator(
+    def _order_x_for_estimator(
         self, X: pd.DataFrame, estimator: BaseEstimator
     ) -> pd.DataFrame:
         """Reorder columns to match the estimator's expected feature order.

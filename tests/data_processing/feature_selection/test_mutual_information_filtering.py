@@ -347,7 +347,7 @@ def test_mutualinformationfiltering_fit_transform_combines_fit_and_transform(
 
 
 def test_mutualinformationfiltering_prepare_x_y_for_mi_validates_inputs():
-    """Tests _prepare_X_y_for_mi method validates input data types correctly.
+    """Tests _prepare_x_y_for_mi method validates input data types correctly.
 
     Asserts:
         - ValueError is raised for non-DataFrame X inputs
@@ -358,15 +358,15 @@ def test_mutualinformationfiltering_prepare_x_y_for_mi_validates_inputs():
 
     # Test invalid X type
     with pytest.raises(ValueError, match="X must be a pandas DataFrame"):
-        mif._prepare_X_y_for_mi(np.array([[1, 2], [3, 4]]), pd.Series([0, 1]))
+        mif._prepare_x_y_for_mi(np.array([[1, 2], [3, 4]]), pd.Series([0, 1]))
 
     # Test invalid y type
     with pytest.raises(ValueError, match="y must be a pandas Series or numpy array"):
-        mif._prepare_X_y_for_mi(pd.DataFrame({"A": [1, 2]}), [[0, 1]])
+        mif._prepare_x_y_for_mi(pd.DataFrame({"A": [1, 2]}), [[0, 1]])
 
 
 def test_mutualinformationfiltering_prepare_x_y_for_mi_handles_categorical_features():
-    """Tests _prepare_X_y_for_mi method properly encodes categorical features.
+    """Tests _prepare_x_y_for_mi method properly encodes categorical features.
 
     Asserts:
         - Categorical features are converted to numeric codes
@@ -379,7 +379,7 @@ def test_mutualinformationfiltering_prepare_x_y_for_mi_handles_categorical_featu
     y = pd.Series([0, 1, 0])
 
     mif = MutualInformationFiltering(problem_type="classification")
-    prepared_x, _prepared_y = mif._prepare_X_y_for_mi(X, y)
+    prepared_x, _prepared_y = mif._prepare_x_y_for_mi(X, y)
 
     # Categorical should be converted to codes
     if not pd.api.types.is_numeric_dtype(prepared_x["categorical"]):

@@ -2066,12 +2066,12 @@ class DataAnalyzer:
         if len(discrete_columns) == 0:
             return X, None
 
-        X_prepared = X.copy()
+        x_prepared = X.copy()
         for column in discrete_columns:
-            X_prepared[column] = pd.Categorical(X_prepared[column]).codes
+            x_prepared[column] = pd.Categorical(x_prepared[column]).codes
 
-        discrete_features_mask = X_prepared.columns.isin(discrete_columns).astype(bool)
-        return X_prepared, discrete_features_mask
+        discrete_features_mask = x_prepared.columns.isin(discrete_columns).astype(bool)
+        return x_prepared, discrete_features_mask
 
     @staticmethod
     def mutual_information_scores(
@@ -2111,7 +2111,7 @@ class DataAnalyzer:
                 "problem_type must be either 'classification' or 'regression'."
             )
 
-        X_prepared, discrete_features_mask = (
+        x_prepared, discrete_features_mask = (
             DataAnalyzer._prepare_features_for_mutual_information(X)
         )
 
@@ -2122,15 +2122,15 @@ class DataAnalyzer:
             mi_kwargs["discrete_features"] = discrete_features_mask
 
         if problem_type == "classification":
-            mi_scores = mutual_info_classif(X_prepared, y, **mi_kwargs)
+            mi_scores = mutual_info_classif(x_prepared, y, **mi_kwargs)
         else:
-            mi_scores = mutual_info_regression(X_prepared, y, **mi_kwargs)
+            mi_scores = mutual_info_regression(x_prepared, y, **mi_kwargs)
 
         mi_scores = np.nan_to_num(mi_scores, nan=0.0, posinf=0.0, neginf=0.0)
         sorted_indices = np.argsort(mi_scores)[::-1]
 
         return {
-            str(X_prepared.columns[idx]): float(mi_scores[idx])
+            str(x_prepared.columns[idx]): float(mi_scores[idx])
             for idx in sorted_indices
         }
 

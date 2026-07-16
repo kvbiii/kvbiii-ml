@@ -70,9 +70,9 @@ class RandomSearchCV:
         """
         self.params_grid = params_grid
         study = self.create_study()
-        X, y = self.check_X(X), self.check_y(y)
+        X, y = self.check_x(X), self.check_y(y)
         if X_valid is not None and y_valid is not None:
-            X_valid = self.check_X(X_valid)
+            X_valid = self.check_x(X_valid)
             y_valid = self.check_y(y_valid)
             study.optimize(
                 lambda trial: self.objective(trial, estimator, X, y, X_valid, y_valid),
@@ -198,19 +198,19 @@ class RandomSearchCV:
         """
         params = {k: self.get_param(trial, k, v) for k, v in self.params_grid.items()}
         if X.shape[0] > self.max_samples:
-            X_sample = X.sample(n=self.max_samples, random_state=self.seed)
+            x_sample = X.sample(n=self.max_samples, random_state=self.seed)
         else:
-            X_sample = X.copy()
-        y_sample = y.loc[X_sample.index]
+            x_sample = X.copy()
+        y_sample = y.loc[x_sample.index]
 
         est = clone(estimator)
         est.set_params(**params)
 
-        _, valid_scores, _ = self.cross_validator.fit(est, X_sample, y_sample)
+        _, valid_scores, _ = self.cross_validator.fit(est, x_sample, y_sample)
         return float(np.mean(valid_scores))
 
     @staticmethod
-    def check_X(X: object) -> pd.DataFrame:
+    def check_x(X: object) -> pd.DataFrame:
         """Ensure features are a DataFrame.
 
         Args:
@@ -248,48 +248,52 @@ if __name__ == "__main__":
     N_FEATURES = 10
     FEATURE_NAMES = [f"feature_{i}" for i in range(N_FEATURES)]
 
-    X_arr, y_arr = make_classification(
-        n_samples=N_SAMPLES,
-        n_features=N_FEATURES,
-        n_informative=5,
-        n_redundant=2,
-        random_state=RANDOM_STATE,
-    )
-    X_df = pd.DataFrame(X_arr, columns=FEATURE_NAMES)
-    y_ser = pd.Series(y_arr)
+    def _run_demo() -> None:
+        """Run RandomSearchCV on a synthetic classification dataset."""
+        x_arr, y_arr = make_classification(
+            n_samples=N_SAMPLES,
+            n_features=N_FEATURES,
+            n_informative=5,
+            n_redundant=2,
+            random_state=RANDOM_STATE,
+        )
+        x_df = pd.DataFrame(x_arr, columns=FEATURE_NAMES)
+        y_ser = pd.Series(y_arr)
 
-    preprocessing_pipeline = Pipeline(
-        [
-            (
-                "winsorizer",
-                WinsorizerWithOriginal(
-                    variables=FEATURE_NAMES,
-                    capping_method="gaussian",
-                    tail="right",
+        preprocessing_pipeline = Pipeline(
+            [
+                (
+                    "winsorizer",
+                    WinsorizerWithOriginal(
+                        variables=FEATURE_NAMES,
+                        capping_method="gaussian",
+                        tail="right",
+                    ),
                 ),
-            ),
-        ]
-    )
-    cross_validation_trainer = CrossValidationTrainer(
-        metric_name="Balanced Accuracy",
-        problem_type="classification",
-        cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE),
-        preprocessing_pipeline=preprocessing_pipeline,
-        verbose=False,
-    )
-    tuner = RandomSearchCV(
-        cross_validator=cross_validation_trainer, n_trials=10, seed=RANDOM_STATE
-    )
-    clf = LGBMClassifier(n_estimators=100, verbose=-1, random_state=RANDOM_STATE)
-    params_grid = {
-        "num_leaves": ("int", [16, 128]),
-        "learning_rate": ("float", [0.01, 0.3], {"log": True}),
-        "min_child_samples": ("int", [5, 50]),
-    }
-    study = tuner.tune(estimator=clf, X=X_df, y=y_ser, params_grid=params_grid)
-    print("Best trial:")
-    print(study.best_trial)
-    print("Best params:")
-    print(study.best_params)
-    print("Best value:")
-    print(study.best_value)
+            ]
+        )
+        cross_validation_trainer = CrossValidationTrainer(
+            metric_name="Balanced Accuracy",
+            problem_type="classification",
+            cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE),
+            preprocessing_pipeline=preprocessing_pipeline,
+            verbose=False,
+        )
+        tuner = RandomSearchCV(
+            cross_validator=cross_validation_trainer, n_trials=10, seed=RANDOM_STATE
+        )
+        clf = LGBMClassifier(n_estimators=100, verbose=-1, random_state=RANDOM_STATE)
+        params_grid = {
+            "num_leaves": ("int", [16, 128]),
+            "learning_rate": ("float", [0.01, 0.3], {"log": True}),
+            "min_child_samples": ("int", [5, 50]),
+        }
+        study = tuner.tune(estimator=clf, X=x_df, y=y_ser, params_grid=params_grid)
+        print("Best trial:")
+        print(study.best_trial)
+        print("Best params:")
+        print(study.best_params)
+        print("Best value:")
+        print(study.best_value)
+
+    _run_demo()

@@ -55,10 +55,10 @@ class FoldwiseSampler:
         """
         if self.sampler is None:
             return X, y
-        X_resampled, y_resampled = self.sampler.fit_resample(X, y)
-        X_resampled = pd.DataFrame(X_resampled, columns=X.columns)
+        x_resampled, y_resampled = self.sampler.fit_resample(X, y)
+        x_resampled = pd.DataFrame(x_resampled, columns=X.columns)
         y_resampled = pd.Series(y_resampled, name=y.name)
-        return X_resampled, y_resampled
+        return x_resampled, y_resampled
 
     def fit_transform(
         self, X: pd.DataFrame, y: pd.Series

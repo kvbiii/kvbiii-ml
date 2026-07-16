@@ -474,7 +474,7 @@ def test_crossvalidationtrainer_predict_with_confidence_returns_classification_m
 def test_crossvalidationtrainer_order_x_for_estimator_reorders_features_correctly(
     sample_dataframe,
 ):
-    """Tests _order_X_for_estimator method reorders features to match estimator expectations.
+    """Tests _order_x_for_estimator method reorders features to match estimator expectations.
 
     Args:
         sample_dataframe (pd.DataFrame): Sample feature data with multiple columns
@@ -488,7 +488,7 @@ def test_crossvalidationtrainer_order_x_for_estimator_reorders_features_correctl
     mock_estimator = Mock(spec=["feature_names_"])
     mock_estimator.feature_names_in_ = ["categorical_1", "numeric_1", "integer_1"]
 
-    reordered_x = CrossValidationTrainer._order_X_for_estimator(
+    reordered_x = CrossValidationTrainer._order_x_for_estimator(
         sample_dataframe, mock_estimator
     )
 
@@ -498,7 +498,7 @@ def test_crossvalidationtrainer_order_x_for_estimator_reorders_features_correctl
 
     # Test fallback when no feature names available
     mock_estimator_no_features = Mock(spec=[])  # No feature name attributes
-    result_x = CrossValidationTrainer._order_X_for_estimator(
+    result_x = CrossValidationTrainer._order_x_for_estimator(
         sample_dataframe, mock_estimator_no_features
     )
 
@@ -506,7 +506,7 @@ def test_crossvalidationtrainer_order_x_for_estimator_reorders_features_correctl
 
 
 def test_crossvalidationtrainer_order_x_for_estimator_handles_normalized_feature_names():
-    """Tests _order_X_for_estimator maps normalized estimator feature names safely.
+    """Tests _order_x_for_estimator maps normalized estimator feature names safely.
 
     Asserts:
         - Feature names with underscores map to source columns with spaces.
@@ -528,7 +528,7 @@ def test_crossvalidationtrainer_order_x_for_estimator_handles_normalized_feature
         "petal_width_(cm)",
     ]
 
-    reordered_x = CrossValidationTrainer._order_X_for_estimator(X, mock_estimator)
+    reordered_x = CrossValidationTrainer._order_x_for_estimator(X, mock_estimator)
 
     if list(reordered_x.columns) != list(X.columns):
         raise AssertionError()

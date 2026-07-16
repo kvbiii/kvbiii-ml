@@ -42,7 +42,7 @@ def test_removal_schedule_basic():
 
 
 def test_prepare_x_y_categorical_mi_rfe():
-    """Tests that _prepare_X_y_for_mi encodes categorical columns and preserves y."""
+    """Tests that _prepare_x_y_for_mi encodes categorical columns and preserves y."""
     selector = MutualInformationRecursiveFeatureElimination(
         estimator=LogisticRegression(max_iter=50, solver="liblinear"),
         problem_type="classification",
@@ -57,7 +57,7 @@ def test_prepare_x_y_categorical_mi_rfe():
         }
     )
     y = pd.Series([0, 1, 0, 1])
-    prepared_x, prepared_y = selector._prepare_X_y_for_mi(X, y)
+    prepared_x, prepared_y = selector._prepare_x_y_for_mi(X, y)
     if "discrete_features" not in selector.mi_kwargs:
         raise AssertionError()
     # categorical column encoded numerically

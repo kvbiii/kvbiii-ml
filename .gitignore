@@ -6,9 +6,12 @@ __pycache__/
 !.gitignore
 !/kvbiii_ml
 !/tests
+!/scripts
 !install_package.sh
 !pyproject.toml
 !README.md
 !requirements.txt
+!requirements-dev.txt
 !setup_venv.sh
+!.pre-commit-config.yaml
 !*.ipynb

@@ -4,7 +4,6 @@ import warnings
 from typing import Any
 
 import pandas as pd
-from feature_engine.outliers import Winsorizer
 from sklearn.base import BaseEstimator, TransformerMixin
 
 
@@ -94,13 +93,13 @@ class _WithOriginalBase(BaseEstimator, TransformerMixin, abc.ABC):
         Returns:
             pd.DataFrame: Original columns plus one derived column per encoded variable.
         """
-        X_orig = X.copy()
+        x_orig = X.copy()
         with self._maybe_suppress_warnings():
-            X_transformed = self._transform_inner(self._inner, X.copy())
+            x_transformed = self._transform_inner(self._inner, X.copy())
         new_cols = {
-            f"{var}_{self._suffix}": X_transformed[var] for var in self.variables_
+            f"{var}_{self._suffix}": x_transformed[var] for var in self.variables_
         }
-        return pd.concat([X_orig, pd.DataFrame(new_cols, index=X_orig.index)], axis=1)
+        return pd.concat([x_orig, pd.DataFrame(new_cols, index=x_orig.index)], axis=1)
 
     @contextlib.contextmanager
     def _maybe_suppress_warnings(self):

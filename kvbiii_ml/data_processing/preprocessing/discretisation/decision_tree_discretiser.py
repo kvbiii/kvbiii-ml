@@ -109,22 +109,28 @@ if __name__ == "__main__":
     import numpy as np
     import pandas as pd
 
-    rng = np.random.default_rng(42)
-    n = 300
-    df = pd.DataFrame(
-        {
-            "age": rng.integers(18, 80, n).astype(float),
-            "income": rng.exponential(50_000, n),
-        }
-    )
-    y = pd.Series((df["income"] > 50_000).astype(int), name="target")
+    def _run_demo() -> None:
+        """Run DecisionTreeDiscretiser and its original-preserving variant."""
+        rng = np.random.default_rng(42)
+        n_rows = 300
+        df = pd.DataFrame(
+            {
+                "age": rng.integers(18, 80, n_rows).astype(float),
+                "income": rng.exponential(50_000, n_rows),
+            }
+        )
+        y = pd.Series((df["income"] > 50_000).astype(int), name="target")
 
-    enc = DecisionTreeDiscretiser(variables=["age", "income"], regression=False, cv=3)
-    print("=== DecisionTreeDiscretiser (replace) ===")
-    print(enc.fit_transform(df, y).head())
+        enc = DecisionTreeDiscretiser(
+            variables=["age", "income"], regression=False, cv=3
+        )
+        print("=== DecisionTreeDiscretiser (replace) ===")
+        print(enc.fit_transform(df, y).head())
 
-    enc_exp = DecisionTreeDiscretiserWithOriginal(
-        variables=["age", "income"], regression=False, cv=3
-    )
-    print("\n=== DecisionTreeDiscretiserWithOriginal (append) ===")
-    print(enc_exp.fit_transform(df, y).head())
+        enc_exp = DecisionTreeDiscretiserWithOriginal(
+            variables=["age", "income"], regression=False, cv=3
+        )
+        print("\n=== DecisionTreeDiscretiserWithOriginal (append) ===")
+        print(enc_exp.fit_transform(df, y).head())
+
+    _run_demo()

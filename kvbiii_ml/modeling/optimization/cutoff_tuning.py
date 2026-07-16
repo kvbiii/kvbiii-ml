@@ -57,7 +57,7 @@ class CutoffTunerCV:
         Returns:
             optuna.study.Study: Completed study; best cutoffs stored in ``self.best_cutoffs``.
         """
-        X, y = self._check_X(X), self._check_y(y)
+        X, y = self._check_x(X), self._check_y(y)
         y_true, y_proba = self._perform_cv(X, y)
 
         study = self._create_study()
@@ -103,8 +103,8 @@ class CutoffTunerCV:
             y_proba = estimator.predict_proba(X)
         else:
             fold_pipeline = self.cross_validator.fitted_pipelines_[0]
-            X_proc = CrossValidationTrainer._transform_with_pipeline(fold_pipeline, X)
-            y_proba = self.fitted_estimators_[0].predict_proba(X_proc)
+            x_proc = CrossValidationTrainer._transform_with_pipeline(fold_pipeline, X)
+            y_proba = self.fitted_estimators_[0].predict_proba(x_proc)
         return self._apply_cutoffs(y_proba, self.best_cutoffs, self._is_binary)
 
     def _create_study(self) -> optuna.study.Study:
@@ -204,7 +204,7 @@ class CutoffTunerCV:
         return y_true, y_proba_full[:, 1] if self._is_binary else y_proba_full
 
     @staticmethod
-    def _check_X(X: object) -> pd.DataFrame:
+    def _check_x(X: object) -> pd.DataFrame:
         """Ensure feature input is a DataFrame.
 
         Args:
@@ -242,77 +242,81 @@ if __name__ == "__main__":
     N_FEATURES = 10
     FEATURE_NAMES = [f"feature_{i}" for i in range(N_FEATURES)]
 
-    preprocessing_pipeline = Pipeline(
-        [
-            (
-                "winsorizer",
-                WinsorizerWithOriginal(
-                    variables=FEATURE_NAMES,
-                    capping_method="gaussian",
-                    tail="right",
+    def _run_demo() -> None:
+        """Run CutoffTunerCV for both binary and multiclass classification."""
+        preprocessing_pipeline = Pipeline(
+            [
+                (
+                    "winsorizer",
+                    WinsorizerWithOriginal(
+                        variables=FEATURE_NAMES,
+                        capping_method="gaussian",
+                        tail="right",
+                    ),
                 ),
+            ]
+        )
+
+        print("=== Binary classification ===")
+        x_arr, y_arr = make_classification(
+            n_samples=N_SAMPLES,
+            n_features=N_FEATURES,
+            n_informative=5,
+            n_redundant=2,
+            random_state=RANDOM_STATE,
+        )
+        x_df = pd.DataFrame(x_arr, columns=FEATURE_NAMES)
+        y_ser = pd.Series(y_arr)
+
+        cv_bin = CrossValidationTrainer(
+            metric_name="Balanced Accuracy",
+            problem_type="classification",
+            cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE),
+            preprocessing_pipeline=preprocessing_pipeline,
+            verbose=False,
+        )
+        tuner_bin = CutoffTunerCV(
+            estimator=LGBMClassifier(
+                n_estimators=100, verbose=-1, random_state=RANDOM_STATE
             ),
-        ]
-    )
+            cross_validator=cv_bin,
+            n_trials=30,
+            seed=RANDOM_STATE,
+        )
+        study_bin = tuner_bin.tune(x_df, y_ser)
+        print("Best trial value:", study_bin.best_value)
+        print("Best cutoffs:", tuner_bin.best_cutoffs)
 
-    print("=== Binary classification ===")
-    X_arr, y_arr = make_classification(
-        n_samples=N_SAMPLES,
-        n_features=N_FEATURES,
-        n_informative=5,
-        n_redundant=2,
-        random_state=RANDOM_STATE,
-    )
-    X_df = pd.DataFrame(X_arr, columns=FEATURE_NAMES)
-    y_ser = pd.Series(y_arr)
+        print("\n=== Multiclass classification ===")
+        x_arr_mc, y_arr_mc = make_classification(
+            n_samples=N_SAMPLES,
+            n_features=N_FEATURES,
+            n_informative=5,
+            n_redundant=2,
+            n_classes=3,
+            n_clusters_per_class=1,
+            random_state=RANDOM_STATE,
+        )
+        x_df_mc = pd.DataFrame(x_arr_mc, columns=FEATURE_NAMES)
+        y_ser_mc = pd.Series(y_arr_mc)
 
-    cv_bin = CrossValidationTrainer(
-        metric_name="Balanced Accuracy",
-        problem_type="classification",
-        cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE),
-        preprocessing_pipeline=preprocessing_pipeline,
-        verbose=False,
-    )
-    tuner_bin = CutoffTunerCV(
-        estimator=LGBMClassifier(
-            n_estimators=100, verbose=-1, random_state=RANDOM_STATE
-        ),
-        cross_validator=cv_bin,
-        n_trials=30,
-        seed=RANDOM_STATE,
-    )
-    study_bin = tuner_bin.tune(X_df, y_ser)
-    print("Best trial value:", study_bin.best_value)
-    print("Best cutoffs:", tuner_bin.best_cutoffs)
+        cv_mc = CrossValidationTrainer(
+            metric_name="Balanced Accuracy",
+            problem_type="classification",
+            cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE),
+            preprocessing_pipeline=preprocessing_pipeline,
+            verbose=False,
+        )
+        tuner_mc = CutoffTunerCV(
+            estimator=LGBMClassifier(
+                n_estimators=100, verbose=-1, random_state=RANDOM_STATE
+            ),
+            cross_validator=cv_mc,
+            n_trials=30,
+            seed=RANDOM_STATE,
+        )
+        study_mc = tuner_mc.tune(x_df_mc, y_ser_mc)
+        print("Best trial value:", study_mc.best_value)
+        print("Best cutoffs:", tuner_mc.best_cutoffs)
 
-    print("\n=== Multiclass classification ===")
-    X_arr_mc, y_arr_mc = make_classification(
-        n_samples=N_SAMPLES,
-        n_features=N_FEATURES,
-        n_informative=5,
-        n_redundant=2,
-        n_classes=3,
-        n_clusters_per_class=1,
-        random_state=RANDOM_STATE,
-    )
-    X_df_mc = pd.DataFrame(X_arr_mc, columns=FEATURE_NAMES)
-    y_ser_mc = pd.Series(y_arr_mc)
-
-    cv_mc = CrossValidationTrainer(
-        metric_name="Balanced Accuracy",
-        problem_type="classification",
-        cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE),
-        preprocessing_pipeline=preprocessing_pipeline,
-        verbose=False,
-    )
-    tuner_mc = CutoffTunerCV(
-        estimator=LGBMClassifier(
-            n_estimators=100, verbose=-1, random_state=RANDOM_STATE
-        ),
-        cross_validator=cv_mc,
-        n_trials=30,
-        seed=RANDOM_STATE,
-    )
-    study_mc = tuner_mc.tune(X_df_mc, y_ser_mc)
-    print("Best trial value:", study_mc.best_value)
-    print("Best cutoffs:", tuner_mc.best_cutoffs)
+    _run_demo()

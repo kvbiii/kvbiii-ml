@@ -203,12 +203,12 @@ class ShapRecursiveFeatureElimination:
         Returns:
             pd.DataFrame: Dataframe with categorical/object columns converted to codes.
         """
-        X_converted = X.copy()
-        for col in X_converted.select_dtypes(include=["category"]).columns:
-            X_converted[col] = (
-                X_converted[col].cat.codes.astype("object").astype("category")
+        x_converted = X.copy()
+        for col in x_converted.select_dtypes(include=["category"]).columns:
+            x_converted[col] = (
+                x_converted[col].cat.codes.astype("object").astype("category")
             )
-        return X_converted
+        return x_converted
 
     def _handle_large_dataset(
         self, X: pd.DataFrame, y: pd.Series
@@ -344,7 +344,7 @@ class ShapRecursiveFeatureElimination:
 
         fold_features_metric_monitor = {f: [] for f in current_features}
 
-        for fold_idx, ((train_idx, valid_idx), fitted) in enumerate(
+        for fold_idx, ((_train_idx, valid_idx), fitted) in enumerate(
             zip(self.cv.split(X[current_features], y), fitted_estimators)
         ):
             try:

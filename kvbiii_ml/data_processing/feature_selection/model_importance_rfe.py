@@ -397,47 +397,51 @@ if __name__ == "__main__":
     from sklearn.ensemble import RandomForestClassifier
     from sklearn.model_selection import KFold
 
-    X, y = make_classification(
-        n_samples=2000,
-        n_features=20,
-        n_informative=10,
-        n_redundant=5,
-        n_repeated=0,
-        n_clusters_per_class=2,
-        random_state=17,
-    )
-    X_df = pd.DataFrame(X, columns=[f"feature_{i}" for i in range(X.shape[1])])
-    y_ser = pd.Series(y, name="target")
-    clf = RandomForestClassifier(random_state=17, max_depth=5, n_estimators=100)
-    cross_validator_example = CrossValidationTrainer(
-        problem_type="classification",
-        metric_name="Accuracy",
-        cv=KFold(n_splits=5, shuffle=True, random_state=17),
-        preprocessing_pipeline=None,
-        verbose=False,
-    )
+    def _run_demo() -> None:
+        """Run ModelImportanceRecursiveFeatureElimination on a synthetic dataset."""
+        X, y = make_classification(
+            n_samples=2000,
+            n_features=20,
+            n_informative=10,
+            n_redundant=5,
+            n_repeated=0,
+            n_clusters_per_class=2,
+            random_state=17,
+        )
+        x_df = pd.DataFrame(X, columns=[f"feature_{i}" for i in range(X.shape[1])])
+        y_ser = pd.Series(y, name="target")
+        clf = RandomForestClassifier(random_state=17, max_depth=5, n_estimators=100)
+        cross_validator_example = CrossValidationTrainer(
+            problem_type="classification",
+            metric_name="Accuracy",
+            cv=KFold(n_splits=5, shuffle=True, random_state=17),
+            preprocessing_pipeline=None,
+            verbose=False,
+        )
 
-    selector = ModelImportanceRecursiveFeatureElimination(
-        estimator=clf,
-        cross_validator=cross_validator_example,
-        steps=10,
-        alpha=0.95,
-        verbose=True,
-        protected_features=["feature_0", "feature_1"],
-    )
+        selector = ModelImportanceRecursiveFeatureElimination(
+            estimator=clf,
+            cross_validator=cross_validator_example,
+            steps=10,
+            alpha=0.95,
+            verbose=True,
+            protected_features=["feature_0", "feature_1"],
+        )
 
-    summary = selector.run(X_df, y_ser)
-    print("\nSummary of Model Importance RFE:")
-    print(
-        summary["history"][
-            [
-                "step",
-                "removed_feature_name",
-                "n_features_remaining",
-                "metric_value",
-                "importance_score",
+        summary = selector.run(x_df, y_ser)
+        print("\nSummary of Model Importance RFE:")
+        print(
+            summary["history"][
+                [
+                    "step",
+                    "removed_feature_name",
+                    "n_features_remaining",
+                    "metric_value",
+                    "importance_score",
+                ]
             ]
-        ]
-    )
-    print("Selected features:", summary["selected_features"])
+        )
+        print("Selected features:", summary["selected_features"])
+
+    _run_demo()
     print(f"Number of selected features: {len(summary['selected_features'])}")

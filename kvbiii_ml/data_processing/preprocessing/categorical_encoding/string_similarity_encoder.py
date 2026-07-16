@@ -110,11 +110,11 @@ class StringSimilarityEncoderWithOriginal(_WithOriginalBase):
             pd.DataFrame: Original columns plus one column per unique string per
                 encoded variable.
         """
-        X_orig = X.copy()
+        x_orig = X.copy()
         with self._maybe_suppress_warnings():
-            X_transformed = self._transform_inner(self._inner, X.copy())
-        new_cols = [c for c in X_transformed.columns if c not in X_orig.columns]
-        return pd.concat([X_orig, X_transformed[new_cols]], axis=1)
+            x_transformed = self._transform_inner(self._inner, X.copy())
+        new_cols = [c for c in x_transformed.columns if c not in x_orig.columns]
+        return pd.concat([x_orig, x_transformed[new_cols]], axis=1)
 
     def get_feature_names_out(self) -> list[str]:
         """Return output column names produced by transform().

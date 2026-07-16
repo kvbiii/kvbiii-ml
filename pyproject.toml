@@ -44,6 +44,24 @@ dependencies = {file = ["requirements.txt"]}
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]
 
+[tool.pylint.main]
+ignore = ["kvbiii-ml_venv", "build"]
+
+[tool.pylint."messages control"]
+disable = ["all"]
+enable = [
+    "unused-import",
+    "wrong-import-order",
+    "unused-variable",
+    "import-outside-toplevel",
+    "missing-function-docstring",
+    "invalid-name",
+    "bare-except",
+]
+
+[tool.pylint.basic]
+good-names = ["X", "X_train", "X_test", "X_valid", "y", "y_train", "y_test", "y_valid", "C"]
+
 [project.urls]
 Homepage = "https://github.com/kvbiii/kvbiii-ml"
 Repository = "https://github.com/kvbiii/kvbiii-ml"

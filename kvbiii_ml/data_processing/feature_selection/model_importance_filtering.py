@@ -131,8 +131,8 @@ class ModelImportanceFiltering:
             return None
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            X_probe = clone(pipeline).fit_transform(X.head(10), y.head(10))
-        return X_probe.dtypes if isinstance(X_probe, pd.DataFrame) else None
+            x_probe = clone(pipeline).fit_transform(X.head(10), y.head(10))
+        return x_probe.dtypes if isinstance(x_probe, pd.DataFrame) else None
 
     @staticmethod
     def _build_raw_to_derived(
@@ -199,7 +199,7 @@ class ModelImportanceFiltering:
         preprocessor: Pipeline | None,
         current_raw_features: list[str],
         current_processed_features: list[str],
-        X_current: pd.DataFrame | None = None,
+        x_current: pd.DataFrame | None = None,
     ) -> Pipeline | None:
         """Clone the pipeline, restricting each step and appending a feature selector.
 
@@ -213,7 +213,7 @@ class ModelImportanceFiltering:
             preprocessor (Pipeline | None): Original preprocessing pipeline.
             current_raw_features (list[str]): Raw columns still active.
             current_processed_features (list[str]): Processed columns the model should see.
-            X_current (pd.DataFrame | None): Representative sample used to trial-fit steps
+            x_current (pd.DataFrame | None): Representative sample used to trial-fit steps
                 with auto-detected variables.  Defaults to None.
 
         Returns:
@@ -234,11 +234,11 @@ class ModelImportanceFiltering:
                 if not filtered:
                     continue
                 cloned_step.set_params(variables=filtered)
-            elif params.get("variables") is None and X_current is not None:
+            elif params.get("variables") is None and x_current is not None:
                 try:
                     with warnings.catch_warnings():
                         warnings.simplefilter("ignore")
-                        clone(step).fit(X_current.head(5))
+                        clone(step).fit(x_current.head(5))
                 except (ValueError, TypeError, KeyError, AttributeError, IndexError):
                     continue
             new_steps.append((name, cloned_step))
@@ -617,11 +617,11 @@ class ModelImportanceFiltering:
         if self.cross_validator.fitted_pipelines_:
             _, val_idx = fold_splits[0]
             first_pipe = self.cross_validator.fitted_pipelines_[0]
-            X_val_proc = CrossValidationTrainer._transform_with_pipeline(
+            x_val_proc = CrossValidationTrainer._transform_with_pipeline(
                 first_pipe, X[all_raw_features].iloc[val_idx].copy()
             )
-            self.all_processed_features = X_val_proc.columns.tolist()
-            post_pipeline_dtypes = X_val_proc.dtypes
+            self.all_processed_features = x_val_proc.columns.tolist()
+            post_pipeline_dtypes = x_val_proc.dtypes
         else:
             self.all_processed_features = list(all_raw_features)
 
@@ -805,16 +805,16 @@ if __name__ == "__main__":
     def _make_clf_data(n_classes: int) -> tuple[pd.DataFrame, pd.Series]:
         """Generate classification dataset with numerical and categorical features."""
         rng = np.random.default_rng(RANDOM_STATE)
-        X_num, y_arr = make_classification(
-            n_samples=N_SAMPLES,
-            n_features=N_FEATURES,
+        x_num, y_arr = make_classification(
+            N_SAMPLES=N_SAMPLES,
+            N_FEATURES=N_FEATURES,
             n_informative=7,
             n_redundant=3,
             n_classes=n_classes,
             n_clusters_per_class=1,
-            random_state=RANDOM_STATE,
+            RANDOM_STATE=RANDOM_STATE,
         )
-        df = pd.DataFrame(X_num, columns=NUM_FEATURES)
+        df = pd.DataFrame(x_num, columns=NUM_FEATURES)
         df["cat_1"] = pd.Categorical(rng.choice(["A", "B", "C", "D"], size=N_SAMPLES))
         df["cat_2"] = pd.Categorical(rng.choice(["X", "Y", "Z"], size=N_SAMPLES))
         return df, pd.Series(y_arr, name="target")
@@ -822,18 +822,18 @@ if __name__ == "__main__":
     def _make_reg_data() -> tuple[pd.DataFrame, pd.Series]:
         """Generate regression dataset with numerical and categorical features."""
         rng = np.random.default_rng(RANDOM_STATE)
-        X_num, y_arr = make_regression(
-            n_samples=N_SAMPLES,
-            n_features=N_FEATURES,
+        x_num, y_arr = make_regression(
+            N_SAMPLES=N_SAMPLES,
+            N_FEATURES=N_FEATURES,
             n_informative=7,
-            random_state=RANDOM_STATE,
+            RANDOM_STATE=RANDOM_STATE,
         )
-        df = pd.DataFrame(X_num, columns=NUM_FEATURES)
+        df = pd.DataFrame(x_num, columns=NUM_FEATURES)
         df["cat_1"] = pd.Categorical(rng.choice(["A", "B", "C", "D"], size=N_SAMPLES))
         df["cat_2"] = pd.Categorical(rng.choice(["X", "Y", "Z"], size=N_SAMPLES))
         return df, pd.Series(y_arr, name="target")
 
-    def _build_pipeline(cat_features: list[str], num_features: list[str]) -> Pipeline:
+    def _build_pipeline(cat_cols: list[str], num_cols: list[str]) -> Pipeline:
         """Build the expansion pipeline used across all scenarios."""
         return Pipeline(
             [
@@ -841,7 +841,7 @@ if __name__ == "__main__":
                 (
                     "winsorizer_with_original",
                     WinsorizerWithOriginal(
-                        variables=num_features,
+                        variables=num_cols,
                         capping_method="iqr",
                         tail="both",
                         fold=3.0,
@@ -849,7 +849,7 @@ if __name__ == "__main__":
                 ),
                 (
                     "mean_encoder",
-                    MeanEncoder(variables=cat_features, missing_values="ignore"),
+                    MeanEncoder(variables=cat_cols, missing_values="ignore"),
                 ),
             ]
         )
@@ -869,7 +869,7 @@ if __name__ == "__main__":
         trainer = CrossValidationTrainer(
             problem_type=problem_type,
             metric_name=metric_name,
-            cv=cv_cls(n_splits=N_FOLDS, shuffle=True, random_state=RANDOM_STATE),
+            cv=cv_cls(n_splits=N_FOLDS, shuffle=True, RANDOM_STATE=RANDOM_STATE),
             preprocessing_pipeline=pipeline,
             verbose=False,
         )
@@ -908,155 +908,161 @@ if __name__ == "__main__":
         n_selected = len(summary["selected_features"])
         print(f"  {label:<60} selected={n_selected} features\n")
 
-    _lgbm_clf = LGBMClassifier(
-        n_estimators=200,
-        early_stopping_rounds=ES,
-        verbose=-1,
-        random_state=RANDOM_STATE,
-    )
-    _lgbm_reg = LGBMRegressor(
-        n_estimators=200,
-        early_stopping_rounds=ES,
-        verbose=-1,
-        random_state=RANDOM_STATE,
-    )
-    _xgb_clf = XGBClassifier(
-        n_estimators=200,
-        early_stopping_rounds=ES,
-        verbosity=0,
-        random_state=RANDOM_STATE,
-    )
-    _xgb_reg = XGBRegressor(
-        n_estimators=200,
-        early_stopping_rounds=ES,
-        verbosity=0,
-        random_state=RANDOM_STATE,
-    )
-    _cat_clf = CatBoostClassifier(
-        n_estimators=200,
-        early_stopping_rounds=ES,
-        verbose=0,
-        random_state=RANDOM_STATE,
-        cat_features=CAT_FEATURES,
-    )
-    _cat_multi = CatBoostClassifier(
-        n_estimators=200,
-        early_stopping_rounds=ES,
-        verbose=0,
-        random_state=RANDOM_STATE,
-        cat_features=CAT_FEATURES,
-        loss_function="MultiClass",
-    )
-    _cat_reg = CatBoostRegressor(
-        n_estimators=200,
-        early_stopping_rounds=ES,
-        verbose=0,
-        random_state=RANDOM_STATE,
-        cat_features=CAT_FEATURES,
-    )
+    def _run_demo() -> None:
+        """Run ModelImportanceFiltering across the full demo scenario matrix."""
+        lgbm_clf = LGBMClassifier(
+            n_estimators=200,
+            early_stopping_rounds=ES,
+            verbose=-1,
+            RANDOM_STATE=RANDOM_STATE,
+        )
+        lgbm_reg = LGBMRegressor(
+            n_estimators=200,
+            early_stopping_rounds=ES,
+            verbose=-1,
+            RANDOM_STATE=RANDOM_STATE,
+        )
+        xgb_clf = XGBClassifier(
+            n_estimators=200,
+            early_stopping_rounds=ES,
+            verbosity=0,
+            RANDOM_STATE=RANDOM_STATE,
+        )
+        xgb_reg = XGBRegressor(
+            n_estimators=200,
+            early_stopping_rounds=ES,
+            verbosity=0,
+            RANDOM_STATE=RANDOM_STATE,
+        )
+        cat_clf = CatBoostClassifier(
+            n_estimators=200,
+            early_stopping_rounds=ES,
+            verbose=0,
+            RANDOM_STATE=RANDOM_STATE,
+            CAT_FEATURES=CAT_FEATURES,
+        )
+        cat_multi = CatBoostClassifier(
+            n_estimators=200,
+            early_stopping_rounds=ES,
+            verbose=0,
+            RANDOM_STATE=RANDOM_STATE,
+            CAT_FEATURES=CAT_FEATURES,
+            loss_function="MultiClass",
+        )
+        cat_reg = CatBoostRegressor(
+            n_estimators=200,
+            early_stopping_rounds=ES,
+            verbose=0,
+            RANDOM_STATE=RANDOM_STATE,
+            CAT_FEATURES=CAT_FEATURES,
+        )
 
-    X_bin, y_bin = _make_clf_data(n_classes=2)
-    X_multi, y_multi = _make_clf_data(n_classes=3)
-    X_reg, y_reg = _make_reg_data()
+        x_bin, y_bin = _make_clf_data(n_classes=2)
+        x_multi, y_multi = _make_clf_data(n_classes=3)
+        x_reg, y_reg = _make_reg_data()
 
-    X_bin_cat = X_bin.assign(**{c: X_bin[c].astype(str) for c in CAT_FEATURES})
-    X_multi_cat = X_multi.assign(**{c: X_multi[c].astype(str) for c in CAT_FEATURES})
-    X_reg_cat = X_reg.assign(**{c: X_reg[c].astype(str) for c in CAT_FEATURES})
+        x_bin_cat = x_bin.assign(**{c: x_bin[c].astype(str) for c in CAT_FEATURES})
+        x_multi_cat = x_multi.assign(
+            **{c: x_multi[c].astype(str) for c in CAT_FEATURES}
+        )
+        x_reg_cat = x_reg.assign(**{c: x_reg[c].astype(str) for c in CAT_FEATURES})
 
-    clf_pipeline = _build_pipeline(CAT_FEATURES, NUM_FEATURES)
-    reg_pipeline = _build_pipeline(CAT_FEATURES, NUM_FEATURES)
+        clf_pipeline = _build_pipeline(CAT_FEATURES, NUM_FEATURES)
+        reg_pipeline = _build_pipeline(CAT_FEATURES, NUM_FEATURES)
 
-    print("=" * 75)
-    print("ModelImportanceFiltering - full test matrix (3 folds, threshold=0.0)")
-    print("=" * 75)
+        print("=" * 75)
+        print("ModelImportanceFiltering - full test matrix (3 folds, threshold=0.0)")
+        print("=" * 75)
 
-    _run_mif(
-        "LightGBM | binary classification | with pipeline",
-        _lgbm_clf,
-        X_bin_cat,
-        y_bin,
-        "Balanced Accuracy",
-        "classification",
-        clf_pipeline,
-        threshold=0.0,
-    )
-    _run_mif(
-        "LightGBM | regression | with pipeline",
-        _lgbm_reg,
-        X_reg_cat,
-        y_reg,
-        "RMSE",
-        "regression",
-        reg_pipeline,
-        threshold=0.0,
-    )
-    _run_mif(
-        "LightGBM | regression | no pipeline",
-        _lgbm_reg,
-        X_reg_cat[NUM_FEATURES],
-        y_reg,
-        "RMSE",
-        "regression",
-        None,
-        threshold=0.0,
-    )
-    _run_mif(
-        "XGBoost | binary classification | with pipeline",
-        _xgb_clf,
-        X_bin_cat,
-        y_bin,
-        "Balanced Accuracy",
-        "classification",
-        clf_pipeline,
-        threshold=0.0,
-    )
-    _run_mif(
-        "XGBoost | multiclass classification | with pipeline",
-        _xgb_clf,
-        X_multi_cat,
-        y_multi,
-        "Balanced Accuracy",
-        "classification",
-        clf_pipeline,
-        threshold=0.0,
-    )
-    _run_mif(
-        "XGBoost | regression | with pipeline",
-        _xgb_reg,
-        X_reg_cat,
-        y_reg,
-        "RMSE",
-        "regression",
-        reg_pipeline,
-        threshold=0.0,
-    )
-    _run_mif(
-        "CatBoost | binary classification | with pipeline",
-        _cat_clf,
-        X_bin_cat,
-        y_bin,
-        "Balanced Accuracy",
-        "classification",
-        clf_pipeline,
-        threshold=0.0,
-    )
-    _run_mif(
-        "CatBoost | multiclass classification | with pipeline",
-        _cat_multi,
-        X_multi_cat,
-        y_multi,
-        "Balanced Accuracy",
-        "classification",
-        clf_pipeline,
-        threshold=0.0,
-    )
-    _run_mif(
-        "CatBoost | regression | with pipeline",
-        _cat_reg,
-        X_reg_cat,
-        y_reg,
-        "RMSE",
-        "regression",
-        reg_pipeline,
-        threshold=0.0,
-    )
+        _run_mif(
+            "LightGBM | binary classification | with pipeline",
+            lgbm_clf,
+            x_bin_cat,
+            y_bin,
+            "Balanced Accuracy",
+            "classification",
+            clf_pipeline,
+            threshold=0.0,
+        )
+        _run_mif(
+            "LightGBM | regression | with pipeline",
+            lgbm_reg,
+            x_reg_cat,
+            y_reg,
+            "RMSE",
+            "regression",
+            reg_pipeline,
+            threshold=0.0,
+        )
+        _run_mif(
+            "LightGBM | regression | no pipeline",
+            lgbm_reg,
+            x_reg_cat[NUM_FEATURES],
+            y_reg,
+            "RMSE",
+            "regression",
+            None,
+            threshold=0.0,
+        )
+        _run_mif(
+            "XGBoost | binary classification | with pipeline",
+            xgb_clf,
+            x_bin_cat,
+            y_bin,
+            "Balanced Accuracy",
+            "classification",
+            clf_pipeline,
+            threshold=0.0,
+        )
+        _run_mif(
+            "XGBoost | multiclass classification | with pipeline",
+            xgb_clf,
+            x_multi_cat,
+            y_multi,
+            "Balanced Accuracy",
+            "classification",
+            clf_pipeline,
+            threshold=0.0,
+        )
+        _run_mif(
+            "XGBoost | regression | with pipeline",
+            xgb_reg,
+            x_reg_cat,
+            y_reg,
+            "RMSE",
+            "regression",
+            reg_pipeline,
+            threshold=0.0,
+        )
+        _run_mif(
+            "CatBoost | binary classification | with pipeline",
+            cat_clf,
+            x_bin_cat,
+            y_bin,
+            "Balanced Accuracy",
+            "classification",
+            clf_pipeline,
+            threshold=0.0,
+        )
+        _run_mif(
+            "CatBoost | multiclass classification | with pipeline",
+            cat_multi,
+            x_multi_cat,
+            y_multi,
+            "Balanced Accuracy",
+            "classification",
+            clf_pipeline,
+            threshold=0.0,
+        )
+        _run_mif(
+            "CatBoost | regression | with pipeline",
+            cat_reg,
+            x_reg_cat,
+            y_reg,
+            "RMSE",
+            "regression",
+            reg_pipeline,
+            threshold=0.0,
+        )
+
+    _run_demo()
