@@ -13,5 +13,4 @@ __pycache__/
 !requirements.txt
 !requirements-dev.txt
 !setup_venv.sh
-!.pre-commit-config.yaml
 !*.ipynb

@@ -57,10 +57,11 @@ enable = [
     "missing-function-docstring",
     "invalid-name",
     "bare-except",
+    "duplicate-code",
 ]
 
 [tool.pylint.basic]
-good-names = ["X", "X_train", "X_test", "X_valid", "y", "y_train", "y_test", "y_valid", "C"]
+good-names = ["X", "X_train", "X_test", "X_valid", "C"]
 
 [project.urls]
 Homepage = "https://github.com/kvbiii/kvbiii-ml"
