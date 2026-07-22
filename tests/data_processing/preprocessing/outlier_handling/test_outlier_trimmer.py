@@ -53,7 +53,9 @@ def test_outliertrimmerwithoriginal_transform_nans_out_of_bound_rows_across_capp
     if len(result) != len(salary_with_outlier):
         raise AssertionError("Row count changed; no rows should be dropped.")
     if not pd.isna(result["salary_PREPROCESS_TRIMMED"].iloc[-1]):
-        raise AssertionError(f"Outlier row was not NaN'd for capping_method={capping_method}.")
+        raise AssertionError(
+            f"Outlier row was not NaN'd for capping_method={capping_method}."
+        )
     pd.testing.assert_series_equal(result["salary"], salary_with_outlier["salary"])
 
 
@@ -90,8 +92,12 @@ def test_outliertrimmerwithoriginal_transform_nans_expected_tail_across_tail_var
                 raise AssertionError(f"Row {position} should be NaN for tail={tail}.")
         else:
             if pd.isna(derived.iloc[position]):
-                raise AssertionError(f"Row {position} should not be NaN for tail={tail}.")
-    pd.testing.assert_series_equal(result["salary"], salary_with_both_tail_outliers["salary"])
+                raise AssertionError(
+                    f"Row {position} should not be NaN for tail={tail}."
+                )
+    pd.testing.assert_series_equal(
+        result["salary"], salary_with_both_tail_outliers["salary"]
+    )
 
 
 if __name__ == "__main__":

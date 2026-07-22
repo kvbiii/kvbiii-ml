@@ -60,7 +60,9 @@ def sample_dataframe(test_settings: TestSettings) -> pd.DataFrame:
         {
             "numeric_1": np.random.rand(test_settings.N_SAMPLES),
             "numeric_2": np.random.rand(test_settings.N_SAMPLES),
-            "categorical_1": np.random.choice(["A", "B", "C"], size=test_settings.N_SAMPLES),
+            "categorical_1": np.random.choice(
+                ["A", "B", "C"], size=test_settings.N_SAMPLES
+            ),
             "categorical_2": np.random.choice(["X", "Y"], size=test_settings.N_SAMPLES),
             "integer_1": np.random.randint(0, 10, size=test_settings.N_SAMPLES),
         }

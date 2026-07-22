@@ -284,7 +284,9 @@ def test_computesinglemodelshap_falls_back_to_values_on_attributeerror(
     """
 
     class FlakyExplainer:
-        def __init__(self, model: object, feature_perturbation: str | None = None) -> None:
+        def __init__(
+            self, model: object, feature_perturbation: str | None = None
+        ) -> None:
             """Store the wrapped model; feature_perturbation is accepted but unused."""
             self.model = model
 

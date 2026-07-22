@@ -358,14 +358,13 @@ def test_run_respects_protected_features(mi_rfe_data: tuple[pd.DataFrame, pd.Ser
     if not set(protected).issubset(set(result["selected_features"])):
         raise AssertionError()
     if any(
-        feat in protected
-        for feat in result["history"]["removed_feature_name"].tolist()
+        feat in protected for feat in result["history"]["removed_feature_name"].tolist()
     ):
         raise AssertionError()
 
 
 def test_run_raises_for_unknown_protected_feature(
-    mi_rfe_data: tuple[pd.DataFrame, pd.Series]
+    mi_rfe_data: tuple[pd.DataFrame, pd.Series],
 ):
     """Tests that run() raises ValueError when protected_features references a missing column.
 

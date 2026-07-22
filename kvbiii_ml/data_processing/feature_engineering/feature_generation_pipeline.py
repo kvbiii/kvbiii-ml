@@ -76,7 +76,9 @@ class FeatureGenerationPipeline:
         return df
 
     @staticmethod
-    def _coerce_to_dataframe(result: object, step: object, X_before: pd.DataFrame) -> pd.DataFrame:
+    def _coerce_to_dataframe(
+        result: object, step: object, X_before: pd.DataFrame
+    ) -> pd.DataFrame:
         """Coerce a step's transform() output back into a pd.DataFrame.
 
         Plain sklearn transformers (e.g. sklearn.preprocessing.TargetEncoder) return

@@ -72,7 +72,9 @@ def _build_estimator() -> RandomForestClassifier:
     Returns:
         RandomForestClassifier: Small, fast-fitting estimator with feature_importances_.
     """
-    return RandomForestClassifier(n_estimators=5, max_depth=2, random_state=RANDOM_STATE)
+    return RandomForestClassifier(
+        n_estimators=5, max_depth=2, random_state=RANDOM_STATE
+    )
 
 
 @pytest.mark.parametrize(
@@ -125,7 +127,9 @@ def test_modelimportancerfe_compute_removal_schedule_returns_empty_for_zero_step
         raise AssertionError()
 
 
-def _build_history(metric_values: list[float], feature_names: list[str | None]) -> pd.DataFrame:
+def _build_history(
+    metric_values: list[float], feature_names: list[str | None]
+) -> pd.DataFrame:
     """Builds a hand-crafted step-wise history DataFrame for weighted-score tests.
 
     Args:
@@ -292,7 +296,11 @@ def test_modelimportancerfe_run_returns_valid_summary_end_to_end(
 
     result = selector.run(X, y)
 
-    if set(result.keys()) != {"selected_features", "selected_features_names", "history"}:
+    if set(result.keys()) != {
+        "selected_features",
+        "selected_features_names",
+        "history",
+    }:
         raise AssertionError()
     history = result["history"]
     if int(history.iloc[0]["step"]) != 0:

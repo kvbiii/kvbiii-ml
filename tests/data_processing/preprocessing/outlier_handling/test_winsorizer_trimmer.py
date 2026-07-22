@@ -64,7 +64,9 @@ def test_winsorizerwithoriginal_transform_preserves_original_columns():
           even though the derived column reflects capped values.
     """
     salary = pd.DataFrame({"salary": [10.0, 12.0, 11.0, 13.0, 12.0, 100.0]})
-    winsorizer = WinsorizerWithOriginal(variables=["salary"], capping_method="iqr", fold=1.0)
+    winsorizer = WinsorizerWithOriginal(
+        variables=["salary"], capping_method="iqr", fold=1.0
+    )
     winsorizer.fit(salary)
     result = winsorizer.transform(salary)
     pd.testing.assert_series_equal(result["salary"], salary["salary"])

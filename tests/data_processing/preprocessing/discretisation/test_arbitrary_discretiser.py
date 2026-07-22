@@ -53,12 +53,16 @@ def test_arbitrarydiscretiserwithoriginal_transform_errors_ignore_yields_nan_for
         - The original column keeps the out-of-range value untouched.
     """
     binning_dict = {"age": [0, 10, 25, 40]}
-    discretiser = ArbitraryDiscretiserWithOriginal(binning_dict=binning_dict, errors="ignore")
+    discretiser = ArbitraryDiscretiserWithOriginal(
+        binning_dict=binning_dict, errors="ignore"
+    )
     discretiser.fit(arbitrary_binning_data)
     out_of_range_data = pd.DataFrame({"age": [200.0]})
     result = discretiser.transform(out_of_range_data)
     if not pd.isna(result["age_PREPROCESS_ARB_DISC"].iloc[0]):
-        raise AssertionError("Out-of-range value should have produced NaN in derived column.")
+        raise AssertionError(
+            "Out-of-range value should have produced NaN in derived column."
+        )
     if result["age"].iloc[0] != 200.0:
         raise AssertionError("Original column value should remain untouched.")
 
@@ -75,7 +79,9 @@ def test_arbitrarydiscretiserwithoriginal_transform_errors_raise_raises_valueerr
         - transform() raises ValueError when a value falls outside the cut-points.
     """
     binning_dict = {"age": [0, 10, 25, 40]}
-    discretiser = ArbitraryDiscretiserWithOriginal(binning_dict=binning_dict, errors="raise")
+    discretiser = ArbitraryDiscretiserWithOriginal(
+        binning_dict=binning_dict, errors="raise"
+    )
     discretiser.fit(arbitrary_binning_data)
     out_of_range_data = pd.DataFrame({"age": [200.0]})
     with pytest.raises(ValueError, match="NaN values were introduced"):

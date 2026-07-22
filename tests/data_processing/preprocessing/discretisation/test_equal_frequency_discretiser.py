@@ -40,7 +40,9 @@ def test_equalfrequencydiscretiserwithoriginal_transform_preserves_original_colu
     discretiser = EqualFrequencyDiscretiserWithOriginal(variables=["age"], q=CUSTOM_Q)
     discretiser.fit(equal_frequency_data)
     result = discretiser.transform(equal_frequency_data)
-    pd.testing.assert_frame_equal(result[equal_frequency_data.columns.tolist()], equal_frequency_data)
+    pd.testing.assert_frame_equal(
+        result[equal_frequency_data.columns.tolist()], equal_frequency_data
+    )
 
 
 def test_equalfrequencydiscretiserwithoriginal_transform_produces_roughly_equal_bin_counts(
@@ -60,7 +62,9 @@ def test_equalfrequencydiscretiserwithoriginal_transform_produces_roughly_equal_
     result = discretiser.transform(equal_frequency_data)
     bin_counts = result["age_PREPROCESS_EQ_FREQ"].value_counts()
     if len(bin_counts) != CUSTOM_Q:
-        raise AssertionError(f"Expected {CUSTOM_Q} distinct bins, got {len(bin_counts)}.")
+        raise AssertionError(
+            f"Expected {CUSTOM_Q} distinct bins, got {len(bin_counts)}."
+        )
     expected_count_per_bin = N_ROWS // CUSTOM_Q
     if not (bin_counts == expected_count_per_bin).all():
         raise AssertionError(f"Bin counts not equal: {bin_counts.to_dict()}")

@@ -88,9 +88,7 @@ def test_crossfeaturegenerator_init_custom_parameters():
         ),
     ],
 )
-def test_crossfeaturegenerator_validate_init_params_raises(
-    kwargs: dict, match: str
-):
+def test_crossfeaturegenerator_validate_init_params_raises(kwargs: dict, match: str):
     """Tests that invalid constructor parameters raise ValueError with a matching message.
 
     Args:
@@ -198,7 +196,9 @@ def test_crossfeaturegenerator_fit_categorical_combo_uses_custom_separator():
         - Combined values inside the encoding map use the custom separator too
     """
     df = pd.DataFrame({"A": ["a", "b"], "B": ["x", "y"]})
-    generator = CrossFeatureGenerator(features_names=["A", "B"], degree=2, separator="-")
+    generator = CrossFeatureGenerator(
+        features_names=["A", "B"], degree=2, separator="-"
+    )
     generator.fit(df)
     if "A-B" not in generator.encoding_maps_:
         raise AssertionError()
@@ -266,7 +266,9 @@ def test_crossfeaturegenerator_transform_numerical_combo_is_elementwise_product(
     generator = CrossFeatureGenerator(features_names=["C", "D"], degree=2)
     generator.fit(mixed_dataframe)
     result = generator.transform(mixed_dataframe)
-    expected = (mixed_dataframe["C"] * mixed_dataframe["D"]).astype("float32").to_numpy()
+    expected = (
+        (mixed_dataframe["C"] * mixed_dataframe["D"]).astype("float32").to_numpy()
+    )
     if not np.allclose(result["C_D"].to_numpy(), expected):
         raise AssertionError()
 

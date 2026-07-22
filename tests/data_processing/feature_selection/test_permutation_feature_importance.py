@@ -80,7 +80,9 @@ def _build_estimator() -> RandomForestClassifier:
     Returns:
         RandomForestClassifier: Small, fast-fitting estimator.
     """
-    return RandomForestClassifier(n_estimators=5, max_depth=2, random_state=RANDOM_STATE)
+    return RandomForestClassifier(
+        n_estimators=5, max_depth=2, random_state=RANDOM_STATE
+    )
 
 
 def test_permutationrfe_run_raises_valueerror_for_unknown_protected_feature(
@@ -134,8 +136,16 @@ def test_permutationrfe_compute_fold_importances_averages_across_folds():
     permutation_module.permutation_importance = _fake_permutation_importance
     try:
         fold_data = [
-            (Mock(), pd.DataFrame(np.zeros((4, 3)), columns=columns), pd.Series([0, 1, 0, 1])),
-            (Mock(), pd.DataFrame(np.zeros((4, 3)), columns=columns), pd.Series([1, 0, 1, 0])),
+            (
+                Mock(),
+                pd.DataFrame(np.zeros((4, 3)), columns=columns),
+                pd.Series([0, 1, 0, 1]),
+            ),
+            (
+                Mock(),
+                pd.DataFrame(np.zeros((4, 3)), columns=columns),
+                pd.Series([1, 0, 1, 0]),
+            ),
         ]
         importances = selector._compute_fold_importances(fold_data)
     finally:
@@ -336,7 +346,11 @@ def test_permutationrfe_run_returns_valid_summary_end_to_end(small_classificatio
 
     result = selector.run(X, y)
 
-    if set(result.keys()) != {"selected_features", "selected_features_names", "history"}:
+    if set(result.keys()) != {
+        "selected_features",
+        "selected_features_names",
+        "history",
+    }:
         raise AssertionError()
     history = result["history"]
     if int(history.iloc[0]["step"]) != 0:

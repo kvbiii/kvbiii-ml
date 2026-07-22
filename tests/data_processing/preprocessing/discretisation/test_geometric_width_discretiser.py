@@ -42,10 +42,14 @@ def test_geometricwidthdiscretiserwithoriginal_transform_preserves_original_colu
     Asserts:
         - The original columns of the output match the input exactly.
     """
-    discretiser = GeometricWidthDiscretiserWithOriginal(variables=["income"], bins=CUSTOM_BINS)
+    discretiser = GeometricWidthDiscretiserWithOriginal(
+        variables=["income"], bins=CUSTOM_BINS
+    )
     discretiser.fit(positive_income_data)
     result = discretiser.transform(positive_income_data)
-    pd.testing.assert_frame_equal(result[positive_income_data.columns.tolist()], positive_income_data)
+    pd.testing.assert_frame_equal(
+        result[positive_income_data.columns.tolist()], positive_income_data
+    )
 
 
 def test_geometricwidthdiscretiserwithoriginal_transform_produces_expected_distinct_bin_count(
@@ -59,12 +63,16 @@ def test_geometricwidthdiscretiserwithoriginal_transform_produces_expected_disti
     Asserts:
         - Exactly `bins` distinct bin codes appear in the derived column.
     """
-    discretiser = GeometricWidthDiscretiserWithOriginal(variables=["income"], bins=CUSTOM_BINS)
+    discretiser = GeometricWidthDiscretiserWithOriginal(
+        variables=["income"], bins=CUSTOM_BINS
+    )
     discretiser.fit(positive_income_data)
     result = discretiser.transform(positive_income_data)
     distinct_bins = sorted(result["income_PREPROCESS_GEO_WIDTH"].unique())
     if distinct_bins != list(range(CUSTOM_BINS)):
-        raise AssertionError(f"Expected bin codes {list(range(CUSTOM_BINS))}, got {distinct_bins}.")
+        raise AssertionError(
+            f"Expected bin codes {list(range(CUSTOM_BINS))}, got {distinct_bins}."
+        )
 
 
 def test_geometricwidthdiscretiserwithoriginal_transform_raises_for_non_positive_data(

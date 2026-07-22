@@ -40,7 +40,9 @@ def test_equalwidthdiscretiserwithoriginal_transform_preserves_original_columns(
     discretiser = EqualWidthDiscretiserWithOriginal(variables=["age"], bins=CUSTOM_BINS)
     discretiser.fit(equal_width_data)
     result = discretiser.transform(equal_width_data)
-    pd.testing.assert_frame_equal(result[equal_width_data.columns.tolist()], equal_width_data)
+    pd.testing.assert_frame_equal(
+        result[equal_width_data.columns.tolist()], equal_width_data
+    )
 
 
 def test_equalwidthdiscretiserwithoriginal_transform_produces_expected_distinct_bin_count(
@@ -60,7 +62,9 @@ def test_equalwidthdiscretiserwithoriginal_transform_produces_expected_distinct_
     result = discretiser.transform(equal_width_data)
     distinct_bins = sorted(result["age_PREPROCESS_EQ_WIDTH"].unique())
     if distinct_bins != list(range(CUSTOM_BINS)):
-        raise AssertionError(f"Expected bin codes {list(range(CUSTOM_BINS))}, got {distinct_bins}.")
+        raise AssertionError(
+            f"Expected bin codes {list(range(CUSTOM_BINS))}, got {distinct_bins}."
+        )
 
 
 if __name__ == "__main__":

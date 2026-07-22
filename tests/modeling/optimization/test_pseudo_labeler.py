@@ -154,7 +154,10 @@ def test_pseudolabelgenerator_init_accepts_valid_boundary_configuration(
 
 
 def test_pseudolabelgenerator_fit_auto_strategy_builds_pseudo_labels_dataframe(
-    small_labeled_data, small_unlabeled_data, pseudo_cv_trainer, logistic_regression_estimator
+    small_labeled_data,
+    small_unlabeled_data,
+    pseudo_cv_trainer,
+    logistic_regression_estimator,
 ):
     """Tests fit() with the "auto" threshold strategy produces a valid pseudo-labels frame.
 
@@ -173,7 +176,9 @@ def test_pseudolabelgenerator_fit_auto_strategy_builds_pseudo_labels_dataframe(
     """
     X_train, y_train = small_labeled_data
     generator = PseudoLabelGenerator(
-        cross_validator=pseudo_cv_trainer, threshold_method="auto", threshold_percentile=70.0
+        cross_validator=pseudo_cv_trainer,
+        threshold_method="auto",
+        threshold_percentile=70.0,
     )
 
     fitted = generator.fit(
@@ -191,14 +196,20 @@ def test_pseudolabelgenerator_fit_auto_strategy_builds_pseudo_labels_dataframe(
         raise AssertionError()
     confidences = generator.pseudo_labels_df_["_confidence"].to_numpy()
     thresholds_per_row = np.array(
-        [generator.thresholds_[label] for label in generator.pseudo_labels_df_["_pseudo_label"]]
+        [
+            generator.thresholds_[label]
+            for label in generator.pseudo_labels_df_["_pseudo_label"]
+        ]
     )
     if not np.all(confidences >= thresholds_per_row - 1e-9):
         raise AssertionError()
 
 
 def test_pseudolabelgenerator_fit_top_k_strategy_builds_pseudo_labels_dataframe(
-    small_labeled_data, small_unlabeled_data, pseudo_cv_trainer, logistic_regression_estimator
+    small_labeled_data,
+    small_unlabeled_data,
+    pseudo_cv_trainer,
+    logistic_regression_estimator,
 ):
     """Tests fit() with the "top_k" threshold strategy produces a valid pseudo-labels frame.
 
@@ -225,21 +236,29 @@ def test_pseudolabelgenerator_fit_top_k_strategy_builds_pseudo_labels_dataframe(
         raise AssertionError()
     confidences = generator.pseudo_labels_df_["_confidence"].to_numpy()
     thresholds_per_row = np.array(
-        [generator.thresholds_[label] for label in generator.pseudo_labels_df_["_pseudo_label"]]
+        [
+            generator.thresholds_[label]
+            for label in generator.pseudo_labels_df_["_pseudo_label"]
+        ]
     )
     if not np.all(confidences >= thresholds_per_row - 1e-9):
         raise AssertionError()
     unlabeled_probas = generator.cross_validator.predict_proba(small_unlabeled_data)
     argmax_indices = np.argmax(unlabeled_probas, axis=1)
     max_confidences = unlabeled_probas.max(axis=1)
-    expected_thresholds = generator._compute_thresholds_top_k(argmax_indices, max_confidences)
+    expected_thresholds = generator._compute_thresholds_top_k(
+        argmax_indices, max_confidences
+    )
     for cls, expected_threshold in expected_thresholds.items():
         if generator.thresholds_[cls] != pytest.approx(expected_threshold):
             raise AssertionError()
 
 
 def test_pseudolabelgenerator_fit_fixed_strategy_builds_pseudo_labels_dataframe(
-    small_labeled_data, small_unlabeled_data, pseudo_cv_trainer, logistic_regression_estimator
+    small_labeled_data,
+    small_unlabeled_data,
+    pseudo_cv_trainer,
+    logistic_regression_estimator,
 ):
     """Tests fit() with the "fixed" threshold strategy produces a valid pseudo-labels frame.
 
@@ -255,7 +274,9 @@ def test_pseudolabelgenerator_fit_fixed_strategy_builds_pseudo_labels_dataframe(
     """
     X_train, y_train = small_labeled_data
     generator = PseudoLabelGenerator(
-        cross_validator=pseudo_cv_trainer, threshold_method="fixed", fixed_threshold=0.55
+        cross_validator=pseudo_cv_trainer,
+        threshold_method="fixed",
+        fixed_threshold=0.55,
     )
 
     generator.fit(logistic_regression_estimator, X_train, y_train, small_unlabeled_data)
@@ -319,7 +340,9 @@ def test_pseudolabelgenerator_compute_thresholds_auto_falls_back_to_predicted_pr
         - The computed threshold for the rare class matches a manual recomputation
           based on predicted-probability percentiles from OOF and unlabeled data
     """
-    generator = PseudoLabelGenerator(cross_validator=pseudo_cv_trainer, threshold_percentile=80.0)
+    generator = PseudoLabelGenerator(
+        cross_validator=pseudo_cv_trainer, threshold_percentile=80.0
+    )
     generator.classes_ = np.array([0, 1])
     oof_probas = np.array(
         [
@@ -345,7 +368,9 @@ def test_pseudolabelgenerator_compute_thresholds_auto_falls_back_to_predicted_pr
     pred_mask = np.array([False, False, False, True, True, False])
     unl_cls_mask = np.array([False, True, False])
     expected_t_oof = float(np.percentile(oof_probas[pred_mask, 1], 80.0))
-    expected_t_unl = float(np.percentile(generator._unlabeled_probas[unl_cls_mask, 1], 80.0))
+    expected_t_unl = float(
+        np.percentile(generator._unlabeled_probas[unl_cls_mask, 1], 80.0)
+    )
     expected_threshold = min(expected_t_oof, expected_t_unl)
     if thresholds[1] != pytest.approx(expected_threshold):
         raise AssertionError()
@@ -365,7 +390,9 @@ def test_pseudolabelgenerator_compute_thresholds_auto_uses_degenerate_fallback_w
     Asserts:
         - The computed threshold for the never-predicted class equals 0.5
     """
-    generator = PseudoLabelGenerator(cross_validator=pseudo_cv_trainer, threshold_percentile=80.0)
+    generator = PseudoLabelGenerator(
+        cross_validator=pseudo_cv_trainer, threshold_percentile=80.0
+    )
     generator.classes_ = np.array([0, 1, 2])
     oof_probas = np.array(
         [
@@ -472,7 +499,9 @@ def test_pseudolabelgenerator_density_curve_falls_back_to_histogram_for_small_or
         raise AssertionError()
 
 
-def test_pseudolabelgenerator_plot_pseudo_label_stats_raises_before_fit(pseudo_cv_trainer):
+def test_pseudolabelgenerator_plot_pseudo_label_stats_raises_before_fit(
+    pseudo_cv_trainer,
+):
     """Tests plot_pseudo_label_stats raises before fit() has been called.
 
     Args:
@@ -490,7 +519,10 @@ def test_pseudolabelgenerator_plot_pseudo_label_stats_raises_before_fit(pseudo_c
 
 
 def test_pseudolabelgenerator_plot_pseudo_label_stats_runs_without_raising_on_normal_data(
-    small_labeled_data, small_unlabeled_data, pseudo_cv_trainer, logistic_regression_estimator
+    small_labeled_data,
+    small_unlabeled_data,
+    pseudo_cv_trainer,
+    logistic_regression_estimator,
 ):
     """Tests plot_pseudo_label_stats completes for a normally sized unlabeled set.
 
@@ -540,7 +572,9 @@ def test_pseudolabelgenerator_plot_pseudo_label_stats_runs_without_raising_on_ti
     generator.plot_pseudo_label_stats()
 
 
-def test_pseudolabelgenerator_get_augmented_dataset_raises_before_fit(pseudo_cv_trainer):
+def test_pseudolabelgenerator_get_augmented_dataset_raises_before_fit(
+    pseudo_cv_trainer,
+):
     """Tests get_augmented_dataset raises before fit() has been called.
 
     Args:
@@ -558,7 +592,10 @@ def test_pseudolabelgenerator_get_augmented_dataset_raises_before_fit(pseudo_cv_
 
 
 def test_pseudolabelgenerator_get_augmented_dataset_weights_rows_by_confidence(
-    small_labeled_data, small_unlabeled_data, pseudo_cv_trainer, logistic_regression_estimator
+    small_labeled_data,
+    small_unlabeled_data,
+    pseudo_cv_trainer,
+    logistic_regression_estimator,
 ):
     """Tests get_augmented_dataset assigns weight 1.0 to originals and confidence to pseudo rows.
 
@@ -593,7 +630,9 @@ def test_pseudolabelgenerator_get_augmented_dataset_weights_rows_by_confidence(
     if not np.allclose(w_combined.iloc[:n_original].to_numpy(), 1.0):
         raise AssertionError()
     expected_pseudo_weights = generator.pseudo_labels_df_["_confidence"].to_numpy()
-    if not np.allclose(w_combined.iloc[n_original:].to_numpy(), expected_pseudo_weights):
+    if not np.allclose(
+        w_combined.iloc[n_original:].to_numpy(), expected_pseudo_weights
+    ):
         raise AssertionError()
 
 

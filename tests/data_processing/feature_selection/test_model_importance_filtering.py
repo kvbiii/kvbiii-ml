@@ -66,7 +66,9 @@ def _build_estimator() -> RandomForestClassifier:
     Returns:
         RandomForestClassifier: Small, fast-fitting estimator with feature_importances_.
     """
-    return RandomForestClassifier(n_estimators=5, max_depth=2, random_state=RANDOM_STATE)
+    return RandomForestClassifier(
+        n_estimators=5, max_depth=2, random_state=RANDOM_STATE
+    )
 
 
 @pytest.mark.parametrize(
@@ -77,10 +79,15 @@ def _build_estimator() -> RandomForestClassifier:
         ({"max_steps": "3"}, "max_steps must be a positive integer"),
         ({"verbose": "yes"}, "verbose must be a boolean"),
         ({"protected_features": "f0"}, "protected_features must be a list of strings"),
-        ({"protected_features": [1, 2]}, "protected_features must be a list of strings"),
+        (
+            {"protected_features": [1, 2]},
+            "protected_features must be a list of strings",
+        ),
     ],
 )
-def test_modelimportancefiltering_init_raises_valueerror_for_invalid_params(kwargs, match):
+def test_modelimportancefiltering_init_raises_valueerror_for_invalid_params(
+    kwargs, match
+):
     """Tests init validation rejects invalid parameter types and values.
 
     Args:
@@ -194,7 +201,9 @@ def test_modelimportancefiltering_history_schema_matches_documented_columns(
 
     result = selector.run(X, y)
 
-    if set(result["history"].columns) != set(ModelImportanceFiltering.history_schema.keys()):
+    if set(result["history"].columns) != set(
+        ModelImportanceFiltering.history_schema.keys()
+    ):
         raise AssertionError()
 
 
@@ -301,7 +310,9 @@ def test_modelimportancefiltering_run_with_pipeline_expansion_discovers_derived_
 
     if not any("_PREPROCESS_EQ_WIDTH" in f for f in selector.all_processed_features):
         raise AssertionError()
-    if not set(result["selected_features"]).issubset(set(selector.all_processed_features)):
+    if not set(result["selected_features"]).issubset(
+        set(selector.all_processed_features)
+    ):
         raise AssertionError()
 
 
