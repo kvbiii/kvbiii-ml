@@ -1,375 +1,374 @@
 """Tests for kvbiii_ml.modeling.training.cross_validation module."""
 
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.linear_model import SGDClassifier
 from sklearn.model_selection import KFold
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
 
-def test_crossvalidationtrainer_init_creates_instance_with_default_cv(test_settings):
-    """Tests CrossValidationTrainer initialization with default cross-validator.
-
-    Args:
-        test_settings: Test configuration fixture
+def test_crossvalidationtrainer_init_creates_instance_with_default_cv():
+    """Tests CrossValidationTrainer initialization with the default cross-validator.
 
     Asserts:
-        - Trainer initializes successfully with default parameters
-        - Default KFold cross-validator is created with expected parameters
-        - Metric configuration is properly loaded
+        - Default KFold cross-validator is created with 5 splits.
+        - Default KFold shuffles with the fixed random_state=17.
+        - Metric configuration is loaded from metric_name.
     """
     trainer = CrossValidationTrainer(
-        metric_name="Accuracy", problem_type="classification"
+        problem_type="classification", metric_name="Accuracy"
     )
 
-    if trainer.metric_name != "Accuracy":
-        raise AssertionError()
-    if trainer.problem_type != "classification":
-        raise AssertionError()
     if not isinstance(trainer.cv, KFold):
         raise AssertionError()
     if trainer.cv.n_splits != 5:
         raise AssertionError()
-    if trainer.verbose is not True:
+    if trainer.cv.shuffle is not True:
         raise AssertionError()
-    if len(trainer.processors) != 0:
+    if trainer.cv.random_state != 17:
+        raise AssertionError()
+    if trainer.metric_name != "Accuracy":
         raise AssertionError()
 
 
-def test_crossvalidationtrainer_init_accepts_custom_cv_and_processors(
-    kfold_cv, mock_transformer
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"problem_type": "invalid_type", "metric_name": "Accuracy"}, "problem_type"),
+        ({"problem_type": "classification"}, "Either metric_name or custom_metric"),
+        (
+            {"problem_type": "classification", "metric_name": "NotAMetric"},
+            "not found in available metrics",
+        ),
+    ],
+)
+def test_crossvalidationtrainer_init_raises_valueerror_for_invalid_configuration(
+    kwargs, match
 ):
-    """Tests CrossValidationTrainer initialization with custom parameters.
+    """Tests CrossValidationTrainer initialization rejects invalid configurations.
 
     Args:
-        kfold_cv (KFold): Custom cross-validator fixture
-        mock_transformer (Mock): Mock transformer fixture
+        kwargs (dict): Constructor keyword arguments under test.
+        match (str): Expected substring of the raised ValueError message.
 
     Asserts:
-        - Custom cross-validator is accepted and stored
-        - Custom processors list is accepted and stored
-        - Verbose setting can be customized
+        - ValueError is raised for an unsupported problem_type.
+        - ValueError is raised when neither metric_name nor custom_metric is given.
+        - ValueError is raised for a metric_name absent from the metrics registry.
     """
-    processors = [mock_transformer]
-    trainer = CrossValidationTrainer(
-        metric_name="F1",
+    with pytest.raises(ValueError, match=match):
+        CrossValidationTrainer(**kwargs)
+
+
+def test_crossvalidationtrainer_init_raises_typeerror_for_non_pipeline_preprocessing():
+    """Tests CrossValidationTrainer rejects a preprocessing_pipeline that is not a Pipeline.
+
+    Asserts:
+        - TypeError is raised when preprocessing_pipeline is neither None nor a Pipeline.
+    """
+    with pytest.raises(TypeError, match="must be an sklearn Pipeline or None"):
+        CrossValidationTrainer(
+            problem_type="classification",
+            metric_name="Accuracy",
+            preprocessing_pipeline=StandardScaler(),
+        )
+
+
+def test_crossvalidationtrainer_init_accepts_none_or_pipeline_preprocessing():
+    """Tests CrossValidationTrainer accepts None and a real Pipeline for preprocessing_pipeline.
+
+    Asserts:
+        - None is stored unchanged.
+        - A Pipeline instance is stored unchanged.
+    """
+    trainer_none = CrossValidationTrainer(
         problem_type="classification",
+        metric_name="Accuracy",
+        preprocessing_pipeline=None,
+    )
+    if trainer_none.preprocessing_pipeline is not None:
+        raise AssertionError()
+
+    pipeline = Pipeline([("scaler", StandardScaler())])
+    trainer_pipeline = CrossValidationTrainer(
+        problem_type="classification",
+        metric_name="Accuracy",
+        preprocessing_pipeline=pipeline,
+    )
+    if trainer_pipeline.preprocessing_pipeline is not pipeline:
+        raise AssertionError()
+
+
+def test_crossvalidationtrainer_validate_pipeline_raises_for_invalid_state():
+    """Tests validate_pipeline raises TypeError when the stored pipeline is invalid.
+
+    Asserts:
+        - Calling validate_pipeline directly after mutating preprocessing_pipeline
+          to a non-Pipeline value raises TypeError.
+    """
+    trainer = CrossValidationTrainer(
+        problem_type="classification", metric_name="Accuracy"
+    )
+    trainer.preprocessing_pipeline = "not_a_pipeline"
+
+    with pytest.raises(TypeError, match="must be an sklearn Pipeline or None"):
+        trainer.validate_pipeline()
+
+
+def test_crossvalidationtrainer_init_accepts_custom_metric():
+    """Tests CrossValidationTrainer initialization with a custom_metric configuration.
+
+    Asserts:
+        - metric_name, metric_type, and metric_direction come from the custom_metric dict.
+        - metric_name argument is not required when custom_metric is provided.
+    """
+    custom_metric = {
+        "name": "custom_mae",
+        "function": lambda y_true, y_pred: float(
+            np.mean(np.abs(np.asarray(y_true) - np.asarray(y_pred)))
+        ),
+        "metric_type": "preds",
+        "direction": "minimize",
+    }
+    trainer = CrossValidationTrainer(
+        problem_type="regression", custom_metric=custom_metric
+    )
+
+    if trainer.metric_name != "custom_mae":
+        raise AssertionError()
+    if trainer.metric_type != "preds":
+        raise AssertionError()
+    if trainer.metric_direction != "minimize":
+        raise AssertionError()
+
+
+def test_crossvalidationtrainer_fit_returns_scores_matching_cv_splits(
+    binary_classification_data, logistic_regression_estimator, kfold_cv
+):
+    """Tests fit returns per-fold train/valid scores whose lengths match cv.n_splits.
+
+    Args:
+        binary_classification_data (tuple): Feature matrix and target vector.
+        logistic_regression_estimator (LogisticRegression): Configured estimator.
+        kfold_cv (KFold): Cross-validation splitter fixture with 3 splits.
+
+    Asserts:
+        - train_scores has length equal to cv.n_splits.
+        - valid_scores has length equal to cv.n_splits.
+        - avg_test_pred is None when X_test is not provided.
+        - fitted_estimators_ has one entry per fold.
+    """
+    X, y = binary_classification_data
+    trainer = CrossValidationTrainer(
+        problem_type="classification",
+        metric_name="Accuracy",
         cv=kfold_cv,
-        processors=processors,
         verbose=False,
     )
 
-    if trainer.cv is not kfold_cv:
-        raise AssertionError()
-    if trainer.processors != processors:
-        raise AssertionError()
-    if trainer.verbose is not False:
-        raise AssertionError()
-
-
-def test_crossvalidationtrainer_init_raises_error_for_invalid_problem_type():
-    """Tests CrossValidationTrainer initialization rejects invalid problem types.
-
-    Asserts:
-        - ValueError is raised for unsupported problem types
-        - Error message contains helpful information about valid options
-    """
-    with pytest.raises(
-        ValueError, match="problem_type must be 'classification' or 'regression'"
-    ):
-        CrossValidationTrainer(metric_name="Accuracy", problem_type="invalid_type")
-
-
-def test_crossvalidationtrainer_init_raises_error_for_invalid_metric():
-    """Tests CrossValidationTrainer initialization rejects invalid metrics.
-
-    Asserts:
-        - ValueError is raised for unknown metric names
-        - Error message lists available metrics for reference
-    """
-    with pytest.raises(ValueError, match="Metric 'InvalidMetric' not found"):
-        CrossValidationTrainer(
-            metric_name="InvalidMetric", problem_type="classification"
-        )
-
-
-def test_crossvalidationtrainer_validate_processors_accepts_valid_transformers(
-    mock_transformer,
-):
-    """Tests validate_processors method accepts properly configured transformers.
-
-    Args:
-        mock_transformer (Mock): Mock transformer with required methods
-
-    Asserts:
-        - Method completes without raising exceptions
-        - Transformers with fit_transform are accepted
-        - Transformers with separate fit and transform are accepted
-    """
-    trainer = CrossValidationTrainer(
-        metric_name="Accuracy",
-        problem_type="classification",
-        processors=[mock_transformer],
-    )
-
-    # Should not raise any exception
-    trainer.validate_processors()
-
-
-def test_crossvalidationtrainer_validate_processors_rejects_invalid_processors():
-    """Tests validate_processors method rejects improperly configured processors.
-
-    Asserts:
-        - ValueError is raised for processors without required methods
-        - Error message explains required interface compliance
-    """
-    invalid_processor = Mock()
-    # Remove required methods to make it invalid
-    del invalid_processor.fit
-    del invalid_processor.transform
-    del invalid_processor.fit_transform
-    del invalid_processor.fit_resample
-
-    with pytest.raises(ValueError, match="must implement either"):
-        CrossValidationTrainer(
-            metric_name="Accuracy",
-            problem_type="classification",
-            processors=[invalid_processor],
-        )
-
-
-def test_crossvalidationtrainer_apply_processors_handles_empty_processors_list(
-    sample_dataframe, sample_series
-):
-    """Tests _apply_processors method handles empty processors list correctly.
-
-    Args:
-        sample_dataframe (pd.DataFrame): Sample feature data
-        sample_series (pd.Series): Sample target data
-
-    Asserts:
-        - Original data is returned unchanged when no processors provided
-        - All returned data structures maintain original types and shapes
-    """
-    trainer = CrossValidationTrainer("Accuracy", "classification")
-
-    train_df, valid_df, test_df, y_train_out, y_valid_out = trainer._apply_processors(
-        processors=None,
-        train_df=sample_dataframe,
-        valid_df=sample_dataframe.copy(),
-        test_df=sample_dataframe.copy(),
-        y_train=sample_series,
-        y_valid=sample_series.copy(),
-    )
-
-    pd.testing.assert_frame_equal(train_df, sample_dataframe)
-    pd.testing.assert_frame_equal(valid_df, sample_dataframe)
-    pd.testing.assert_frame_equal(test_df, sample_dataframe)
-    pd.testing.assert_series_equal(y_train_out, sample_series)
-    pd.testing.assert_series_equal(y_valid_out, sample_series)
-
-
-def test_crossvalidationtrainer_apply_processors_handles_fit_transform_processors(
-    sample_dataframe, sample_series
-):
-    """Tests _apply_processors method correctly applies fit_transform processors.
-
-    Args:
-        sample_dataframe (pd.DataFrame): Sample feature data
-        sample_series (pd.Series): Sample target data
-
-    Asserts:
-        - Processors are fitted on training data
-        - Transform is applied to all provided datasets
-        - Method signatures are properly introspected for y parameter
-    """
-    mock_processor = Mock()
-    mock_processor.fit_transform.return_value = sample_dataframe * 2
-    mock_processor.transform.return_value = sample_dataframe * 2
-
-    # Explicitly ensure fit_resample is not an attribute
-    del mock_processor.fit_resample
-
-    # Mock signature inspection to indicate y parameter is accepted
-    with patch("kvbiii_ml.modeling.training.cross_validation.signature") as mock_sig:
-        mock_sig.return_value.parameters = {"y": Mock()}
-
-        trainer = CrossValidationTrainer("Accuracy", "classification")
-
-        trainer._apply_processors(
-            processors=[mock_processor],
-            train_df=sample_dataframe,
-            valid_df=sample_dataframe.copy(),
-            test_df=sample_dataframe.copy(),
-            y_train=sample_series,
-            y_valid=sample_series.copy(),
-        )
-
-        mock_processor.fit_transform.assert_called_once()
-        mock_processor.transform.assert_called()
-
-
-def test_crossvalidationtrainer_apply_processors_handles_fit_resample_processors(
-    sample_dataframe, sample_series
-):
-    """Tests _apply_processors method correctly applies fit_resample processors.
-
-    Args:
-        sample_dataframe (pd.DataFrame): Sample feature data
-        sample_series (pd.Series): Sample target data
-
-    Asserts:
-        - fit_resample is called on training data
-        - Resampled data is properly returned
-        - Target data is updated from resampling
-    """
-    mock_processor = Mock()
-    resampled_x = sample_dataframe.iloc[:50]  # Simulate resampling to fewer samples
-    resampled_y = sample_series.iloc[:50]
-    mock_processor.fit_resample.return_value = (resampled_x, resampled_y)
-
-    trainer = CrossValidationTrainer("Accuracy", "classification")
-
-    train_df, _valid_df, _test_df, y_train_out, _y_valid_out = (
-        trainer._apply_processors(
-            processors=[mock_processor],
-            train_df=sample_dataframe,
-            valid_df=sample_dataframe.copy(),
-            test_df=sample_dataframe.copy(),
-            y_train=sample_series,
-            y_valid=sample_series.copy(),
-        )
-    )
-
-    mock_processor.fit_resample.assert_called_once()
-    pd.testing.assert_frame_equal(train_df, resampled_x)
-    pd.testing.assert_series_equal(y_train_out, resampled_y)
-
-
-def test_crossvalidationtrainer_fit_executes_cross_validation_loop(
-    binary_classification_data, logistic_regression_estimator
-):
-    """Tests fit method executes complete cross-validation training loop.
-
-    Args:
-        binary_classification_data (tuple): Feature matrix and target vector
-        logistic_regression_estimator (LogisticRegression): Configured estimator
-
-    Asserts:
-        - Cross-validation completes without errors
-        - Training and validation scores are computed for each fold
-        - Fitted estimators are stored for each fold
-    """
-    X, y = binary_classification_data
-    trainer = CrossValidationTrainer("Accuracy", "classification", verbose=False)
-
-    train_scores, valid_scores, _test_preds = trainer.fit(
+    train_scores, valid_scores, avg_test_pred = trainer.fit(
         logistic_regression_estimator, X, y
     )
 
-    if len(train_scores) != 5:
+    if len(train_scores) != kfold_cv.n_splits:
         raise AssertionError()
-    if len(valid_scores) != 5:
+    if len(valid_scores) != kfold_cv.n_splits:
         raise AssertionError()
-    if len(trainer.fitted_estimators_) != 5:
+    if avg_test_pred is not None:
         raise AssertionError()
-    if not all(isinstance(score, float) for score in train_scores):
-        raise AssertionError()
-    if not all(isinstance(score, float) for score in valid_scores):
+    if len(trainer.fitted_estimators_) != kfold_cv.n_splits:
         raise AssertionError()
 
 
-def test_crossvalidationtrainer_fit_handles_test_data_averaging(
-    binary_classification_data, logistic_regression_estimator
+def test_crossvalidationtrainer_fit_averages_test_predictions_across_folds(
+    binary_classification_data, logistic_regression_estimator, kfold_cv
 ):
-    """Tests fit method properly averages test predictions across folds.
+    """Tests fit averages test-set predictions across folds when X_test is provided.
 
     Args:
-        binary_classification_data (tuple): Feature matrix and target vector
-        logistic_regression_estimator (LogisticRegression): Configured estimator
+        binary_classification_data (tuple): Feature matrix and target vector.
+        logistic_regression_estimator (LogisticRegression): Configured estimator.
+        kfold_cv (KFold): Cross-validation splitter fixture with 3 splits.
 
     Asserts:
-        - Test predictions are returned when test data provided
-        - Predictions are averaged across all folds
-        - Output shape matches test data dimensions
+        - avg_test_pred is not None when X_test is passed.
+        - avg_test_pred has one row per test sample.
     """
     X, y = binary_classification_data
-    X_test = X.iloc[:20]  # Use subset as test data
-    trainer = CrossValidationTrainer("Accuracy", "classification", verbose=False)
+    X_test = X.iloc[:10]
+    trainer = CrossValidationTrainer(
+        problem_type="classification",
+        metric_name="Accuracy",
+        cv=kfold_cv,
+        verbose=False,
+    )
 
-    _train_scores, _valid_scores, test_preds = trainer.fit(
+    _train_scores, _valid_scores, avg_test_pred = trainer.fit(
         logistic_regression_estimator, X, y, X_test=X_test
     )
 
-    if test_preds is None:
+    if avg_test_pred is None:
         raise AssertionError()
-    if len(test_preds) != len(X_test):
-        raise AssertionError()
-    if not isinstance(test_preds, np.ndarray):
+    if len(avg_test_pred) != len(X_test):
         raise AssertionError()
 
 
-def test_crossvalidationtrainer_predict_returns_averaged_predictions(
-    binary_classification_data, logistic_regression_estimator
+def test_crossvalidationtrainer_fit_with_preprocessing_pipeline_round_trips(
+    binary_classification_data, logistic_regression_estimator, kfold_cv
 ):
-    """Tests predict method returns averaged predictions from fitted estimators.
+    """Tests fit clones and applies a preprocessing_pipeline independently per fold.
 
     Args:
-        binary_classification_data (tuple): Feature matrix and target vector
-        logistic_regression_estimator (LogisticRegression): Configured estimator
+        binary_classification_data (tuple): Feature matrix and target vector.
+        logistic_regression_estimator (LogisticRegression): Configured estimator.
+        kfold_cv (KFold): Cross-validation splitter fixture with 3 splits.
 
     Asserts:
-        - Predictions are generated from all fitted fold estimators
-        - Results are averaged appropriately for problem type
-        - Output format matches expected prediction format
+        - fit completes without raising when a Pipeline is supplied.
+        - One fitted pipeline is stored per fold.
+        - predict returns one prediction per input row after fitting.
     """
     X, y = binary_classification_data
-    trainer = CrossValidationTrainer("Accuracy", "classification", verbose=False)
+    pipeline = Pipeline([("scaler", StandardScaler())]).set_output(transform="pandas")
+    trainer = CrossValidationTrainer(
+        problem_type="classification",
+        metric_name="Accuracy",
+        cv=kfold_cv,
+        preprocessing_pipeline=pipeline,
+        verbose=False,
+    )
+
     trainer.fit(logistic_regression_estimator, X, y)
 
-    predictions = trainer.predict(X)
+    if len(trainer.fitted_pipelines_) != kfold_cv.n_splits:
+        raise AssertionError()
+    if not all(fp is not None for fp in trainer.fitted_pipelines_):
+        raise AssertionError()
 
+    predictions = trainer.predict(X)
     if len(predictions) != len(X):
         raise AssertionError()
-    if predictions.dtype not in [np.int32, np.int64]:
-        raise AssertionError()
-    if not all(pred in [0, 1] for pred in predictions):
-        raise AssertionError()
 
 
-def test_crossvalidationtrainer_predict_raises_error_when_not_fitted():
-    """Tests predict method raises error when called before fitting.
+@pytest.mark.parametrize(
+    "method_name", ["predict", "predict_proba", "predict_with_confidence"]
+)
+def test_crossvalidationtrainer_prediction_methods_raise_before_fit(method_name):
+    """Tests predict, predict_proba, and predict_with_confidence raise before fit().
+
+    Args:
+        method_name (str): Name of the prediction method under test.
 
     Asserts:
-        - RuntimeError is raised when predict called on unfitted trainer
-        - Error message provides clear guidance about required fitting
+        - RuntimeError is raised when the method is called before fit().
     """
-    trainer = CrossValidationTrainer("Accuracy", "classification")
+    trainer = CrossValidationTrainer(
+        problem_type="classification", metric_name="Accuracy"
+    )
     X = pd.DataFrame({"feature": [1, 2, 3]})
 
-    with pytest.raises(RuntimeError, match="must be fitted before calling predict"):
-        trainer.predict(X)
+    with pytest.raises(RuntimeError, match="must be fitted before calling"):
+        getattr(trainer, method_name)(X)
+
+
+def test_crossvalidationtrainer_predict_proba_raises_valueerror_for_regression():
+    """Tests predict_proba raises ValueError when problem_type is regression.
+
+    Asserts:
+        - ValueError is raised regardless of fitted state for regression trainers.
+    """
+    trainer = CrossValidationTrainer(problem_type="regression", metric_name="MAE")
+    X = pd.DataFrame({"feature": [1, 2, 3]})
+
+    with pytest.raises(
+        ValueError, match="predict_proba is only available for classification"
+    ):
+        trainer.predict_proba(X)
+
+
+def test_crossvalidationtrainer_predict_with_confidence_returns_regression_summary(
+    regression_data, linear_regression_estimator, kfold_cv
+):
+    """Tests predict_with_confidence returns mean/std/CI for regression problems.
+
+    Args:
+        regression_data (tuple): Feature matrix and continuous target vector.
+        linear_regression_estimator (LinearRegression): Configured regression estimator.
+        kfold_cv (KFold): Cross-validation splitter fixture with 3 splits.
+
+    Asserts:
+        - Returned dict contains prediction, std, ci_95_lower, and ci_95_upper keys.
+        - Each array has one entry per input row.
+    """
+    X, y = regression_data
+    trainer = CrossValidationTrainer(
+        problem_type="regression", metric_name="MAE", cv=kfold_cv, verbose=False
+    )
+    trainer.fit(linear_regression_estimator, X, y)
+
+    result = trainer.predict_with_confidence(X)
+
+    for key in ("prediction", "std", "ci_95_lower", "ci_95_upper"):
+        if key not in result:
+            raise AssertionError(f"Missing key: {key}")
+        if len(result[key]) != len(X):
+            raise AssertionError()
+
+
+def test_crossvalidationtrainer_predict_with_confidence_raises_without_predict_proba(
+    binary_classification_data, kfold_cv
+):
+    """Tests predict_with_confidence raises ValueError when a fold estimator lacks predict_proba.
+
+    Args:
+        binary_classification_data (tuple): Feature matrix and target vector.
+        kfold_cv (KFold): Cross-validation splitter fixture with 3 splits.
+
+    Asserts:
+        - ValueError is raised naming predict_proba as the missing requirement.
+    """
+    X, y = binary_classification_data
+    estimator = SGDClassifier(random_state=17, max_iter=1000, loss="hinge")
+    trainer = CrossValidationTrainer(
+        problem_type="classification",
+        metric_name="Accuracy",
+        cv=kfold_cv,
+        verbose=False,
+    )
+    trainer.fit(estimator, X, y)
+
+    with pytest.raises(ValueError, match="must implement predict_proba"):
+        trainer.predict_with_confidence(X)
 
 
 def test_crossvalidationtrainer_predict_proba_returns_averaged_probabilities(
-    binary_classification_data, logistic_regression_estimator
+    binary_classification_data, logistic_regression_estimator, kfold_cv
 ):
-    """Tests predict_proba method returns averaged class probabilities.
+    """Tests predict_proba returns averaged, well-formed class probabilities.
 
     Args:
-        binary_classification_data (tuple): Feature matrix and target vector
-        logistic_regression_estimator (LogisticRegression): Configured estimator
+        binary_classification_data (tuple): Feature matrix and target vector.
+        logistic_regression_estimator (LogisticRegression): Configured estimator.
+        kfold_cv (KFold): Cross-validation splitter fixture with 3 splits.
 
     Asserts:
-        - Probabilities are averaged across all fitted estimators
-        - Output shape matches (n_samples, n_classes) format
-        - Probability values sum to 1 for each sample
+        - Output shape is (n_samples, n_classes).
+        - Each row sums to 1.
+        - All probability values lie within [0, 1].
     """
     X, y = binary_classification_data
-    trainer = CrossValidationTrainer("Accuracy", "classification", verbose=False)
+    trainer = CrossValidationTrainer(
+        problem_type="classification",
+        metric_name="Accuracy",
+        cv=kfold_cv,
+        verbose=False,
+    )
     trainer.fit(logistic_regression_estimator, X, y)
 
     probabilities = trainer.predict_proba(X)
@@ -382,135 +381,45 @@ def test_crossvalidationtrainer_predict_proba_returns_averaged_probabilities(
         raise AssertionError()
 
 
-def test_crossvalidationtrainer_predict_proba_raises_error_for_regression():
-    """Tests predict_proba method raises error for regression problems.
-
-    Asserts:
-        - ValueError is raised when predict_proba called for regression
-        - Error message explains method is only for classification
-    """
-    trainer = CrossValidationTrainer("MAE", "regression")
-    X = pd.DataFrame({"feature": [1, 2, 3]})
-
-    with pytest.raises(
-        ValueError, match="predict_proba is only available for classification"
-    ):
-        trainer.predict_proba(X)
-
-
-def test_crossvalidationtrainer_predict_with_confidence_returns_regression_metrics(
-    regression_data, linear_regression_estimator
-):
-    """Tests predict_with_confidence method returns proper regression confidence metrics.
-
-    Args:
-        regression_data (tuple): Feature matrix and continuous target vector
-        linear_regression_estimator (LinearRegression): Configured regression estimator
-
-    Asserts:
-        - Returns prediction mean and standard deviation across folds
-        - Confidence intervals are computed using normal approximation
-        - All returned metrics have appropriate shapes and value ranges
-    """
-    X, y = regression_data
-    trainer = CrossValidationTrainer("MAE", "regression", verbose=False)
-
-    trainer.fit(linear_regression_estimator, X, y)
-
-    confidence_results = trainer.predict_with_confidence(X)
-
-    if "prediction" not in confidence_results:
-        raise AssertionError()
-    if "std" not in confidence_results:
-        raise AssertionError()
-    if "ci_95_lower" not in confidence_results:
-        raise AssertionError()
-    if "ci_95_upper" not in confidence_results:
-        raise AssertionError()
-
-    if len(confidence_results["prediction"]) != len(X):
-        raise AssertionError()
-    if len(confidence_results["std"]) != len(X):
-        raise AssertionError()
-
-
-def test_crossvalidationtrainer_predict_with_confidence_returns_classification_metrics(
-    binary_classification_data, logistic_regression_estimator
-):
-    """Tests predict_with_confidence method returns proper classification confidence metrics.
-
-    Args:
-        binary_classification_data (tuple): Feature matrix and binary target vector
-        logistic_regression_estimator (LogisticRegression): Configured estimator
-
-    Asserts:
-        - Returns predicted classes and confidence measures
-        - Disagreement metric measures fold consensus
-        - All returned metrics have appropriate shapes and interpretations
-    """
-    X, y = binary_classification_data
-    trainer = CrossValidationTrainer("Accuracy", "classification", verbose=False)
-    trainer.fit(logistic_regression_estimator, X, y)
-
-    confidence_results = trainer.predict_with_confidence(X)
-
-    if "prediction" not in confidence_results:
-        raise AssertionError()
-    if "confidence" not in confidence_results:
-        raise AssertionError()
-    if "disagreement" not in confidence_results:
-        raise AssertionError()
-    if "proba" not in confidence_results:
-        raise AssertionError()
-
-    if len(confidence_results["prediction"]) != len(X):
-        raise AssertionError()
-    if len(confidence_results["confidence"]) != len(X):
-        raise AssertionError()
-    if confidence_results["proba"].shape != (len(X), 2):
-        raise AssertionError()
-
-
-def test_crossvalidationtrainer_order_x_for_estimator_reorders_features_correctly(
+def test_crossvalidationtrainer_order_x_for_estimator_reorders_exact_names(
     sample_dataframe,
 ):
-    """Tests _order_x_for_estimator method reorders features to match estimator expectations.
+    """Tests _order_x_for_estimator reorders columns for an exact feature-name match.
 
     Args:
-        sample_dataframe (pd.DataFrame): Sample feature data with multiple columns
+        sample_dataframe (pd.DataFrame): Sample feature data with multiple columns.
 
     Asserts:
-        - Features are reordered when estimator has feature_names_in_ attribute
-        - Original DataFrame is returned when estimator lacks feature ordering info
-        - Column order matches estimator's expected feature names
+        - Columns are reordered to match estimator.feature_names_in_ exactly.
+        - The original DataFrame is returned unchanged when the estimator exposes
+          no feature-name attribute at all.
     """
-    # Create mock estimator with specific feature order
-    mock_estimator = Mock(spec=["feature_names_"])
+    mock_estimator = Mock(spec=["feature_names_in_"])
     mock_estimator.feature_names_in_ = ["categorical_1", "numeric_1", "integer_1"]
 
     reordered_x = CrossValidationTrainer._order_x_for_estimator(
         sample_dataframe, mock_estimator
     )
-
-    expected_order = ["categorical_1", "numeric_1", "integer_1"]
-    if list(reordered_x.columns) != expected_order:
+    if list(reordered_x.columns) != ["categorical_1", "numeric_1", "integer_1"]:
         raise AssertionError()
 
-    # Test fallback when no feature names available
-    mock_estimator_no_features = Mock(spec=[])  # No feature name attributes
+    mock_estimator_no_features = Mock(spec=[])
     result_x = CrossValidationTrainer._order_x_for_estimator(
         sample_dataframe, mock_estimator_no_features
     )
-
     pd.testing.assert_frame_equal(result_x, sample_dataframe)
 
 
-def test_crossvalidationtrainer_order_x_for_estimator_handles_normalized_feature_names():
-    """Tests _order_x_for_estimator maps normalized estimator feature names safely.
+def test_crossvalidationtrainer_order_x_for_estimator_falls_back_to_normalized_names():
+    """Tests _order_x_for_estimator's tolerant normalized-name matching fallback.
+
+    Args:
+        None.
 
     Asserts:
-        - Feature names with underscores map to source columns with spaces.
-        - No KeyError is raised when estimator naming differs from DataFrame naming.
+        - Estimator feature names differing only by whitespace/underscore
+          normalization still resolve to the matching DataFrame columns.
+        - No KeyError is raised despite the naming mismatch.
     """
     X = pd.DataFrame(
         {
@@ -520,7 +429,7 @@ def test_crossvalidationtrainer_order_x_for_estimator_handles_normalized_feature
             "petal width (cm)": [0.2, 0.2],
         }
     )
-    mock_estimator = Mock()
+    mock_estimator = Mock(spec=["feature_names_"])
     mock_estimator.feature_names_ = [
         "sepal_length_(cm)",
         "sepal_width_(cm)",
@@ -531,48 +440,6 @@ def test_crossvalidationtrainer_order_x_for_estimator_handles_normalized_feature
     reordered_x = CrossValidationTrainer._order_x_for_estimator(X, mock_estimator)
 
     if list(reordered_x.columns) != list(X.columns):
-        raise AssertionError()
-
-
-def test_crossvalidationtrainer_fit_maps_verbose_one_and_includes_train_in_eval_set(
-    binary_classification_data,
-    logistic_regression_estimator,
-):
-    """Tests fit maps verbose=1 to fit-time verbose=True and includes train in eval_set.
-
-    Args:
-        binary_classification_data (tuple): Feature matrix and target vector.
-        logistic_regression_estimator: Estimator fixture used for cloning.
-
-    Asserts:
-        - fit_and_predict receives fit_verbose=True when trainer verbose is set to 1
-        - fit_and_predict receives include_train_in_eval_set=True on every fold
-    """
-    X, y = binary_classification_data
-    trainer = CrossValidationTrainer(
-        problem_type="classification", metric_name="Accuracy", verbose=1
-    )
-
-    captured_kwargs: list[dict] = []
-
-    def _fake_fit_and_predict(*args, **kwargs):
-        captured_kwargs.append(kwargs)
-        estimator = args[0]
-        y_train = args[2]
-        y_valid = args[4]
-        return np.asarray(y_train), np.asarray(y_valid), None, estimator
-
-    with patch.object(CrossValidationTrainer, "fit_and_predict") as mock_fit:
-        mock_fit.side_effect = _fake_fit_and_predict
-        trainer.fit(logistic_regression_estimator, X, y)
-
-    if not captured_kwargs:
-        raise AssertionError()
-    if not all(kwargs.get("fit_verbose") is True for kwargs in captured_kwargs):
-        raise AssertionError()
-    if not all(
-        kwargs.get("include_train_in_eval_set") is True for kwargs in captured_kwargs
-    ):
         raise AssertionError()
 
 

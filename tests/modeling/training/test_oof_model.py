@@ -8,6 +8,8 @@ import pytest
 from sklearn.base import BaseEstimator
 from sklearn.linear_model import SGDClassifier
 from sklearn.model_selection import KFold
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 from kvbiii_ml.modeling.training.oof_model import OOFModel
@@ -110,28 +112,32 @@ def test_oofmodel_init_raises_error_for_invalid_problem_type(
         )
 
 
-def test_oofmodel_init_raises_error_for_unsupported_metric(
+def test_oofmodel_init_raises_error_for_calibrate_with_regression(
     logistic_regression_estimator, kfold_cv
 ):
-    """Tests OOFModel initialization rejects cross-validators with unsupported metrics.
+    """Tests OOFModel initialization rejects calibrate=True for regression problems.
 
     Args:
         logistic_regression_estimator (LogisticRegression): Configured estimator
         kfold_cv (KFold): Cross-validation splitter
 
     Asserts:
-        - ValueError is raised for unknown metric names in cross-validator
-        - Error message lists supported metrics for reference
+        - ValueError is raised when calibrate=True and problem_type='regression'
+        - Error message clarifies calibration is classification-only
     """
-    # Mock cross-validator with invalid metric
-    cv_trainer = Mock()
-    cv_trainer.metric_name = "UnsupportedMetric"
+    cv_trainer = CrossValidationTrainer(
+        metric_name="MAE", problem_type="regression", cv=kfold_cv
+    )
 
-    with pytest.raises(ValueError, match="Unsupported metric.*Supported metrics are"):
+    with pytest.raises(
+        ValueError,
+        match="calibrate=True is only supported for problem_type='classification'",
+    ):
         OOFModel(
             estimator=logistic_regression_estimator,
             cross_validator=cv_trainer,
-            problem_type="classification",
+            problem_type="regression",
+            calibrate=True,
         )
 
 
@@ -397,7 +403,7 @@ def test_oofmodel_predict_proba_raises_error_for_regression(
 
 
 def test_oofmodel_order_x_for_estimator_reorders_features_correctly(sample_dataframe):
-    """Tests _order_x_for_estimator method reorders features to match estimator expectations.
+    """Tests CrossValidationTrainer._order_x_for_estimator reorders features for OOFModel.
 
     Args:
         sample_dataframe (pd.DataFrame): Sample feature data with multiple columns
@@ -407,19 +413,19 @@ def test_oofmodel_order_x_for_estimator_reorders_features_correctly(sample_dataf
         - Original DataFrame is returned when estimator lacks feature ordering info
         - Column order matches estimator's expected feature names
     """
-    # Create mock estimator with specific feature order
     mock_estimator = Mock()
     mock_estimator.feature_names_in_ = ["categorical_1", "numeric_1", "integer_1"]
 
-    reordered_x = OOFModel._order_x_for_estimator(sample_dataframe, mock_estimator)
+    reordered_x = CrossValidationTrainer._order_x_for_estimator(
+        sample_dataframe, mock_estimator
+    )
 
     expected_order = ["categorical_1", "numeric_1", "integer_1"]
     if list(reordered_x.columns) != expected_order:
         raise AssertionError()
 
-    # Test fallback when no feature names available
-    mock_estimator_no_features = Mock(spec=[])  # No feature name attributes
-    result_x = OOFModel._order_x_for_estimator(
+    mock_estimator_no_features = Mock(spec=[])
+    result_x = CrossValidationTrainer._order_x_for_estimator(
         sample_dataframe, mock_estimator_no_features
     )
 
@@ -473,29 +479,30 @@ def test_oofmodel_predict_handles_estimators_without_predict_proba():
         raise AssertionError()
 
 
-def test_oofmodel_integration_with_processors(
-    binary_classification_data, logistic_regression_estimator, kfold_cv, mock_processor
+def test_oofmodel_integration_with_preprocessing_pipeline(
+    binary_classification_data, logistic_regression_estimator, kfold_cv
 ):
-    """Tests OOFModel integration with cross-validation processors.
+    """Tests OOFModel integration with a per-fold preprocessing pipeline.
 
     Args:
         binary_classification_data (tuple): Feature matrix and target vector
         logistic_regression_estimator (LogisticRegression): Configured estimator
         kfold_cv (KFold): Cross-validation splitter
-        mock_processor (Mock): Mock processor for preprocessing
 
     Asserts:
-        - OOF model works with processors in cross-validation pipeline
-        - Processors are applied per fold without data leakage
+        - OOF model works with a preprocessing_pipeline in cross-validation
+        - The pipeline is applied per fold without data leakage
         - Final predictions are properly generated
     """
     X, y = binary_classification_data
+
+    pipeline = Pipeline([("scaler", StandardScaler())]).set_output(transform="pandas")
 
     cv_trainer = CrossValidationTrainer(
         metric_name="Accuracy",
         problem_type="classification",
         cv=kfold_cv,
-        processors=[mock_processor],
+        preprocessing_pipeline=pipeline,
         verbose=False,
     )
 
@@ -512,8 +519,6 @@ def test_oofmodel_integration_with_processors(
         raise AssertionError()
     if len(oof.fitted_estimators_) != kfold_cv.n_splits:
         raise AssertionError()
-    # Verify processor was used in cross-validation
-    mock_processor.fit_resample.assert_called()
 
 
 if __name__ == "__main__":

@@ -39,10 +39,10 @@ class EnsembleModel(BaseEstimator):
 
         self.estimators = estimators
         self.problem_type = problem_type
-        self.weights = weights
         self.meta_learner = meta_learner
         self._estimators_list = list(estimators)
         self._weights_normalized = self._validate_and_normalize_weights(weights)
+        self.weights = self._weights_normalized
         self.classes_: np.ndarray | None = None
         self.fitted_estimators_: list[BaseEstimator] = []
         self.fitted_meta_learner_: BaseEstimator | None = None

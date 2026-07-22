@@ -1,5 +1,6 @@
-"""Tests for CrossFeatureGenerator class in cross_encoding module."""
+"""Tests for CrossFeatureGenerator in kvbiii_ml.data_processing.feature_engineering.cross_encoding."""
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -8,371 +9,377 @@ from kvbiii_ml.data_processing.feature_engineering.cross_encoding import (
 )
 
 
-class TestCrossFeatureGenerator:
-    """Test suite for CrossFeatureGenerator class."""
+@pytest.fixture
+def mixed_dataframe() -> pd.DataFrame:
+    """Provides a small DataFrame with categorical and numeric columns.
 
-    def test_crossfeaturegenerator_init_default_parameters(self):
-        """Tests CrossFeatureGenerator initialization with default parameters.
+    Returns:
+        pd.DataFrame: DataFrame with columns A, B (categorical), C, D (numeric).
+    """
+    return pd.DataFrame(
+        {
+            "A": ["a", "b", "a", "c"],
+            "B": ["x", "y", "x", "z"],
+            "C": [1, 2, 1, 3],
+            "D": [10, 20, 10, 30],
+        }
+    )
 
-        Asserts:
-            - Default parameters are set correctly
-            - Empty feature_names list is handled
-            - Default degree is 2
-            - Default separator is '_'
-        """
-        generator = CrossFeatureGenerator()
 
-        if generator.features_names != []:
-            raise AssertionError()
-        if generator.degree != 2:
-            raise AssertionError()
-        if generator.separator != "_":
-            raise AssertionError()
-        if generator.feature_combinations_ != []:
-            raise AssertionError()
-        if generator.encoding_maps_ != {}:
-            raise AssertionError()
+def test_crossfeaturegenerator_init_default_parameters():
+    """Tests CrossFeatureGenerator initialization with default parameters.
 
-    def test_crossfeaturegenerator_init_custom_parameters(self):
-        """Tests CrossFeatureGenerator initialization with custom parameters.
+    Asserts:
+        - Empty features_names list is the default
+        - Default degree is 2
+        - Default separator is "_"
+        - feature_combinations_, encoding_maps_, and numerical_combos_ start empty
+    """
+    generator = CrossFeatureGenerator()
+    if generator.features_names != []:
+        raise AssertionError()
+    if generator.degree != 2:
+        raise AssertionError()
+    if generator.separator != "_":
+        raise AssertionError()
+    if generator.feature_combinations_ != []:
+        raise AssertionError()
+    if generator.encoding_maps_ != {}:
+        raise AssertionError()
+    if generator.numerical_combos_ != set():
+        raise AssertionError()
+    if generator.batch_size != 10:
+        raise AssertionError()
+    if generator.chunk_size != 50000:
+        raise AssertionError()
 
-        Asserts:
-            - Custom parameters are set correctly
-            - Feature names list is preserved
-            - Custom degree and separator are applied
-        """
-        features = ["col1", "col2", "col3"]
-        generator = CrossFeatureGenerator(
-            features_names=features, degree=3, separator="-"
-        )
 
-        if generator.features_names != features:
-            raise AssertionError()
-        if generator.degree != 3:
-            raise AssertionError()
-        if generator.separator != "-":
-            raise AssertionError()
+def test_crossfeaturegenerator_init_custom_parameters():
+    """Tests CrossFeatureGenerator initialization with custom parameters.
 
-    def test_crossfeaturegenerator_validate_init_params_invalid_features(self):
-        """Tests CrossFeatureGenerator parameter validation with invalid feature names.
+    Asserts:
+        - Custom features_names, degree, and separator are stored as provided
+    """
+    features = ["col1", "col2", "col3"]
+    generator = CrossFeatureGenerator(features_names=features, degree=3, separator="-")
+    if generator.features_names != features:
+        raise AssertionError()
+    if generator.degree != 3:
+        raise AssertionError()
+    if generator.separator != "-":
+        raise AssertionError()
 
-        Asserts:
-            - ValueError is raised for non-list feature names
-            - ValueError is raised for non-string feature names
-        """
-        with pytest.raises(
-            ValueError, match="features_names must be a list of strings"
-        ):
-            CrossFeatureGenerator(features_names="not_a_list")
 
-        with pytest.raises(
-            ValueError, match="features_names must be a list of strings"
-        ):
-            CrossFeatureGenerator(features_names=[1, 2, 3])
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"features_names": "not_a_list"}, "features_names must be a list of strings"),
+        ({"features_names": [1, 2, 3]}, "features_names must be a list of strings"),
+        ({"degree": 1.5}, "degree must be an integer >= 2"),
+        ({"degree": 1}, "degree must be an integer >= 2"),
+        ({"separator": 123}, "separator must be a string"),
+        ({"batch_size": 0}, "batch_size must be a positive integer"),
+        ({"batch_size": -3}, "batch_size must be a positive integer"),
+        ({"chunk_size": 0}, "chunk_size must be a positive integer"),
+        ({"chunk_size": -1}, "chunk_size must be a positive integer"),
+        (
+            {"features_names": ["A"], "degree": 2},
+            "Number of features .* must be >= degree",
+        ),
+    ],
+)
+def test_crossfeaturegenerator_validate_init_params_raises(
+    kwargs: dict, match: str
+):
+    """Tests that invalid constructor parameters raise ValueError with a matching message.
 
-    def test_crossfeaturegenerator_validate_init_params_invalid_degree(self):
-        """Tests CrossFeatureGenerator parameter validation with invalid degree.
+    Args:
+        kwargs (dict): Constructor keyword arguments under test.
+        match (str): Regex expected to match the raised error message.
 
-        Asserts:
-            - ValueError is raised for non-integer degree
-            - ValueError is raised for degree less than 2
-        """
-        with pytest.raises(ValueError, match="degree must be an integer >= 2"):
-            CrossFeatureGenerator(degree=1.5)
+    Asserts:
+        - ValueError is raised with the expected message for each invalid input
+    """
+    with pytest.raises(ValueError, match=match):
+        CrossFeatureGenerator(**kwargs)
 
-        with pytest.raises(ValueError, match="degree must be an integer >= 2"):
-            CrossFeatureGenerator(degree=1)
 
-    def test_crossfeaturegenerator_validate_init_params_invalid_separator(self):
-        """Tests CrossFeatureGenerator parameter validation with invalid separator.
+def test_crossfeaturegenerator_legacy_batch_chunk_kwargs_are_applied():
+    """Tests that legacy batch_size/chunk_size kwargs populate the processing config.
 
-        Asserts:
-            - ValueError is raised for non-string separator
-        """
-        with pytest.raises(ValueError, match="separator must be a string"):
-            CrossFeatureGenerator(separator=123)
+    Asserts:
+        - batch_size and chunk_size properties reflect the passed kwargs
+    """
+    generator = CrossFeatureGenerator(batch_size=3, chunk_size=100)
+    if generator.batch_size != 3:
+        raise AssertionError()
+    if generator.chunk_size != 100:
+        raise AssertionError()
 
-    def test_crossfeaturegenerator_validate_init_params_insufficient_features(self):
-        """Tests CrossFeatureGenerator parameter validation with insufficient features.
 
-        Asserts:
-            - ValueError is raised when feature count is less than degree
-        """
-        with pytest.raises(ValueError, match="Number of features .* must be >= degree"):
-            CrossFeatureGenerator(features_names=["col1"], degree=2)
+def test_crossfeaturegenerator_processing_dict_is_applied():
+    """Tests that a processing dict configures batch_size and chunk_size.
 
-    def test_crossfeaturegenerator_is_numerical_combo_all_numeric(
-        self, sample_dataframe
+    Asserts:
+        - batch_size and chunk_size properties reflect the processing dict values
+    """
+    generator = CrossFeatureGenerator(processing={"batch_size": 7, "chunk_size": 250})
+    if generator.batch_size != 7:
+        raise AssertionError()
+    if generator.chunk_size != 250:
+        raise AssertionError()
+
+
+def test_crossfeaturegenerator_unexpected_kwarg_raises_value_error():
+    """Tests that an unrecognized keyword argument raises ValueError.
+
+    Asserts:
+        - ValueError is raised mentioning the unexpected argument name
+    """
+    with pytest.raises(ValueError, match="Unexpected arguments: unknown_kwarg"):
+        CrossFeatureGenerator(unknown_kwarg=5)
+
+
+def test_crossfeaturegenerator_fit_empty_features_uses_all_columns(mixed_dataframe):
+    """Tests fit defaults features_names to all DataFrame columns when left empty.
+
+    Args:
+        mixed_dataframe (pd.DataFrame): Fixture DataFrame with mixed dtypes.
+
+    Asserts:
+        - features_names is populated with every column of the input DataFrame
+        - Feature combinations are generated from all columns
+    """
+    generator = CrossFeatureGenerator(degree=2)
+    generator.fit(mixed_dataframe)
+    if set(generator.features_names) != set(mixed_dataframe.columns):
+        raise AssertionError()
+    if len(generator.feature_combinations_) != 6:
+        raise AssertionError()
+
+
+def test_crossfeaturegenerator_fit_insufficient_columns_raises_error():
+    """Tests fit raises ValueError when the DataFrame has fewer columns than degree.
+
+    Asserts:
+        - ValueError is raised mentioning the required minimum feature count
+    """
+    df = pd.DataFrame({"A": ["a", "b"]})
+    generator = CrossFeatureGenerator(degree=2)
+    with pytest.raises(ValueError, match="Number of features .* must be >= degree"):
+        generator.fit(df)
+
+
+def test_crossfeaturegenerator_fit_categorical_combo_uses_default_separator():
+    """Tests that fit builds combo column names via the default separator "_".
+
+    Asserts:
+        - Combo name "A_B" is present in encoding_maps_ for the default separator
+        - encoding_maps_ contains one integer code per unique combined value
+    """
+    df = pd.DataFrame({"A": ["a", "b", "a", "c"], "B": ["x", "y", "x", "z"]})
+    generator = CrossFeatureGenerator(features_names=["A", "B"], degree=2)
+    fitted_generator = generator.fit(df)
+    if fitted_generator is not generator:
+        raise AssertionError()
+    if ("A", "B") not in generator.feature_combinations_:
+        raise AssertionError()
+    if "A_B" not in generator.encoding_maps_:
+        raise AssertionError()
+    if generator.encoding_maps_["A_B"] != {"a_x": 0, "b_y": 1, "c_z": 2}:
+        raise AssertionError()
+
+
+def test_crossfeaturegenerator_fit_categorical_combo_uses_custom_separator():
+    """Tests that fit builds combo column names via a custom separator.
+
+    Asserts:
+        - Combo name "A-B" is present in encoding_maps_ for separator="-"
+        - Combined values inside the encoding map use the custom separator too
+    """
+    df = pd.DataFrame({"A": ["a", "b"], "B": ["x", "y"]})
+    generator = CrossFeatureGenerator(features_names=["A", "B"], degree=2, separator="-")
+    generator.fit(df)
+    if "A-B" not in generator.encoding_maps_:
+        raise AssertionError()
+    if set(generator.encoding_maps_["A-B"]) != {"a-x", "b-y"}:
+        raise AssertionError()
+
+
+def test_crossfeaturegenerator_fit_numerical_combo_tracked_separately(mixed_dataframe):
+    """Tests fit tracks all-numeric feature combinations in numerical_combos_.
+
+    Args:
+        mixed_dataframe (pd.DataFrame): Fixture DataFrame with mixed dtypes.
+
+    Asserts:
+        - Numeric combo "C_D" is present in numerical_combos_
+        - Numeric combo does not receive an encoding map
+    """
+    generator = CrossFeatureGenerator(features_names=["C", "D"], degree=2)
+    generator.fit(mixed_dataframe)
+    if "C_D" not in generator.numerical_combos_:
+        raise AssertionError()
+    if "C_D" in generator.encoding_maps_:
+        raise AssertionError()
+
+
+def test_crossfeaturegenerator_transform_categorical_combo_columns(mixed_dataframe):
+    """Tests transform adds an integer-coded column for a categorical combination.
+
+    Args:
+        mixed_dataframe (pd.DataFrame): Fixture DataFrame with mixed dtypes.
+
+    Asserts:
+        - New combo column is added alongside the original columns
+        - Combo column values are integer-coded and correctly mapped
+        - Row count is preserved
+    """
+    generator = CrossFeatureGenerator(features_names=["A", "B"], degree=2)
+    generator.fit(mixed_dataframe)
+    result = generator.transform(mixed_dataframe)
+    if "A_B" not in result.columns:
+        raise AssertionError()
+    if "A" not in result.columns or "B" not in result.columns:
+        raise AssertionError()
+    if len(result) != len(mixed_dataframe):
+        raise AssertionError()
+    expected_codes = [
+        generator.encoding_maps_["A_B"][f"{a}_{b}"]
+        for a, b in zip(mixed_dataframe["A"], mixed_dataframe["B"])
+    ]
+    if result["A_B"].tolist() != expected_codes:
+        raise AssertionError()
+
+
+def test_crossfeaturegenerator_transform_numerical_combo_is_elementwise_product(
+    mixed_dataframe,
+):
+    """Tests transform multiplies numeric feature combinations element-wise.
+
+    Args:
+        mixed_dataframe (pd.DataFrame): Fixture DataFrame with mixed dtypes.
+
+    Asserts:
+        - Combo column values equal the element-wise product of the source columns
+    """
+    generator = CrossFeatureGenerator(features_names=["C", "D"], degree=2)
+    generator.fit(mixed_dataframe)
+    result = generator.transform(mixed_dataframe)
+    expected = (mixed_dataframe["C"] * mixed_dataframe["D"]).astype("float32").to_numpy()
+    if not np.allclose(result["C_D"].to_numpy(), expected):
+        raise AssertionError()
+
+
+def test_crossfeaturegenerator_transform_unseen_categorical_combo_maps_to_negative_one():
+    """Tests transform encodes an unseen categorical combination as -1.
+
+    Asserts:
+        - A combination never seen during fit is encoded as -1 at transform time
+        - A combination seen during fit keeps its fitted encoding
+    """
+    train_df = pd.DataFrame({"A": ["a", "b"], "B": ["x", "y"]})
+    test_df = pd.DataFrame({"A": ["c", "a"], "B": ["z", "x"]})
+    generator = CrossFeatureGenerator(features_names=["A", "B"], degree=2)
+    generator.fit(train_df)
+    result = generator.transform(test_df)
+    if result["A_B"].tolist()[0] != -1:
+        raise AssertionError()
+    if result["A_B"].tolist()[1] != generator.encoding_maps_["A_B"]["a_x"]:
+        raise AssertionError()
+
+
+def test_crossfeaturegenerator_transform_before_fit_raises_value_error():
+    """Tests transform raises ValueError when the generator has not been fitted.
+
+    Asserts:
+        - ValueError is raised mentioning that the generator must be fitted first
+    """
+    df = pd.DataFrame({"A": ["a", "b"], "B": ["x", "y"]})
+    generator = CrossFeatureGenerator()
+    with pytest.raises(
+        ValueError, match="CrossFeatureGenerator must be fitted before transform"
     ):
-        """Tests _is_numerical_combo method with all numeric columns.
+        generator.transform(df)
 
-        Args:
-            sample_dataframe (pd.DataFrame): Test DataFrame fixture
 
-        Asserts:
-            - Returns True for all numeric columns
-            - Correctly identifies numeric data types
-        """
-        generator = CrossFeatureGenerator()
+def test_crossfeaturegenerator_fit_transform_before_fit_not_needed(mixed_dataframe):
+    """Tests fit_transform runs fit then transform and matches calling them separately.
 
-        # Create dataframe with numeric columns
-        df = pd.DataFrame(
-            {"num1": [1, 2, 3], "num2": [1.5, 2.5, 3.5], "cat1": ["A", "B", "C"]}
-        )
+    Args:
+        mixed_dataframe (pd.DataFrame): Fixture DataFrame with mixed dtypes.
 
-        if generator._is_numerical_combo(df, ["num1", "num2"]) != True:
-            raise AssertionError()
+    Asserts:
+        - fit_transform output equals output from separate fit() and transform() calls
+    """
+    generator_combined = CrossFeatureGenerator(features_names=["A", "B"], degree=2)
+    result_combined = generator_combined.fit_transform(mixed_dataframe)
 
-    def test_crossfeaturegenerator_is_numerical_combo_mixed_types(self):
-        """Tests _is_numerical_combo method with mixed data types.
+    generator_separate = CrossFeatureGenerator(features_names=["A", "B"], degree=2)
+    generator_separate.fit(mixed_dataframe)
+    result_separate = generator_separate.transform(mixed_dataframe)
 
-        Asserts:
-            - Returns False for mixed numeric and categorical columns
-            - Correctly identifies mixed data types
-        """
-        generator = CrossFeatureGenerator()
+    pd.testing.assert_frame_equal(result_combined, result_separate)
 
-        df = pd.DataFrame({"num1": [1, 2, 3], "cat1": ["A", "B", "C"]})
 
-        if generator._is_numerical_combo(df, ["num1", "cat1"]) != False:
-            raise AssertionError()
+def test_crossfeaturegenerator_get_feature_names_empty_before_fit():
+    """Tests get_feature_names returns an empty list before fitting.
 
-    def test_crossfeaturegenerator_fit_categorical_features(self):
-        """Tests fit method with categorical features.
+    Asserts:
+        - Empty list is returned when no combinations have been generated
+    """
+    generator = CrossFeatureGenerator()
+    if generator.get_feature_names() != []:
+        raise AssertionError()
 
-        Asserts:
-            - Encoding maps are created for categorical combinations
-            - Feature combinations are generated correctly
-            - Combined value maps are created
-        """
-        df = pd.DataFrame({"A": ["a", "b", "a", "c"], "B": ["x", "y", "x", "z"]})
 
-        generator = CrossFeatureGenerator(features_names=["A", "B"], degree=2)
-        fitted_generator = generator.fit(df)
+@pytest.mark.parametrize(
+    ("separator", "expected_names"),
+    [
+        ("_", ["A_B", "A_C", "B_C"]),
+        ("-", ["A-B", "A-C", "B-C"]),
+    ],
+)
+def test_crossfeaturegenerator_get_feature_names_reflects_separator(
+    separator: str, expected_names: list[str]
+):
+    """Tests get_feature_names joins combo tuples using the configured separator.
 
-        if fitted_generator is not generator:
-            raise AssertionError()
-        if len(generator.feature_combinations_) != 1:
-            raise AssertionError()
-        if ("A", "B") not in generator.feature_combinations_:
-            raise AssertionError()
-        if "A-B" not in generator.encoding_maps_:
-            raise AssertionError()
-        if len(generator.encoding_maps_["A-B"]) != 3:
-            raise AssertionError()
+    Args:
+        separator (str): Separator configured on the generator.
+        expected_names (list[str]): Expected separator-joined combo names.
 
-    def test_crossfeaturegenerator_fit_numerical_features(self):
-        """Tests fit method with numerical features.
+    Asserts:
+        - Returned feature names match the expected separator-joined combo names
+    """
+    df = pd.DataFrame({"A": ["a", "b"], "B": ["x", "y"], "C": ["1", "2"]})
+    generator = CrossFeatureGenerator(
+        features_names=["A", "B", "C"], degree=2, separator=separator
+    )
+    generator.fit(df)
+    if sorted(generator.get_feature_names()) != sorted(expected_names):
+        raise AssertionError()
 
-        Asserts:
-            - Numerical combinations are tracked separately
-            - No encoding maps created for numerical features
-            - Combined value maps contain multiplied values
-        """
-        df = pd.DataFrame({"D": [10, 20, 10, 30], "E": [0.1, 0.2, 0.1, 0.3]})
 
-        generator = CrossFeatureGenerator(features_names=["D", "E"], degree=2)
-        generator.fit(df)
+def test_crossfeaturegenerator_degree_three_combinations():
+    """Tests CrossFeatureGenerator with degree=3 generates 3-way combinations.
 
-        if "D-E" not in generator.numerical_combos_:
-            raise AssertionError()
-        if "D-E" in generator.encoding_maps_:
-            raise AssertionError()
-        if "D-E" not in generator.combined_value_maps_:
-            raise AssertionError()
-
-    def test_crossfeaturegenerator_fit_empty_features_uses_all_columns(self):
-        """Tests fit method with empty features_names uses all DataFrame columns.
-
-        Asserts:
-            - All DataFrame columns are used when features_names is empty
-            - Feature combinations are generated from all columns
-        """
-        df = pd.DataFrame({"A": ["a", "b"], "B": ["x", "y"], "C": ["1", "2"]})
-
-        generator = CrossFeatureGenerator(degree=2)
-        generator.fit(df)
-
-        if set(generator.features_names) != {"A", "B", "C"}:
-            raise AssertionError()
-        if len(generator.feature_combinations_) != 3:
-            raise AssertionError()
-
-    def test_crossfeaturegenerator_fit_insufficient_columns_raises_error(self):
-        """Tests fit method with insufficient columns raises ValueError.
-
-        Asserts:
-            - ValueError is raised when DataFrame has fewer columns than degree
-        """
-        df = pd.DataFrame({"A": ["a", "b"]})
-
-        generator = CrossFeatureGenerator(degree=2)
-
-        with pytest.raises(ValueError, match="Number of features .* must be >= degree"):
-            generator.fit(df)
-
-    def test_crossfeaturegenerator_transform_categorical_features(self):
-        """Tests transform method with categorical features.
-
-        Asserts:
-            - New encoded columns are added to DataFrame
-            - Original columns are preserved
-            - Encoded values are integers
-        """
-        df = pd.DataFrame({"A": ["a", "b", "a"], "B": ["x", "y", "x"]})
-
-        generator = CrossFeatureGenerator(features_names=["A", "B"], degree=2)
-        generator.fit(df)
-        result = generator.transform(df)
-
-        if "A-B" not in result.columns:
-            raise AssertionError()
-        if "A" not in result.columns:
-            raise AssertionError()
-        if "B" not in result.columns:
-            raise AssertionError()
-        if result["A-B"].dtype != int:
-            raise AssertionError()
-        if len(result) != len(df):
-            raise AssertionError()
-
-    def test_crossfeaturegenerator_transform_numerical_features(self):
-        """Tests transform method with numerical features.
-
-        Asserts:
-            - New product columns are added to DataFrame
-            - Values are products of original columns
-            - Original columns are preserved
-        """
-        df = pd.DataFrame({"D": [2, 3, 4], "E": [5, 6, 7]})
-
-        generator = CrossFeatureGenerator(features_names=["D", "E"], degree=2)
-        generator.fit(df)
-        result = generator.transform(df)
-
-        if "D-E" not in result.columns:
-            raise AssertionError()
-        if result["D-E"].tolist() != [10, 18, 28]:
-            raise AssertionError()
-
-    def test_crossfeaturegenerator_transform_unfitted_raises_error(self):
-        """Tests transform method raises error when not fitted.
-
-        Asserts:
-            - ValueError is raised when transform is called before fit
-        """
-        df = pd.DataFrame({"A": ["a", "b"], "B": ["x", "y"]})
-        generator = CrossFeatureGenerator()
-
-        with pytest.raises(
-            ValueError, match="CrossFeatureGenerator must be fitted before transform"
-        ):
-            generator.transform(df)
-
-    def test_crossfeaturegenerator_transform_unseen_values_handled(self):
-        """Tests transform method handles unseen categorical values.
-
-        Asserts:
-            - Unseen values are encoded as -1
-            - Transform completes without errors
-        """
-        train_df = pd.DataFrame({"A": ["a", "b"], "B": ["x", "y"]})
-
-        test_df = pd.DataFrame(
-            {"A": ["c", "a"], "B": ["z", "x"]}
-        )  # 'c' is unseen  # 'z' is unseen
-
-        generator = CrossFeatureGenerator(features_names=["A", "B"], degree=2)
-        generator.fit(train_df)
-        result = generator.transform(test_df)
-
-        if "A-B" not in result.columns:
-            raise AssertionError()
-        if -1 not in result["A-B"].values:
-            raise AssertionError()
-
-    def test_crossfeaturegenerator_fit_transform_equivalent_to_fit_then_transform(self):
-        """Tests fit_transform produces same result as fit then transform.
-
-        Asserts:
-            - fit_transform result equals separate fit and transform
-            - Both methods produce identical DataFrames
-        """
-        df = pd.DataFrame({"A": ["a", "b", "a"], "B": ["x", "y", "x"]})
-
-        generator1 = CrossFeatureGenerator(features_names=["A", "B"], degree=2)
-        result1 = generator1.fit_transform(df)
-
-        generator2 = CrossFeatureGenerator(features_names=["A", "B"], degree=2)
-        generator2.fit(df)
-        result2 = generator2.transform(df)
-
-        pd.testing.assert_frame_equal(result1, result2)
-
-    def test_crossfeaturegenerator_get_feature_names_empty_before_fit(self):
-        """Tests get_feature_names returns empty list before fitting.
-
-        Asserts:
-            - Empty list is returned when no features are generated
-        """
-        generator = CrossFeatureGenerator()
-
-        if generator.get_feature_names() != []:
-            raise AssertionError()
-
-    def test_crossfeaturegenerator_get_feature_names_after_fit(self):
-        """Tests get_feature_names returns correct names after fitting.
-
-        Asserts:
-            - Correct feature names are returned after fitting
-            - Names follow the expected format
-        """
-        df = pd.DataFrame({"A": ["a", "b"], "B": ["x", "y"], "C": ["1", "2"]})
-
-        generator = CrossFeatureGenerator(features_names=["A", "B", "C"], degree=2)
-        generator.fit(df)
-        feature_names = generator.get_feature_names()
-
-        expected_names = ["A-B", "A-C", "B-C"]
-        if sorted(feature_names) != sorted(expected_names):
-            raise AssertionError()
-
-    def test_crossfeaturegenerator_custom_separator(self):
-        """Tests CrossFeatureGenerator with custom separator.
-
-        Asserts:
-            - Custom separator is used in feature value combination
-            - Feature names still use hyphen separator
-        """
-        df = pd.DataFrame({"A": ["a", "b"], "B": ["x", "y"]})
-
-        generator = CrossFeatureGenerator(features_names=["A", "B"], separator="|")
-        generator.fit(df)
-
-        # Check that the combined values use the custom separator
-        combined_values = generator.combined_value_maps_["A-B"]
-        if not all("|" in str(val) for val in combined_values.unique()):
-            raise AssertionError()
-
-    def test_crossfeaturegenerator_degree_three_combinations(self):
-        """Tests CrossFeatureGenerator with degree 3 combinations.
-
-        Asserts:
-            - Correct number of 3-way combinations are generated
-            - All combinations include exactly 3 features
-        """
-        df = pd.DataFrame(
-            {"A": ["a", "b"], "B": ["x", "y"], "C": ["1", "2"], "D": ["p", "q"]}
-        )
-
-        generator = CrossFeatureGenerator(features_names=["A", "B", "C", "D"], degree=3)
-        generator.fit(df)
-
-        # 4 choose 3 = 4 combinations
-        if len(generator.feature_combinations_) != 4:
-            raise AssertionError()
-        if not all(len(combo) == 3 for combo in generator.feature_combinations_):
-            raise AssertionError()
+    Asserts:
+        - Correct number of 3-way combinations are generated (4 choose 3 = 4)
+        - Every combination has exactly 3 features
+        - Combo column names join 3 feature names with the separator
+    """
+    df = pd.DataFrame(
+        {"A": ["a", "b"], "B": ["x", "y"], "C": ["1", "2"], "D": ["p", "q"]}
+    )
+    generator = CrossFeatureGenerator(features_names=["A", "B", "C", "D"], degree=3)
+    result = generator.fit_transform(df)
+    if len(generator.feature_combinations_) != 4:
+        raise AssertionError()
+    if not all(len(combo) == 3 for combo in generator.feature_combinations_):
+        raise AssertionError()
+    if "A_B_C" not in result.columns:
+        raise AssertionError()
 
 
 if __name__ == "__main__":

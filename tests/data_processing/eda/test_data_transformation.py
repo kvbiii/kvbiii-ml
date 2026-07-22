@@ -122,8 +122,8 @@ def test_optimize_memory_converts_object_to_categorical(sample_mixed_dataframe):
     """
     transformer = DataTransformer()
 
-    # Original is object dtype
-    if sample_mixed_dataframe["object_col"].dtype != "object":
+    # Original is a string-like dtype (object, or pandas' inferred "string" dtype)
+    if not pd.api.types.is_string_dtype(sample_mixed_dataframe["object_col"].dtype):
         raise AssertionError()
 
     # Optimize with object_col specified as categorical
@@ -177,6 +177,69 @@ def test_optimize_memory_verbose_output(sample_mixed_dataframe, capsys):
 
     # Date feature generation and other advanced transformations not implemented; skip related assertions
     pass
+
+
+def test_encode_target_feature_raises_error_for_missing_target():
+    """Tests encode_target_feature raises ValueError when the target column is absent.
+
+    Asserts:
+        - ValueError is raised mentioning the missing target feature name
+    """
+    df = pd.DataFrame({"feature": [1, 2, 3]})
+
+    with pytest.raises(ValueError, match="Target feature 'missing_target' not found"):
+        DataTransformer.encode_target_feature(df, "missing_target", verbose=False)
+
+
+def test_encode_target_feature_returns_correct_id2label_mapping():
+    """Tests encode_target_feature returns an id2label mapping matching the categorical
+    codes actually assigned to the target column.
+
+    Asserts:
+        - id2label maps each assigned integer code to its original string label
+        - The mapping keys cover exactly the codes present in the encoded column
+        - Categories are sorted alphabetically, matching pandas' categorical ordering
+    """
+    df = pd.DataFrame({"target": ["yes", "no", "yes", "no", "maybe"]})
+
+    encoded_df, id2label = DataTransformer.encode_target_feature(
+        df, "target", verbose=False
+    )
+
+    if id2label != {0: "maybe", 1: "no", 2: "yes"}:
+        raise AssertionError()
+    if set(encoded_df["target"].unique()) != set(id2label.keys()):
+        raise AssertionError()
+
+
+def test_encode_target_feature_replaces_target_with_integer_codes():
+    """Tests encode_target_feature replaces the target column with integer codes that
+    correctly reconstruct the original labels via the returned id2label mapping.
+
+    Asserts:
+        - The target column dtype is integer after encoding
+        - Mapping the encoded codes back through id2label reproduces the original labels
+        - Non-target columns remain unchanged
+    """
+    df = pd.DataFrame(
+        {
+            "feature": [10, 20, 30, 40, 50],
+            "target": ["yes", "no", "yes", "no", "maybe"],
+        }
+    )
+
+    encoded_df, id2label = DataTransformer.encode_target_feature(
+        df, "target", verbose=False
+    )
+
+    if not pd.api.types.is_integer_dtype(encoded_df["target"]):
+        raise AssertionError()
+
+    reconstructed_labels = encoded_df["target"].map(id2label).tolist()
+    if reconstructed_labels != df["target"].tolist():
+        raise AssertionError()
+
+    pd.testing.assert_series_equal(encoded_df["feature"], df["feature"])
 
 
 if __name__ == "__main__":

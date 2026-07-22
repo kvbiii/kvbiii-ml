@@ -1,9 +1,4 @@
-"""Tests for kvbiii_ml.modeling.optimization.ensemble_weights_tuner.EnsembleWeightTunerCV (new version).
-
-Focus: weight normalization, negative weights path, blending shapes, and integration with CrossValidationTrainer.
-"""
-
-from __future__ import annotations
+from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
@@ -11,8 +6,33 @@ import pytest
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.model_selection import KFold
 
+from kvbiii_ml.evaluation.metrics import (
+    get_metric_direction,
+    get_metric_function,
+    get_metric_type,
+)
 from kvbiii_ml.modeling.optimization.ensemble_weights_tuner import EnsembleWeightTunerCV
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
+
+
+def _build_dummy_cv(metric_name: str, problem_type: str) -> Mock:
+    """Build a minimal cross-validator stub exposing the attributes EnsembleWeightTunerCV reads.
+
+    Args:
+        metric_name (str): Metric name registered in METRICS.
+        problem_type (str): Problem type, either "classification" or "regression".
+
+    Returns:
+        Mock: Stub with metric_name, problem_type, metric_fn, metric_type, and
+            metric_direction attributes populated from METRICS.
+    """
+    dummy = Mock()
+    dummy.metric_name = metric_name
+    dummy.problem_type = problem_type
+    dummy.metric_fn = get_metric_function(metric_name)
+    dummy.metric_type = get_metric_type(metric_name)
+    dummy.metric_direction = get_metric_direction(metric_name)
+    return dummy
 
 
 @pytest.fixture
@@ -20,7 +40,6 @@ def small_classification_data() -> tuple[pd.DataFrame, pd.Series]:
     """Provides a small non-linearly-separable binary classification dataset."""
     rng = np.random.default_rng(17)
     X = pd.DataFrame(rng.normal(size=(60, 4)), columns=[f"f{i}" for i in range(4)])
-    # Non-linearly separable target to avoid trivial perfect scores
     y = pd.Series(
         ((X["f0"] + X["f1"] * 0.5 + rng.normal(scale=0.3, size=60)) > 0).astype(int),
         name="target",
@@ -40,11 +59,19 @@ def small_regression_data() -> tuple[pd.DataFrame, pd.Series]:
 
 
 def _build_cv(metric: str, problem: str) -> CrossValidationTrainer:
+    """Build a CrossValidationTrainer with a fixed 3-fold splitter.
+
+    Args:
+        metric (str): Metric name registered in METRICS.
+        problem (str): Problem type, either "classification" or "regression".
+
+    Returns:
+        CrossValidationTrainer: Configured trainer.
+    """
     return CrossValidationTrainer(
         metric_name=metric,
         problem_type=problem,
         cv=KFold(n_splits=3, shuffle=True, random_state=17),
-        processors=None,
         verbose=False,
     )
 
@@ -95,7 +122,6 @@ def test_tuner_classification_negative_weights_path(small_classification_data):
     l1 = np.sum(np.abs(tuner.best_weights))
     if not np.isclose(l1, 1.0, atol=1e-6):
         raise AssertionError()
-    # Some negative weight likely (not guaranteed) – so only check range
     if not np.all(np.abs(tuner.best_weights) <= 1.0 + 1e-6):
         raise AssertionError()
 
@@ -106,7 +132,7 @@ def test_tuner_regression_weights(small_regression_data):
     estimators = [
         LinearRegression(),
         LinearRegression(),
-    ]  # identical models OK for smoke
+    ]
     cv_trainer = _build_cv("MSE", "regression")
     tuner = EnsembleWeightTunerCV(
         estimators=estimators, cross_validator=cv_trainer, n_trials=3, seed=5
@@ -119,15 +145,15 @@ def test_tuner_regression_weights(small_regression_data):
 
 
 def test_blend_predictions_shapes_classification_logits():
-    """Directly tests _blend_predictions for binary prob case with negative weights (logit averaging)."""
+    """Directly tests _blend_predictions for binary prob case with negative weights (logit averaging).
 
-    class DummyCV:  # minimal stub
-        metric_name = "Roc AUC"
-        problem_type = "classification"
-
-    dummy = DummyCV()
-    t = EnsembleWeightTunerCV([], dummy, n_trials=1, allow_negative_weights=True)
-    preds_list = [np.full(10, 0.7), np.full(10, 0.2)]
+    Asserts:
+        - Blended output preserves the (n_samples,) shape
+        - Blended values remain valid probabilities in [0, 1]
+    """
+    dummy_cv = _build_dummy_cv("Roc AUC", "classification")
+    t = EnsembleWeightTunerCV([], dummy_cv, n_trials=1, allow_negative_weights=True)
+    preds_list = [pd.Series(np.full(10, 0.7)), pd.Series(np.full(10, 0.2))]
     weights = np.array([0.4, -0.6])
     blended = t._blend_predictions(preds_list, weights)
     if blended.shape != (10,):
@@ -137,18 +163,19 @@ def test_blend_predictions_shapes_classification_logits():
 
 
 def test_blend_predictions_multiclass_probability_normalization():
-    """Checks probability rows sum to 1 after blending multiclass probs."""
+    """Checks probability rows sum to 1 after blending multiclass probs.
 
-    class DummyCV:
-        metric_name = "Accuracy"  # preds type but we want probs path -> simulate classification probs metric
-        problem_type = "classification"
-
-    t = EnsembleWeightTunerCV([], DummyCV(), n_trials=1)
-    # Force metric_type to 'probs' to exercise path
+    Asserts:
+        - Blended output preserves the (n_samples, n_classes) shape
+        - Every row of blended probabilities sums to 1
+    """
+    dummy_cv = _build_dummy_cv("Accuracy", "classification")
+    t = EnsembleWeightTunerCV([], dummy_cv, n_trials=1)
     t.metric_type = "probs"
+    columns = ["class_0", "class_1", "class_2"]
     preds_list = [
-        np.tile([[0.2, 0.3, 0.5]], (6, 1)),
-        np.tile([[0.1, 0.6, 0.3]], (6, 1)),
+        pd.DataFrame(np.tile([[0.2, 0.3, 0.5]], (6, 1)), columns=columns),
+        pd.DataFrame(np.tile([[0.1, 0.6, 0.3]], (6, 1)), columns=columns),
     ]
     weights = np.array([0.3, 0.7])
     blended = t._blend_predictions(preds_list, weights)

@@ -1,317 +1,243 @@
 """Tests for kvbiii_ml.evaluation.generate_reports module."""
 
-from unittest.mock import patch
-
 import numpy as np
 import pytest
+from sklearn.metrics import (
+    accuracy_score,
+    explained_variance_score,
+    mean_absolute_error,
+    mean_squared_error,
+    r2_score,
+    root_mean_squared_error,
+)
 
 from kvbiii_ml.evaluation.generate_reports import (
-    generate_classification_report,
-    generate_regression_report,
-    plot_confusion_matrix,
-    plot_regression_error,
-    plot_roc_curve,
+    classification_results,
+    regression_results,
 )
 
 
-@pytest.fixture
-def classification_data():
-    """Provides data for classification reporting.
-
-    Returns:
-        tuple: y_true, y_pred, and probabilities for classification reports
-    """
-    np.random.seed(42)
-    y_true = np.random.choice([0, 1], size=100)
-    y_pred = np.random.choice([0, 1], size=100)
-
-    # Make predictions somewhat correlated with truth
-    for i in range(100):
-        if np.random.random() < 0.7:  # 70% accuracy
-            y_pred[i] = y_true[i]
-
-    # Generate probabilities
-    probas = np.zeros((100, 2))
-    for i in range(100):
-        if y_pred[i] == 1:
-            probas[i, 1] = 0.6 + np.random.random() * 0.4
-            probas[i, 0] = 1 - probas[i, 1]
-        else:
-            probas[i, 0] = 0.6 + np.random.random() * 0.4
-            probas[i, 1] = 1 - probas[i, 0]
-
-    return y_true, y_pred, probas
-
-
-@pytest.fixture
-def regression_data():
-    """Provides data for regression reporting.
-
-    Returns:
-        tuple: y_true and y_pred for regression reports
-    """
-    np.random.seed(42)
-    y_true = np.random.normal(50, 10, 100)
-
-    # Create somewhat correlated predictions
-    y_pred = y_true + np.random.normal(0, 5, 100)
-
-    return y_true, y_pred
-
-
-@patch("kvbiii_ml.evaluation.generate_reports.classification_report")
-@patch("kvbiii_ml.evaluation.generate_reports.confusion_matrix")
-@patch("kvbiii_ml.evaluation.generate_reports.roc_auc_score")
-def test_generate_classification_report_creates_comprehensive_report(
-    mock_roc_auc, mock_confusion_matrix, mock_classification_report, classification_data
-):
-    """Tests generate_classification_report creates a comprehensive classification report.
-
-    Args:
-        mock_roc_auc: Mocked ROC AUC score function
-        mock_confusion_matrix: Mocked confusion matrix function
-        mock_classification_report: Mocked classification report function
-        classification_data: Classification data fixture
+def test_regression_results_computes_metrics_matching_sklearn_equivalents():
+    """Tests regression_results computes MAE/MSE/RMSE/R2/Explained Var correctly.
 
     Asserts:
-        - Classification report includes all necessary metrics
-        - Confusion matrix is calculated
-        - ROC AUC is included when probabilities are provided
-        - Returns dictionary with expected keys
+        - Each metric column matches the equivalent sklearn function computed
+          directly on the same train/test arrays.
     """
-    y_true, y_pred, y_probas = classification_data
+    y_train_true = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+    y_train_pred = np.array([1.1, 2.2, 2.8, 3.9, 5.2])
+    y_test_true = np.array([10.0, 20.0, 30.0])
+    y_test_pred = np.array([12.0, 18.0, 33.0])
 
-    # Configure mocks
-    mock_classification_report.return_value = "Classification Report"
-    mock_confusion_matrix.return_value = np.array([[30, 20], [10, 40]])
-    mock_roc_auc.return_value = 0.85
+    styler = regression_results(y_train_true, y_train_pred, y_test_true, y_test_pred)
+    df = styler.data
 
-    # Generate report with all options
-    report = generate_classification_report(
-        y_true, y_pred, y_probas=y_probas[:, 1], class_names=["Negative", "Positive"]
-    )
-
-    # Check all metrics were called
-    mock_classification_report.assert_called_once()
-    mock_confusion_matrix.assert_called_once()
-    mock_roc_auc.assert_called_once()
-
-    # Check report structure
-    if "classification_report" not in report:
+    if df.loc["Train", "MAE"] != pytest.approx(
+        mean_absolute_error(y_train_true, y_train_pred)
+    ):
         raise AssertionError()
-    if "confusion_matrix" not in report:
+    if df.loc["Test", "MAE"] != pytest.approx(
+        mean_absolute_error(y_test_true, y_test_pred)
+    ):
         raise AssertionError()
-    if "roc_auc" not in report:
+    if df.loc["Train", "MSE"] != pytest.approx(
+        mean_squared_error(y_train_true, y_train_pred)
+    ):
         raise AssertionError()
-    if "accuracy" not in report:
+    if df.loc["Test", "RMSE"] != pytest.approx(
+        root_mean_squared_error(y_test_true, y_test_pred)
+    ):
         raise AssertionError()
-    if "precision" not in report:
+    if df.loc["Train", "R²"] != pytest.approx(r2_score(y_train_true, y_train_pred)):
         raise AssertionError()
-    if "recall" not in report:
-        raise AssertionError()
-    if "f1" not in report:
-        raise AssertionError()
-
-    # Test without probabilities
-    mock_roc_auc.reset_mock()
-    report_no_proba = generate_classification_report(
-        y_true, y_pred, class_names=["Negative", "Positive"]
-    )
-
-    # ROC AUC shouldn't be called or included
-    mock_roc_auc.assert_not_called()
-    if "roc_auc" in report_no_proba:
-        raise AssertionError()
-
-
-@patch("kvbiii_ml.evaluation.generate_reports.mean_squared_error")
-@patch("kvbiii_ml.evaluation.generate_reports.mean_absolute_error")
-@patch("kvbiii_ml.evaluation.generate_reports.r2_score")
-@patch("kvbiii_ml.evaluation.generate_reports.explained_variance_score")
-def test_generate_regression_report_includes_common_metrics(
-    mock_explained_variance, mock_r2, mock_mae, mock_mse, regression_data
-):
-    """Tests generate_regression_report includes common regression metrics.
-
-    Args:
-        mock_explained_variance: Mocked explained variance score function
-        mock_r2: Mocked R² score function
-        mock_mae: Mocked MAE function
-        mock_mse: Mocked MSE function
-        regression_data: Regression data fixture
-
-    Asserts:
-        - Report includes all standard regression metrics
-        - RMSE is calculated from MSE
-        - Report includes both raw and percentage errors
-        - Returns dictionary with expected keys
-    """
-    y_true, y_pred = regression_data
-
-    # Configure mocks
-    mock_mse.return_value = 25
-    mock_mae.return_value = 4
-    mock_r2.return_value = 0.85
-    mock_explained_variance.return_value = 0.86
-
-    # Generate report
-    report = generate_regression_report(y_true, y_pred)
-
-    # Check all metrics were called
-    mock_mse.assert_called_once()
-    mock_mae.assert_called_once()
-    mock_r2.assert_called_once()
-    mock_explained_variance.assert_called_once()
-
-    # Check report structure
-    if "mse" not in report:
-        raise AssertionError()
-    if "rmse" not in report:
-        raise AssertionError()
-    if "mae" not in report:
-        raise AssertionError()
-    if "r2" not in report:
-        raise AssertionError()
-    if "explained_variance" not in report:
-        raise AssertionError()
-    if "mape" not in report:
-        raise AssertionError()
-
-    # Check RMSE calculation
-    if report["rmse"] != 5.0:
-        raise AssertionError()
-
-
-@patch("kvbiii_ml.evaluation.generate_reports.plt")
-def test_plot_confusion_matrix_visualization(mock_plt, classification_data):
-    """Tests plot_confusion_matrix creates visualization.
-
-    Args:
-        mock_plt: Mocked matplotlib pyplot
-        classification_data: Classification data fixture
-
-    Asserts:
-        - Confusion matrix is visualized correctly
-        - Display options are configurable
-        - Class names are used when provided
-    """
-    y_true, y_pred, _ = classification_data
-
-    # Create plot
-    plot_confusion_matrix(
-        y_true,
-        y_pred,
-        class_names=["Negative", "Positive"],
-        normalize=True,
-        cmap="Blues",
-        figsize=(8, 6),
-    )
-
-    # Check figure was created
-    mock_plt.figure.assert_called_once()
-
-    # Check heatmap or similar function was called
-    # This will differ based on implementation (imshow, matshow, etc.)
-    if not (
-        mock_plt.imshow.called or mock_plt.matshow.called or mock_plt.pcolormesh.called
+    if df.loc["Test", "Explained Var"] != pytest.approx(
+        explained_variance_score(y_test_true, y_test_pred)
     ):
         raise AssertionError()
 
-    # Check labels were set
-    if not mock_plt.xlabel.called:
+
+def test_regression_results_mape_is_nan_for_all_zero_target():
+    """Tests the internal _safe_mape helper returns NaN when a target is all zeros.
+
+    Asserts:
+        - MAPE is NaN for both train and test rows when the true values are
+          entirely zero, avoiding a division-by-zero crash.
+    """
+    y_zero = np.array([0.0, 0.0, 0.0])
+    y_pred = np.array([1.0, 2.0, 3.0])
+
+    styler = regression_results(y_zero, y_pred, y_zero, y_pred)
+    df = styler.data
+
+    if not np.isnan(df.loc["Train", "MAPE"]):
         raise AssertionError()
-    if not mock_plt.ylabel.called:
-        raise AssertionError()
-    if not mock_plt.title.called:
+    if not np.isnan(df.loc["Test", "MAPE"]):
         raise AssertionError()
 
-    # Check show was called
-    if not mock_plt.show.called:
-        raise AssertionError()
+
+@pytest.fixture
+def binary_classification_report_data():
+    """Provides binary classification data with label-space predictions and probabilities.
+
+    Returns:
+        dict: Train/test true labels, predictions, probabilities, and id2label mapping,
+            all consistent with the same label space required by classification_results.
+    """
+    return {
+        "y_train_true": np.array(["neg", "neg", "pos", "pos", "neg", "pos"]),
+        "y_train_pred": np.array(["neg", "pos", "pos", "pos", "neg", "neg"]),
+        "y_train_proba": np.array(
+            [[0.8, 0.2], [0.4, 0.6], [0.3, 0.7], [0.2, 0.8], [0.6, 0.4], [0.55, 0.45]]
+        ),
+        "y_test_true": np.array(["neg", "pos", "neg", "pos"]),
+        "y_test_pred": np.array(["neg", "pos", "pos", "neg"]),
+        "y_test_proba": np.array([[0.7, 0.3], [0.3, 0.7], [0.4, 0.6], [0.6, 0.4]]),
+        "id2label": {0: "neg", 1: "pos"},
+    }
 
 
-@patch("kvbiii_ml.evaluation.generate_reports.plt")
-@patch("kvbiii_ml.evaluation.generate_reports.roc_curve")
-@patch("kvbiii_ml.evaluation.generate_reports.auc")
-def test_plot_roc_curve_visualization(
-    mock_auc, mock_roc_curve, mock_plt, classification_data
+def test_classification_results_returns_two_stylers_without_cutoffs(
+    binary_classification_report_data,
 ):
-    """Tests plot_roc_curve creates ROC curve visualization.
+    """Tests classification_results returns exactly 2 Stylers when cutoffs is None.
 
     Args:
-        mock_auc: Mocked AUC function
-        mock_roc_curve: Mocked ROC curve function
-        mock_plt: Mocked matplotlib pyplot
-        classification_data: Classification data fixture
+        binary_classification_report_data (dict): Consistent binary classification fixture data.
 
     Asserts:
-        - ROC curve is calculated and plotted
-        - AUC is displayed in the plot
-        - Multiple curves can be plotted with labels
+        - The return value has exactly 2 elements.
+        - Both elements expose a .data DataFrame.
     """
-    y_true, _, y_probas = classification_data
-
-    # Configure mocks
-    mock_roc_curve.return_value = (
-        np.array([0, 0.2, 0.5, 0.8, 1]),  # FPR
-        np.array([0, 0.6, 0.8, 0.9, 1]),  # TPR
-        np.array([1, 0.8, 0.5, 0.2, 0]),  # Thresholds
+    data = binary_classification_report_data
+    result = classification_results(
+        data["y_train_true"],
+        data["y_train_pred"],
+        data["y_test_true"],
+        data["y_test_pred"],
     )
-    mock_auc.return_value = 0.85
 
-    # Create plot
-    plot_roc_curve(y_true, y_probas[:, 1], label="Model 1")
-
-    # Check ROC curve was calculated
-    mock_roc_curve.assert_called_once()
-
-    # Check AUC was calculated
-    mock_auc.assert_called_once()
-
-    # Check plot was created
-    mock_plt.figure.assert_called_once()
-    mock_plt.plot.assert_called()  # Plot called at least once
-    mock_plt.title.assert_called_once()
-    mock_plt.xlabel.assert_called_once()
-    mock_plt.ylabel.assert_called_once()
-    mock_plt.legend.assert_called_once()
-    mock_plt.show.assert_called_once()
+    if len(result) != 2:
+        raise AssertionError()
+    if not all(hasattr(styler, "data") for styler in result):
+        raise AssertionError()
 
 
-@patch("kvbiii_ml.evaluation.generate_reports.plt")
-def test_plot_regression_error_visualization(mock_plt, regression_data):
-    """Tests plot_regression_error creates error visualization.
+def test_classification_results_returns_four_stylers_with_cutoffs(
+    binary_classification_report_data,
+):
+    """Tests classification_results returns exactly 4 Stylers when cutoffs is given.
 
     Args:
-        mock_plt: Mocked matplotlib pyplot
-        regression_data: Regression data fixture
+        binary_classification_report_data (dict): Consistent binary classification fixture data.
 
     Asserts:
-        - Actual vs. predicted values are plotted
-        - Error distribution is plotted
-        - Residual plot is created
+        - The return value has exactly 4 elements when cutoffs, probabilities, and
+          id2label are all supplied.
     """
-    y_true, y_pred = regression_data
+    data = binary_classification_report_data
+    result = classification_results(
+        data["y_train_true"],
+        data["y_train_pred"],
+        data["y_test_true"],
+        data["y_test_pred"],
+        y_train_proba=data["y_train_proba"],
+        y_test_proba=data["y_test_proba"],
+        id2label=data["id2label"],
+        cutoffs=0.6,
+    )
 
-    # Create plot
-    plot_regression_error(y_true, y_pred, figsize=(15, 10))
-
-    # Check plots were created
-    if not mock_plt.figure.call_count >= 1:
-        raise AssertionError()
-    if not mock_plt.subplot.call_count >= 3:
-        raise AssertionError()
-
-    # Check scatter plot for actual vs predicted
-    if not mock_plt.scatter.call_count >= 1:
-        raise AssertionError()
-
-    # Check histogram for error distribution
-    if not mock_plt.hist.call_count >= 1:
+    if len(result) != 4:
         raise AssertionError()
 
-    # Check plots were shown
-    if not mock_plt.show.called:
+
+def test_classification_results_raises_valueerror_when_cutoffs_missing_dependencies(
+    binary_classification_report_data,
+):
+    """Tests classification_results raises ValueError when cutoffs lacks required data.
+
+    Args:
+        binary_classification_report_data (dict): Consistent binary classification fixture data.
+
+    Asserts:
+        - ValueError is raised when cutoffs is provided without probabilities and id2label.
+    """
+    data = binary_classification_report_data
+
+    with pytest.raises(ValueError, match="Probabilities and class labels are required"):
+        classification_results(
+            data["y_train_true"],
+            data["y_train_pred"],
+            data["y_test_true"],
+            data["y_test_pred"],
+            cutoffs=0.5,
+        )
+
+
+def test_classification_results_overall_accuracy_matches_sklearn(
+    binary_classification_report_data,
+):
+    """Tests the overall metrics table's Accuracy column matches sklearn's accuracy_score.
+
+    Args:
+        binary_classification_report_data (dict): Consistent binary classification fixture data.
+
+    Asserts:
+        - Train and Test Accuracy values match accuracy_score computed directly.
+    """
+    data = binary_classification_report_data
+    overall_default, _per_class_default = classification_results(
+        data["y_train_true"],
+        data["y_train_pred"],
+        data["y_test_true"],
+        data["y_test_pred"],
+    )
+    df = overall_default.data
+
+    if df.loc["Train", "Accuracy"] != pytest.approx(
+        accuracy_score(data["y_train_true"], data["y_train_pred"])
+    ):
+        raise AssertionError()
+    if df.loc["Test", "Accuracy"] != pytest.approx(
+        accuracy_score(data["y_test_true"], data["y_test_pred"])
+    ):
+        raise AssertionError()
+
+
+def test_classification_results_degrades_roc_auc_and_log_loss_to_nan_for_single_class_split():
+    """Tests ROC-AUC and Log Loss degrade to NaN for an ill-posed single-class test split.
+
+    Asserts:
+        - Test-row ROC-AUC and Log Loss are NaN when y_test_true contains a single class.
+        - Train-row ROC-AUC and Log Loss remain finite for a well-posed split.
+    """
+    y_train_true = np.array(["neg", "neg", "pos", "pos", "neg", "pos"])
+    y_train_pred = np.array(["neg", "pos", "pos", "pos", "neg", "neg"])
+    y_train_proba = np.array(
+        [[0.8, 0.2], [0.4, 0.6], [0.3, 0.7], [0.2, 0.8], [0.6, 0.4], [0.55, 0.45]]
+    )
+    y_test_true = np.array(["neg", "neg", "neg"])
+    y_test_pred = np.array(["neg", "pos", "neg"])
+    y_test_proba = np.array([[0.7, 0.3], [0.3, 0.7], [0.6, 0.4]])
+    id2label = {0: "neg", 1: "pos"}
+
+    overall_default, _per_class_default = classification_results(
+        y_train_true,
+        y_train_pred,
+        y_test_true,
+        y_test_pred,
+        y_train_proba=y_train_proba,
+        y_test_proba=y_test_proba,
+        id2label=id2label,
+    )
+    df = overall_default.data
+
+    if not np.isnan(df.loc["Test", "ROC-AUC"]):
+        raise AssertionError()
+    if not np.isnan(df.loc["Test", "Log Loss"]):
+        raise AssertionError()
+    if not np.isfinite(df.loc["Train", "ROC-AUC"]):
+        raise AssertionError()
+    if not np.isfinite(df.loc["Train", "Log Loss"]):
         raise AssertionError()
 
 

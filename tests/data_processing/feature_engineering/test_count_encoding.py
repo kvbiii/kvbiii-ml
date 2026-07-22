@@ -123,7 +123,7 @@ def test_countencoder_transform_replaces_categories_with_counts(categorical_data
     transformed = encoder.transform(categorical_data)
 
     # Original data should be unchanged
-    if categorical_data["high_cardinality"].dtype != object:
+    if not pd.api.types.is_string_dtype(categorical_data["high_cardinality"].dtype):
         raise AssertionError()
 
     # Transformed data should have numeric count values

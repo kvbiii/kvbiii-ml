@@ -3,7 +3,6 @@
 import numpy as np
 import pandas as pd
 import pytest
-from scipy import stats
 
 from kvbiii_ml.data_processing.eda.data_cleaning import DataCleaner
 
@@ -88,289 +87,79 @@ def test_datacleaner_init_accepts_custom_parameters():
         pytest.skip("DataCleaner class not implemented")
 
 
-def test_remove_duplicate_rows_removes_exact_duplicates(dirty_data):
-    """Tests duplicate row removal using pandas drop_duplicates method.
-
-    Args:
-        dirty_data (pd.DataFrame): Data with duplicate rows
+def test_datacleaner_remove_duplicate_features_removes_exact_duplicates():
+    """Tests DataCleaner._remove_duplicate_features removes columns with identical values.
 
     Asserts:
-        - Duplicate rows are identified and removed correctly
-        - Original row order is preserved for non-duplicates
-        - First occurrence of duplicates is retained
+        - The duplicate column is dropped from the returned DataFrame
+        - The original column is retained
+        - The duplicate column name is reported in the removed features list
     """
-    # Create test data with known duplicates
     test_data = pd.DataFrame(
         {
-            "A": [1, 2, 1, 3, 2],  # Duplicates at indices 0,2 and 1,4
-            "B": ["a", "b", "a", "c", "b"],
+            "original": [1, 2, 1, 3, 2],
+            "duplicate": [1, 2, 1, 3, 2],
+            "distinct": ["a", "b", "a", "c", "b"],
         }
     )
 
-    original_length = len(test_data)
-    cleaned_data = test_data.drop_duplicates()
+    cleaned_data, removed_features = DataCleaner._remove_duplicate_features(test_data)
 
-    if not len(cleaned_data) < original_length:
+    if "duplicate" in cleaned_data.columns:
         raise AssertionError()
-    if not isinstance(cleaned_data, pd.DataFrame):
+    if "original" not in cleaned_data.columns:
         raise AssertionError()
-    # Check that all remaining rows are unique
-    if len(cleaned_data) != len(cleaned_data.drop_duplicates()):
+    if "distinct" not in cleaned_data.columns:
         raise AssertionError()
-    if len(cleaned_data) != 3:
+    if removed_features != ["duplicate"]:
         raise AssertionError()
 
 
-def test_remove_duplicate_rows_handles_no_duplicates():
-    """Tests duplicate row handling with pandas drop_duplicates when no duplicates exist.
+def test_datacleaner_remove_duplicate_features_handles_no_duplicates():
+    """Tests DataCleaner._remove_duplicate_features when no columns are duplicated.
 
     Asserts:
-        - Function returns data unchanged when no duplicates present
-        - No errors occur with unique data
-        - DataFrame structure is preserved
+        - The returned DataFrame is unchanged when no duplicate columns exist
+        - No features are reported as removed
     """
     unique_data = pd.DataFrame({"A": [1, 2, 3, 4], "B": ["a", "b", "c", "d"]})
 
-    cleaned_data = unique_data.drop_duplicates()
+    cleaned_data, removed_features = DataCleaner._remove_duplicate_features(unique_data)
+
     pd.testing.assert_frame_equal(cleaned_data, unique_data)
+    if removed_features != []:
+        raise AssertionError()
 
 
-def test_handle_missing_values_drops_missing_rows():
-    """Tests missing value handling by dropping rows with pandas dropna.
+def test_datacleaner_categorize_categorical_features_by_missing_boundary_thresholds():
+    """Tests DataCleaner.categorize_categorical_features_by_missing at exact threshold
+    boundaries (0.0 and 0.1 missing ratio).
 
     Asserts:
-        - Rows with any missing values are removed when using dropna()
-        - Complete rows are preserved
-        - DataFrame shape is reduced appropriately
+        - A feature with exactly 0.0 missing ratio is treated as non-missing, not
+          categorical_missing_features
+        - A feature with exactly 0.1 missing ratio falls into the "not many missing"
+          bucket, matching the inclusive `<= 0.1` boundary in the implementation
     """
-    data_with_missing = pd.DataFrame({"A": [1, 2, np.nan, 4], "B": [1, np.nan, 3, 4]})
-
-    cleaned_data = data_with_missing.dropna()
-
-    if len(cleaned_data) != 2:
-        raise AssertionError()
-    if cleaned_data.isnull().any().any():
-        raise AssertionError()
-
-
-def test_handle_missing_values_fills_missing_with_mean():
-    """Tests missing value handling by filling with mean using pandas fillna.
-
-    Asserts:
-        - Missing numeric values are filled with column means
-        - Non-numeric columns are handled appropriately
-        - No missing values remain after filling
-    """
-    data_with_missing = pd.DataFrame(
-        {
-            "numeric": [1.0, 2.0, np.nan, 4.0],  # mean = 2.333...
-            "categorical": ["A", "B", np.nan, "C"],
-        }
-    )
-
-    # Fill numeric column with mean
-    numeric_mean = data_with_missing["numeric"].mean()
-    cleaned_data = data_with_missing.copy()
-    cleaned_data["numeric"] = cleaned_data["numeric"].fillna(numeric_mean)
-
-    # No missing values should remain in numeric column
-    if cleaned_data["numeric"].isnull().any():
-        raise AssertionError()
-
-    # Check that mean was used for numeric column
-    expected_mean = np.mean([1.0, 2.0, 4.0])  # 2.333...
-    if not abs(cleaned_data.loc[2, "numeric"] - expected_mean) < 1e-10:
-        raise AssertionError()
-
-
-def test_handle_missing_values_fills_missing_with_median():
-    """Tests missing value handling by filling with median using pandas fillna.
-
-    Asserts:
-        - Missing numeric values are filled with column medians
-        - Median calculation handles even/odd number of values
-        - Result contains no missing values
-    """
-    data_with_missing = pd.DataFrame(
-        {"numeric": [1.0, 2.0, np.nan, 4.0, 5.0]}
-    )  # median = 3.0
-
-    # Fill with median
-    numeric_median = data_with_missing["numeric"].median()
-    cleaned_data = data_with_missing.copy()
-    cleaned_data["numeric"] = cleaned_data["numeric"].fillna(numeric_median)
-
-    if cleaned_data["numeric"].isnull().any():
-        raise AssertionError()
-    # Median of [1, 2, 4, 5] is 3.0
-    if cleaned_data.loc[2, "numeric"] != 3.0:
-        raise AssertionError()
-
-
-def test_remove_outliers_using_iqr_method(dirty_data):
-    """Tests outlier removal using IQR method with pandas and numpy.
-
-    Args:
-        dirty_data (pd.DataFrame): Data containing outliers
-
-    Asserts:
-        - Outliers are detected and removed using IQR method
-        - Normal data points are preserved
-        - Outlier detection is applied to numeric columns only
-    """
-    # Create test data with known outliers
     test_data = pd.DataFrame(
         {
-            "normal_feature": np.random.normal(0, 1, 100),
-            "outlier_feature": list(np.random.normal(0, 1, 98))
-            + [50, -50],  # Add clear outliers
+            "zero_missing": ["A", "B", "C", "A", "B", "C", "A", "B", "C", "A"],
+            "ten_percent_missing": ["A", "B", "C", "A", "B", "C", "A", "B", "C", None],
         }
     )
 
-    # Apply IQR method
-    q1 = test_data["outlier_feature"].quantile(0.25)
-    q3 = test_data["outlier_feature"].quantile(0.75)
-    iqr = q3 - q1
-    lower_bound = q1 - 1.5 * iqr
-    upper_bound = q3 + 1.5 * iqr
-
-    cleaned_data = test_data[
-        (test_data["outlier_feature"] >= lower_bound)
-        & (test_data["outlier_feature"] <= upper_bound)
-    ]
-
-    # Should have fewer rows after outlier removal
-    if not len(cleaned_data) <= len(test_data):
-        raise AssertionError()
-
-    # Extreme outliers should be removed
-    outlier_feature = cleaned_data["outlier_feature"]
-    if not outlier_feature.max() < 50:
-        raise AssertionError()
-    if not outlier_feature.min() > -50:
-        raise AssertionError()
-
-
-def test_remove_outliers_using_zscore_method():
-    """Tests outlier removal using z-score method with pandas and scipy.
-
-    Asserts:
-        - Outliers are detected using z-score threshold
-        - Data points with |z-score| > threshold are removed
-        - Method works with different threshold values
-    """
-    data_with_outliers = pd.DataFrame(
-        {"feature": [1, 2, 3, 100, 4, 5, -100]}  # 100 and -100 are outliers
+    categories = DataCleaner.categorize_categorical_features_by_missing(
+        test_data, ["zero_missing", "ten_percent_missing"]
     )
 
-    # Apply z-score method with a stricter threshold
-    z_scores = np.abs(stats.zscore(data_with_outliers["feature"]))
-    threshold = 1.0  # More strict threshold to actually filter outliers
-    cleaned_data = data_with_outliers[z_scores < threshold]
-
-    # Should remove some data points (outliers)
-    if not len(cleaned_data) < len(data_with_outliers):
+    if "zero_missing" not in categories["non_missing_categorical_features"]:
         raise AssertionError()
-
-    # Check that extreme outliers are filtered
-    outlier_mask = z_scores >= threshold
-    outliers_removed = data_with_outliers[outlier_mask]
-    if not len(outliers_removed) > 0:
+    if "zero_missing" in categories["categorical_missing_features"]:
         raise AssertionError()
-
-
-def test_standardize_column_names_cleans_column_names(dirty_data):
-    """Tests column name standardization using pandas string methods.
-
-    Args:
-        dirty_data (pd.DataFrame): Data with inconsistent column names
-
-    Asserts:
-        - Spaces in column names are replaced with underscores
-        - Column names are converted to lowercase
-        - Special characters are handled appropriately
-    """
-    # Create test data with messy column names
-    test_data = pd.DataFrame(
-        {
-            "Normal Feature": [1, 2, 3],
-            "Feature With Spaces": [4, 5, 6],
-            "UPPERCASE": [7, 8, 9],
-        }
-    )
-
-    # Standardize column names
-    standardized_data = test_data.copy()
-    standardized_data.columns = standardized_data.columns.str.lower().str.replace(
-        " ", "_"
-    )
-
-    # Check that column names are standardized
-    if "normal_feature" not in standardized_data.columns:
+    if "ten_percent_missing" not in categories["categorical_not_many_missing_features"]:
         raise AssertionError()
-    if "feature_with_spaces" not in standardized_data.columns:
+    if "ten_percent_missing" in categories["categorical_many_missing_features"]:
         raise AssertionError()
-    if "uppercase" not in standardized_data.columns:
-        raise AssertionError()
-
-    # No spaces should remain in column names
-    for col in standardized_data.columns:
-        if " " in col:
-            raise AssertionError()
-
-    # Should be lowercase
-    for col in standardized_data.columns:
-        if col != col.lower():
-            raise AssertionError()
-
-
-def test_standardize_column_names_handles_special_characters():
-    """Tests column name standardization with special characters using pandas.
-
-    Asserts:
-        - Special characters are replaced or removed appropriately
-        - Column names remain valid Python identifiers where possible
-        - Duplicate names after cleaning are handled
-    """
-    data_special_cols = pd.DataFrame(
-        {
-            "Column-With-Dashes": [1, 2],
-            "Column.With.Dots": [3, 4],
-            "Column With Spaces": [5, 6],
-            "Column@#$%": [7, 8],
-        }
-    )
-
-    # Apply standardization using pandas string methods
-    standardized_data = data_special_cols.copy()
-    standardized_data.columns = (
-        standardized_data.columns.str.lower()
-        .str.replace(" ", "_")
-        .str.replace("-", "_")
-        .str.replace(".", "_")
-        .str.replace("@", "_")
-        .str.replace("#", "_")
-        .str.replace("$", "_")
-        .str.replace("%", "_")
-    )
-
-    # Check standardized names
-    for col in standardized_data.columns:
-        # Should not contain problematic characters
-        if "-" in col:
-            raise AssertionError()
-        if "." in col:
-            raise AssertionError()
-        if " " in col:
-            raise AssertionError()
-        if "@" in col:
-            raise AssertionError()
-        if "#" in col:
-            raise AssertionError()
-        if "$" in col:
-            raise AssertionError()
-        if "%" in col:
-            raise AssertionError()
 
 
 def test_datacleaner_fit_transform_combines_all_cleaning_steps(dirty_data):

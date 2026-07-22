@@ -213,11 +213,18 @@ class DataCleaner:
     def _group_candidate_columns_by_cardinality(
         df: pd.DataFrame,
     ) -> dict[int, list[str]]:
-        """Groups candidate columns by cardinality for bijection checks."""
+        """Groups candidate columns by cardinality for bijection checks.
+
+        Columns with every value unique (``n_unique == len(df)``) are excluded:
+        with no repeated key, the row-wise mapping-consistency check in
+        ``_are_codes_bijective`` is trivially satisfied for any two such columns
+        regardless of whether they are actually related, which would otherwise
+        flag independent all-unique columns as false-positive bijective duplicates.
+        """
         count_groups: dict[int, list[str]] = defaultdict(list)
         for col in df.columns:
             n_unique = df[col].nunique(dropna=False)
-            if 1 < n_unique <= 1000:
+            if 1 < n_unique <= 1000 and n_unique < len(df):
                 count_groups[n_unique].append(col)
         return count_groups
 

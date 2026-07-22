@@ -1,23 +1,23 @@
-"""Tests for kvbiii_ml.data_processing.feature_engineering.categories_assigner module."""
+"""Tests for kvbiii_ml.data_processing.feature_engineering.categorical_aligner module."""
 
 import numpy as np
 import pandas as pd
 import pytest
 
 from kvbiii_ml.data_processing.feature_engineering.categorical_aligner import (
-    CategoriesAssigner,
+    CategoricalAligner,
 )
 
 
 @pytest.fixture
-def categorical_training_data(test_settings):
+def categorical_training_data(test_settings) -> pd.DataFrame:
     """Provides training data with categorical features for testing.
 
     Args:
-        test_settings: Test configuration fixture
+        test_settings: Test configuration fixture.
 
     Returns:
-        pd.DataFrame: Training data with categorical columns
+        pd.DataFrame: Training data with categorical columns.
     """
     np.random.seed(test_settings.SEED)
     return pd.DataFrame(
@@ -32,391 +32,341 @@ def categorical_training_data(test_settings):
 
 
 @pytest.fixture
-def categorical_test_data():
+def categorical_test_data() -> pd.DataFrame:
     """Provides test data with known and unknown categorical values.
 
     Returns:
-        pd.DataFrame: Test data containing unseen categorical values
+        pd.DataFrame: Test data containing unseen categorical values.
     """
     return pd.DataFrame(
         {
-            "color": ["blue", "purple", "yellow", "red"],  # purple, yellow are unseen
-            "fuel": ["diesel", "hydrogen", "petrol", "electric"],  # hydrogen is unseen
+            "color": ["blue", "purple", "yellow", "red"],
+            "fuel": ["diesel", "hydrogen", "petrol", "electric"],
             "numeric": [15, 25, 35, 45],
         }
     )
 
 
-def test_categoriesassigner_init_stores_categorical_features():
-    """Tests CategoriesAssigner initialization stores categorical feature list.
+def test_categoricalaligner_init_stores_default_parameters():
+    """Tests CategoricalAligner initialization stores default constructor parameters.
 
     Asserts:
-        - Categorical feature list is stored correctly
-        - Instance attributes are properly initialized
-        - Feature list can be empty
+        - categorical_features defaults to None
+        - fill_values defaults to None
+        - warn_on_unknown defaults to True
+        - categories_ and modes_ start as empty dicts
     """
-    features = ["color", "fuel", "brand"]
-    assigner = CategoriesAssigner(features)
-
-    if assigner.categorical_features != features:
+    aligner = CategoricalAligner()
+    if aligner.categorical_features is not None:
+        raise AssertionError()
+    if aligner.fill_values is not None:
+        raise AssertionError()
+    if aligner.warn_on_unknown is not True:
+        raise AssertionError()
+    if aligner.categories_ != {}:
+        raise AssertionError()
+    if aligner.modes_ != {}:
         raise AssertionError()
 
-    # Test empty list initialization
-    empty_assigner = CategoriesAssigner([])
-    if empty_assigner.categorical_features != []:
-        raise AssertionError()
 
-
-def test_categoriesassigner_fit_extracts_category_levels(categorical_training_data):
-    """Tests fit method extracts category levels from categorical columns.
-
-    Args:
-        categorical_training_data (pd.DataFrame): Training data with categoricals
+def test_categoricalaligner_init_stores_custom_parameters():
+    """Tests CategoricalAligner initialization stores custom constructor parameters.
 
     Asserts:
-        - Category levels are extracted and stored for each feature
-        - Feature modes are computed correctly for unknown value replacement
-        - Input features are stored for later reference
+        - categorical_features list is stored as provided
+        - fill_values dict is stored as provided
+        - warn_on_unknown flag is stored as provided
     """
-    assigner = CategoriesAssigner(["color", "fuel"])
-    fitted_assigner = assigner.fit(categorical_training_data)
-
-    if fitted_assigner is not assigner:
-        raise AssertionError()
-    if "color" not in assigner.feature_groups:
-        raise AssertionError()
-    if "fuel" not in assigner.feature_groups:
-        raise AssertionError()
-
-    # Check categories are extracted
-    if set(assigner.feature_groups["color"]) != {"red", "blue", "green"}:
-        raise AssertionError()
-    if set(assigner.feature_groups["fuel"]) != {"petrol", "diesel", "electric"}:
-        raise AssertionError()
-
-    # Check modes are computed
-    if "color" not in assigner.feature_modes_:
-        raise AssertionError()
-    if "fuel" not in assigner.feature_modes_:
-        raise AssertionError()
-
-
-def test_categoriesassigner_fit_handles_missing_features(categorical_training_data):
-    """Tests fit method handles specified features that don't exist in data.
-
-    Args:
-        categorical_training_data (pd.DataFrame): Training data
-
-    Asserts:
-        - Non-existent features are ignored without error
-        - Existing features are processed normally
-        - Feature groups only contain actually present features
-    """
-    assigner = CategoriesAssigner(["color", "nonexistent_feature"])
-    assigner.fit(categorical_training_data)
-
-    if "color" not in assigner.feature_groups:
-        raise AssertionError()
-    if "nonexistent_feature" in assigner.feature_groups:
-        raise AssertionError()
-
-
-def test_categoriesassigner_fit_handles_non_categorical_features():
-    """Tests fit method ignores features that are not categorical.
-
-    Asserts:
-        - Non-categorical features are ignored even if specified
-        - Only actual categorical features are processed
-        - No errors are raised for non-categorical features
-    """
-    data = pd.DataFrame(
-        {
-            "color": pd.Categorical(["red", "blue"]),
-            "numeric": [1, 2],  # Not categorical
-            "text": ["a", "b"],  # Not categorical
-        }
+    features = ["color", "fuel"]
+    fill_values = {"color": "Unknown"}
+    aligner = CategoricalAligner(
+        categorical_features=features, fill_values=fill_values, warn_on_unknown=False
     )
-
-    assigner = CategoriesAssigner(["color", "numeric", "text"])
-    assigner.fit(data)
-
-    if "color" not in assigner.feature_groups:
+    if aligner.categorical_features != features:
         raise AssertionError()
-    if "numeric" in assigner.feature_groups:
+    if aligner.fill_values != fill_values:
         raise AssertionError()
-    if "text" in assigner.feature_groups:
+    if aligner.warn_on_unknown is not False:
         raise AssertionError()
 
 
-def test_categoriesassigner_fit_computes_correct_modes(test_settings):
-    """Tests fit method computes correct mode values for unknown replacement.
-
-    Args:
-        test_settings: Test configuration fixture
+def test_categoricalaligner_create_fill_values_uses_default_value():
+    """Tests create_fill_values classmethod applies the default fill value.
 
     Asserts:
-        - Mode is the most frequent value in each categorical feature
-        - Ties in mode frequency are handled consistently
-        - Mode computation ignores null values
+        - Every feature listed maps to the default_value when no custom_fills given
+        - Features not present in the DataFrame are excluded
     """
-    np.random.seed(test_settings.SEED)
-    data = pd.DataFrame(
-        {
-            "category": pd.Categorical(["A", "A", "A", "B", "B", "C"]),  # Mode is 'A'
-            "balanced": pd.Categorical(
-                ["X", "Y", "X", "Y", "X", "Y"]
-            ),  # Balanced, mode is first
-        }
+    df = pd.DataFrame({"color": ["red", "blue"], "fuel": ["petrol", "diesel"]})
+    fill_values = CategoricalAligner.create_fill_values(
+        df, categorical_features=["color", "fuel", "missing_feature"]
     )
-
-    assigner = CategoriesAssigner(["category", "balanced"])
-    assigner.fit(data)
-
-    if assigner.feature_modes_["category"] != "A":
-        raise AssertionError()
-    if assigner.feature_modes_["balanced"] not in ["X", "Y"]:
+    if fill_values != {"color": "mode", "fuel": "mode"}:
         raise AssertionError()
 
 
-def test_categoriesassigner_transform_preserves_known_categories(
-    categorical_training_data, categorical_test_data
-):
-    """Tests transform method preserves known categorical values.
-
-    Args:
-        categorical_training_data (pd.DataFrame): Training data
-        categorical_test_data (pd.DataFrame): Test data with known values
+def test_categoricalaligner_create_fill_values_respects_custom_fills():
+    """Tests create_fill_values classmethod overrides defaults with custom_fills.
 
     Asserts:
-        - Known categorical values are preserved unchanged
-        - Categorical dtype is maintained after transformation
-        - Original data structure is maintained
+        - Feature present in custom_fills uses the custom value
+        - Feature absent from custom_fills falls back to default_value
     """
-    assigner = CategoriesAssigner(["color", "fuel"])
-    assigner.fit(categorical_training_data)
-
-    transformed = assigner.transform(categorical_test_data)
-
-    # Check that known values are preserved
-    if transformed.loc[0, "color"] != "blue":
-        raise AssertionError()
-    if transformed.loc[2, "fuel"] != "petrol":
-        raise AssertionError()
-
-    # Check categorical dtype is maintained
-    if not isinstance(transformed["color"].dtype, pd.CategoricalDtype):
-        raise AssertionError()
-    if not isinstance(transformed["fuel"].dtype, pd.CategoricalDtype):
-        raise AssertionError()
-
-
-def test_categoriesassigner_transform_replaces_unknown_with_mode(
-    categorical_training_data, categorical_test_data
-):
-    """Tests transform method replaces unknown values with fitted modes.
-
-    Args:
-        categorical_training_data (pd.DataFrame): Training data
-        categorical_test_data (pd.DataFrame): Test data with unknown values
-
-    Asserts:
-        - Unknown categorical values are replaced with mode from training
-        - Replacement only affects unknown values, not known ones
-        - Mode replacement is consistent across multiple unknown values
-    """
-    assigner = CategoriesAssigner(["color", "fuel"])
-    assigner.fit(categorical_training_data)
-
-    transformed = assigner.transform(categorical_test_data)
-
-    # Get the modes that were computed during fit
-    color_mode = assigner.feature_modes_["color"]
-    fuel_mode = assigner.feature_modes_["fuel"]
-
-    # Check unknown values are replaced with mode
-    if transformed.loc[1, "color"] != color_mode:
-        raise AssertionError()
-    if transformed.loc[2, "color"] != color_mode:
-        raise AssertionError()
-    if transformed.loc[1, "fuel"] != fuel_mode:
-        raise AssertionError()
-
-
-def test_categoriesassigner_transform_handles_missing_values():
-    """Tests transform method properly handles missing/null values.
-
-    Asserts:
-        - Null values are preserved and not replaced with mode
-        - Mode replacement only affects non-null unknown values
-        - Categorical dtype handles null values correctly
-    """
-    training_data = pd.DataFrame({"category": pd.Categorical(["A", "B", "A", "B"])})
-
-    test_data = pd.DataFrame(
-        {"category": ["A", None, "C", "B"]}  # None should stay, 'C' should become mode
+    df = pd.DataFrame({"color": ["red", "blue"], "fuel": ["petrol", "diesel"]})
+    fill_values = CategoricalAligner.create_fill_values(
+        df,
+        categorical_features=["color", "fuel"],
+        custom_fills={"color": "Unknown"},
+        default_value="Other",
     )
-
-    assigner = CategoriesAssigner(["category"])
-    assigner.fit(training_data)
-    transformed = assigner.transform(test_data)
-
-    if transformed.loc[0, "category"] != "A":
-        raise AssertionError()
-    if not pd.isna(transformed.loc[1, "category"]):
-        raise AssertionError()
-    if transformed.loc[2, "category"] not in ["A", "B"]:
-        raise AssertionError()
-    if transformed.loc[3, "category"] != "B":
+    if fill_values != {"color": "Unknown", "fuel": "Other"}:
         raise AssertionError()
 
 
-def test_categoriesassigner_transform_creates_copy_of_input(
-    categorical_training_data, categorical_test_data
-):
-    """Tests transform method creates copy of input data without modifying original.
-
-    Args:
-        categorical_training_data (pd.DataFrame): Training data
-        categorical_test_data (pd.DataFrame): Test data
+def test_categoricalaligner_create_fill_values_handles_empty_inputs():
+    """Tests create_fill_values classmethod with no categorical_features provided.
 
     Asserts:
-        - Original input DataFrame is not modified
-        - Returned DataFrame is a separate copy
-        - Changes to returned DataFrame don't affect original
+        - An empty dict is returned when categorical_features is None
     """
-    assigner = CategoriesAssigner(["color", "fuel"])
-    assigner.fit(categorical_training_data)
-
-    original_test = categorical_test_data.copy()
-    transformed = assigner.transform(categorical_test_data)
-
-    # Original data should be unchanged
-    pd.testing.assert_frame_equal(categorical_test_data, original_test)
-
-    # Transformed should be different (contains categorical dtypes)
-    if categorical_test_data.equals(transformed):
+    df = pd.DataFrame({"color": ["red", "blue"]})
+    fill_values = CategoricalAligner.create_fill_values(df)
+    if fill_values != {}:
         raise AssertionError()
 
 
-def test_categoriesassigner_transform_ignores_non_configured_features():
-    """Tests transform method ignores features not in categorical_features list.
-
-    Asserts:
-        - Features not in categorical_features are left unchanged
-        - Only specified categorical features are processed
-        - Non-categorical features maintain their original dtypes
-    """
-    training_data = pd.DataFrame(
-        {
-            "configured": pd.Categorical(["A", "B"]),
-            "not_configured": pd.Categorical(["X", "Y"]),
-            "numeric": [1, 2],
-        }
-    )
-
-    test_data = pd.DataFrame(
-        {
-            "configured": ["A", "C"],  # 'C' is unknown
-            "not_configured": ["X", "Z"],  # 'Z' is unknown but shouldn't be processed
-            "numeric": [3, 4],
-        }
-    )
-
-    assigner = CategoriesAssigner(["configured"])  # Only configure one feature
-    assigner.fit(training_data)
-    transformed = assigner.transform(test_data)
-
-    # Configured feature should be processed
-    if not isinstance(transformed["configured"].dtype, pd.CategoricalDtype):
-        raise AssertionError()
-
-    # Non-configured categorical feature should remain unchanged
-    if transformed.loc[1, "not_configured"] != "Z":
-        raise AssertionError()
-
-    # Numeric feature should be unchanged
-    if not transformed["numeric"].equals(test_data["numeric"]):
-        raise AssertionError()
-
-
-def test_categoriesassigner_get_feature_names_out_returns_input_features(
+def test_categoricalaligner_fit_auto_detects_categorical_features(
     categorical_training_data,
 ):
-    """Tests get_feature_names_out method returns original feature names.
+    """Tests fit auto-detects object/string/category columns when categorical_features is None.
 
     Args:
-        categorical_training_data (pd.DataFrame): Training data
+        categorical_training_data (pd.DataFrame): Training data with categoricals.
 
     Asserts:
-        - Method returns pandas Index of original feature names
-        - Feature names match those seen during fit
-        - Input parameter is ignored as documented
+        - categorical_features is populated with color and fuel only
+        - numeric column is excluded from auto-detection
     """
-    assigner = CategoriesAssigner(["color", "fuel"])
-    assigner.fit(categorical_training_data)
-
-    feature_names = assigner.get_feature_names_out()
-
-    if not isinstance(feature_names, pd.Index):
+    aligner = CategoricalAligner()
+    aligner.fit(categorical_training_data)
+    if set(aligner.categorical_features) != {"color", "fuel"}:
         raise AssertionError()
-    if list(feature_names) != list(categorical_training_data.columns):
+    if "numeric" in aligner.categorical_features:
         raise AssertionError()
 
-    # Test that input parameter is ignored
-    feature_names_with_input = assigner.get_feature_names_out(["ignored", "input"])
-    pd.testing.assert_index_equal(feature_names, feature_names_with_input)
 
+def test_categoricalaligner_fit_computes_modes_and_categories(
+    categorical_training_data,
+):
+    """Tests fit computes modes_ and categories_ from the training data.
 
-def test_categoriesassigner_handles_empty_categorical_features_list():
-    """Tests CategoriesAssigner handles empty categorical features list gracefully.
+    Args:
+        categorical_training_data (pd.DataFrame): Training data with categoricals.
 
     Asserts:
-        - Fit and transform work with empty feature list
-        - No features are processed when list is empty
-        - Original data is returned unchanged
+        - modes_ contains the most frequent value for each categorical feature
+        - categories_ contains the full observed category set for each feature
+        - fit returns self
     """
-    training_data = pd.DataFrame(
-        {"category": pd.Categorical(["A", "B"]), "numeric": [1, 2]}
-    )
-
-    test_data = pd.DataFrame(
-        {
-            "category": ["A", "C"],  # Unknown value that won't be processed
-            "numeric": [3, 4],
-        }
-    )
-
-    assigner = CategoriesAssigner([])  # Empty feature list
-    assigner.fit(training_data)
-    transformed = assigner.transform(test_data)
-
-    # Data should be unchanged except for potential copy
-    if not transformed["category"].equals(test_data["category"]):
+    aligner = CategoricalAligner(categorical_features=["color", "fuel"])
+    fitted_aligner = aligner.fit(categorical_training_data)
+    if fitted_aligner is not aligner:
         raise AssertionError()
-    if not transformed["numeric"].equals(test_data["numeric"]):
+    if aligner.modes_["color"] not in {"red", "blue"}:
         raise AssertionError()
-    if len(assigner.feature_groups) != 0:
+    if aligner.modes_["fuel"] not in {"petrol", "diesel"}:
+        raise AssertionError()
+    if set(aligner.categories_["color"]) != {"red", "blue", "green"}:
+        raise AssertionError()
+    if set(aligner.categories_["fuel"]) != {"petrol", "diesel", "electric"}:
         raise AssertionError()
 
 
-def test_categoriesassigner_fit_handles_empty_categories():
-    """Tests fit method handles categorical features with no categories gracefully.
+def test_categoricalaligner_fit_categories_include_unseen_fill_value():
+    """Tests fit includes the fill value in categories_ even when unseen in training data.
 
     Asserts:
-        - Empty categorical features don't cause errors
-        - Mode computation handles empty categories appropriately
-        - Transformer remains functional with empty categories
+        - The configured fill value is present in categories_ despite never
+          appearing in the training data
     """
-    # Create categorical with no categories (edge case)
-    training_data = pd.DataFrame(
-        {"normal_cat": pd.Categorical(["A", "B"]), "numeric": [1, 2]}
+    df = pd.DataFrame({"color": pd.Categorical(["red", "blue", "red"])})
+    aligner = CategoricalAligner(
+        categorical_features=["color"], fill_values={"color": "Unknown"}
     )
+    aligner.fit(df)
+    if "Unknown" not in aligner.categories_["color"]:
+        raise AssertionError()
+    if set(aligner.categories_["color"]) != {"red", "blue", "Unknown"}:
+        raise AssertionError()
 
-    assigner = CategoriesAssigner(["normal_cat"])
-    assigner.fit(training_data)
 
-    # Should handle normal categories without error
-    if "normal_cat" not in assigner.feature_groups:
+def test_categoricalaligner_fit_skips_features_missing_from_dataframe():
+    """Tests fit silently skips configured features absent from the input DataFrame.
+
+    Asserts:
+        - Missing feature does not appear in modes_ or categories_
+        - Present feature is still processed normally
+    """
+    df = pd.DataFrame({"color": pd.Categorical(["red", "blue"])})
+    aligner = CategoricalAligner(categorical_features=["color", "nonexistent"])
+    aligner.fit(df)
+    if "color" not in aligner.categories_:
+        raise AssertionError()
+    if "nonexistent" in aligner.categories_:
+        raise AssertionError()
+    if "nonexistent" in aligner.modes_:
+        raise AssertionError()
+
+
+def test_categoricalaligner_transform_fills_missing_values():
+    """Tests transform fills NaN values with the fitted fill value.
+
+    Asserts:
+        - NaN entries are replaced with the feature's fill value
+        - Resulting column is category dtype
+    """
+    train = pd.DataFrame({"color": pd.Categorical(["red", "blue", "red"])})
+    test = pd.DataFrame({"color": ["red", np.nan, "blue"]})
+    aligner = CategoricalAligner(categorical_features=["color"])
+    aligner.fit(train)
+    transformed = aligner.transform(test)
+    if transformed.loc[1, "color"] != aligner.modes_["color"]:
+        raise AssertionError()
+    if not isinstance(transformed["color"].dtype, pd.CategoricalDtype):
+        raise AssertionError()
+
+
+def test_categoricalaligner_transform_replaces_unknown_categories(
+    categorical_training_data, categorical_test_data
+):
+    """Tests transform replaces categories unseen during fit with the fill value.
+
+    Args:
+        categorical_training_data (pd.DataFrame): Training data.
+        categorical_test_data (pd.DataFrame): Test data with unknown categories.
+
+    Asserts:
+        - Unknown color and fuel values are replaced with their fitted fill value
+        - Known values are preserved unchanged
+    """
+    aligner = CategoricalAligner(categorical_features=["color", "fuel"])
+    aligner.fit(categorical_training_data)
+    transformed = aligner.transform(categorical_test_data)
+    if transformed.loc[1, "color"] != aligner.modes_["color"]:
+        raise AssertionError()
+    if transformed.loc[1, "fuel"] != aligner.modes_["fuel"]:
+        raise AssertionError()
+    if transformed.loc[0, "color"] != "blue":
+        raise AssertionError()
+    if transformed.loc[3, "fuel"] != "electric":
+        raise AssertionError()
+
+
+def test_categoricalaligner_transform_warns_on_unknown_when_enabled(
+    categorical_training_data, categorical_test_data
+):
+    """Tests transform raises a UserWarning when unknown categories are found and enabled.
+
+    Args:
+        categorical_training_data (pd.DataFrame): Training data.
+        categorical_test_data (pd.DataFrame): Test data with unknown categories.
+
+    Asserts:
+        - A UserWarning is raised mentioning the unknown category count
+    """
+    aligner = CategoricalAligner(categorical_features=["color"], warn_on_unknown=True)
+    aligner.fit(categorical_training_data)
+    with pytest.warns(UserWarning, match="unknown categor"):
+        aligner.transform(categorical_test_data)
+
+
+def test_categoricalaligner_transform_does_not_warn_when_disabled(
+    categorical_training_data, categorical_test_data, recwarn: pytest.WarningsRecorder
+):
+    """Tests transform does not raise a warning when warn_on_unknown is False.
+
+    Args:
+        categorical_training_data (pd.DataFrame): Training data.
+        categorical_test_data (pd.DataFrame): Test data with unknown categories.
+        recwarn (pytest.WarningsRecorder): Pytest fixture recording emitted warnings.
+
+    Asserts:
+        - No UserWarning is emitted during transform
+    """
+    aligner = CategoricalAligner(categorical_features=["color"], warn_on_unknown=False)
+    aligner.fit(categorical_training_data)
+    aligner.transform(categorical_test_data)
+    user_warnings = [w for w in recwarn.list if issubclass(w.category, UserWarning)]
+    if user_warnings:
+        raise AssertionError(f"Unexpected warning(s) raised: {user_warnings}")
+
+
+def test_categoricalaligner_transform_casts_to_category_with_full_category_set(
+    categorical_training_data, categorical_test_data
+):
+    """Tests transform casts the output column to category dtype with the fitted set.
+
+    Args:
+        categorical_training_data (pd.DataFrame): Training data.
+        categorical_test_data (pd.DataFrame): Test data.
+
+    Asserts:
+        - The transformed column's categories equal the fitted categories_ set
+    """
+    aligner = CategoricalAligner(categorical_features=["color"], warn_on_unknown=False)
+    aligner.fit(categorical_training_data)
+    transformed = aligner.transform(categorical_test_data)
+    if set(transformed["color"].cat.categories) != set(aligner.categories_["color"]):
+        raise AssertionError()
+
+
+def test_categoricalaligner_transform_before_fit_is_noop_copy():
+    """Tests transform before fit is a silent no-op copy since categories_ starts as {}.
+
+    Asserts:
+        - Transformed output equals the input DataFrame
+        - Transformed output is a distinct object from the input
+    """
+    aligner = CategoricalAligner()
+    df = pd.DataFrame({"color": ["red", "blue"]})
+    transformed = aligner.transform(df)
+    pd.testing.assert_frame_equal(transformed, df)
+    if transformed is df:
+        raise AssertionError()
+
+
+def test_categoricalaligner_transform_skips_features_missing_from_input():
+    """Tests transform skips fitted features that are absent from the input DataFrame.
+
+    Asserts:
+        - Transform completes without error when a fitted feature is missing
+        - Remaining columns are returned unchanged
+    """
+    train = pd.DataFrame(
+        {"color": pd.Categorical(["red", "blue"]), "fuel": pd.Categorical(["a", "b"])}
+    )
+    aligner = CategoricalAligner(categorical_features=["color", "fuel"])
+    aligner.fit(train)
+    test = pd.DataFrame({"color": ["red", "blue"]})
+    transformed = aligner.transform(test)
+    if "fuel" in transformed.columns:
+        raise AssertionError()
+    if not isinstance(transformed["color"].dtype, pd.CategoricalDtype):
+        raise AssertionError()
+
+
+def test_categoricalaligner_does_not_expose_get_feature_names_out():
+    """Tests that CategoricalAligner does not define get_feature_names_out.
+
+    The real source class only defines create_fill_values, fit, and transform;
+    it neither implements nor inherits a get_feature_names_out method from
+    sklearn's BaseEstimator/TransformerMixin in the installed sklearn version.
+
+    Asserts:
+        - The instance has no get_feature_names_out attribute
+    """
+    aligner = CategoricalAligner()
+    if hasattr(aligner, "get_feature_names_out"):
         raise AssertionError()
 
 

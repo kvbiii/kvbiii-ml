@@ -4,309 +4,300 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from kvbiii_ml.evaluation.error_diagnostics import ErrorDiagnostics
+from kvbiii_ml.evaluation.error_diagnostics import (
+    display_classification_errors,
+    display_regression_under_over_errors,
+    get_top_classification_errors,
+    get_top_regression_under_over_errors,
+)
 
 
-@pytest.fixture
-def classification_predictions():
-    """Provides target and prediction data for classification error diagnostics.
+def test_get_top_regression_under_over_errors_raises_typeerror_for_non_series_y_true():
+    """Tests get_top_regression_under_over_errors rejects a non-Series y_true.
 
-    Returns:
-        tuple: y_true, y_pred, and probabilities for binary classification
+    Asserts:
+        - TypeError is raised when y_true is a plain numpy array.
     """
-    y_true = np.array([0, 0, 1, 1, 0, 1, 0, 1, 0, 0])
-    y_pred = np.array([0, 1, 1, 0, 0, 1, 1, 1, 0, 1])
-    probas = np.array(
+    y_true = np.array([1.0, 2.0, 3.0])
+    y_pred = np.array([1.1, 2.2, 2.8])
+
+    with pytest.raises(TypeError, match="y_true must be a pandas Series"):
+        get_top_regression_under_over_errors(y_true, y_pred)
+
+
+def test_get_top_regression_under_over_errors_protects_against_zero_true_values():
+    """Tests the epsilon guard prevents division by zero when y_true contains zeros.
+
+    Asserts:
+        - No infinite or NaN percentage errors are produced for the zero-valued row.
+        - The zero-valued row is classified as overestimated since its prediction is positive.
+    """
+    y_true = pd.Series([10.0, 20.0, 0.0, 40.0, 50.0])
+    y_pred = pd.Series([12.0, 15.0, 5.0, 35.0, 55.0])
+
+    _underestimated, overestimated = get_top_regression_under_over_errors(
+        y_true, y_pred, epsilon=1e-9
+    )
+
+    if 2 not in overestimated.index:
+        raise AssertionError()
+    if not np.isfinite(overestimated.loc[2, "Percentage Error (%)"]):
+        raise AssertionError()
+
+
+def test_get_top_regression_under_over_errors_truncates_to_top_n():
+    """Tests top_n truncation for the direction with more errors than requested.
+
+    Asserts:
+        - underestimated_df is truncated to top_n rows, largest magnitude first.
+        - overestimated_df returns fewer than top_n rows without padding when
+          fewer errors exist in that direction.
+    """
+    y_true = pd.Series([10.0] * 5, index=range(5))
+    y_pred = pd.Series([8.0, 7.0, 6.0, 12.0, 10.0], index=range(5))
+
+    underestimated, overestimated = get_top_regression_under_over_errors(
+        y_true, y_pred, top_n=2
+    )
+
+    if len(underestimated) != 2:
+        raise AssertionError()
+    if list(underestimated.index) != [2, 1]:
+        raise AssertionError()
+    if len(overestimated) != 1:
+        raise AssertionError()
+    if list(overestimated.index) != [3]:
+        raise AssertionError()
+
+
+def test_get_top_regression_under_over_errors_adds_exponentiated_columns_when_log():
+    """Tests log=True adds exponentiated true/predicted/error columns.
+
+    Asserts:
+        - True Value (exp), Predicted Value (exp), Error (exp), and
+          Percentage Error (exp) (%) columns are present in both outputs.
+    """
+    y_true = pd.Series([1.0, 2.0, 3.0])
+    y_pred = pd.Series([0.8, 2.5, 2.7])
+
+    underestimated, overestimated = get_top_regression_under_over_errors(
+        y_true, y_pred, log=True
+    )
+
+    expected_cols = {
+        "True Value (exp)",
+        "Predicted Value (exp)",
+        "Error (exp)",
+        "Percentage Error (exp) (%)",
+    }
+    if not expected_cols <= set(underestimated.columns):
+        raise AssertionError()
+    if not expected_cols <= set(overestimated.columns):
+        raise AssertionError()
+
+
+def test_display_regression_under_over_errors_runs_without_raising():
+    """Tests display_regression_under_over_errors renders without raising.
+
+    Asserts:
+        - The function completes without raising for valid DataFrame inputs.
+    """
+    y_true = pd.Series([10.0, 20.0, 30.0])
+    y_pred = pd.Series([8.0, 25.0, 27.0])
+    underestimated, overestimated = get_top_regression_under_over_errors(y_true, y_pred)
+
+    display_regression_under_over_errors(underestimated, overestimated)
+
+
+def test_get_top_classification_errors_raises_typeerror_for_non_series_y_true():
+    """Tests get_top_classification_errors rejects a non-Series y_true.
+
+    Asserts:
+        - TypeError is raised when y_true is a plain numpy array.
+    """
+    y_true = np.array([0, 1, 0])
+    y_pred_proba = np.array([[0.9, 0.1], [0.2, 0.8], [0.6, 0.4]])
+
+    with pytest.raises(TypeError, match="y_true must be a pandas Series"):
+        get_top_classification_errors(
+            y_true, y_pred_proba, class_id=0, id2label={0: "neg", 1: "pos"}
+        )
+
+
+def test_get_top_classification_errors_raises_valueerror_for_shape_mismatch():
+    """Tests get_top_classification_errors rejects mismatched sample counts.
+
+    Asserts:
+        - ValueError is raised when y_pred_proba.shape[0] != len(y_true).
+    """
+    y_true = pd.Series([0, 1, 0])
+    y_pred_proba = np.array([[0.9, 0.1], [0.2, 0.8]])
+
+    with pytest.raises(ValueError, match="same number of samples"):
+        get_top_classification_errors(
+            y_true, y_pred_proba, class_id=0, id2label={0: "neg", 1: "pos"}
+        )
+
+
+def test_get_top_classification_errors_raises_valueerror_for_out_of_bounds_class_id():
+    """Tests get_top_classification_errors rejects an out-of-range class_id.
+
+    Asserts:
+        - ValueError is raised when class_id is outside [0, n_classes).
+    """
+    y_true = pd.Series([0, 1, 0])
+    y_pred_proba = np.array([[0.9, 0.1], [0.2, 0.8], [0.6, 0.4]])
+
+    with pytest.raises(ValueError, match="out of bounds"):
+        get_top_classification_errors(
+            y_true, y_pred_proba, class_id=5, id2label={0: "neg", 1: "pos"}
+        )
+
+
+def test_get_top_classification_errors_raises_valueerror_for_cutoff_length_mismatch():
+    """Tests get_top_classification_errors rejects a multiclass cutoff of the wrong length.
+
+    Asserts:
+        - ValueError is raised when the cutoff list length does not match n_classes.
+    """
+    y_true = pd.Series([0, 1, 2])
+    y_pred_proba = np.array([[0.7, 0.2, 0.1], [0.1, 0.8, 0.1], [0.2, 0.2, 0.6]])
+    id2label = {0: "a", 1: "b", 2: "c"}
+
+    with pytest.raises(ValueError, match="Number of cutoffs"):
+        get_top_classification_errors(
+            y_true, y_pred_proba, class_id=0, id2label=id2label, cutoff=[0.5, 0.5]
+        )
+
+
+def test_get_top_classification_errors_stacks_1d_binary_probabilities():
+    """Tests a 1-D binary y_pred_proba array is stacked into a 2-D matrix internally.
+
+    Asserts:
+        - The function runs without raising for a 1-D probability array.
+        - Only the false-negative row for the target class is returned.
+    """
+    y_true = pd.Series([0, 1, 0, 1, 0], index=[10, 11, 12, 13, 14])
+    y_pred_proba_1d = np.array([0.2, 0.9, 0.7, 0.3, 0.4])
+    id2label = {0: "neg", 1: "pos"}
+
+    result = get_top_classification_errors(
+        y_true, y_pred_proba_1d, class_id=1, id2label=id2label
+    )
+
+    if len(result) != 1:
+        raise AssertionError()
+    if list(result.index) != [13]:
+        raise AssertionError()
+
+
+def test_get_top_classification_errors_only_considers_false_negatives():
+    """Tests only false negatives for the target class are returned, not false positives.
+
+    A false positive for class 1 exists at index 12 (true=0, predicted=1) but must
+    not appear in the class_id=1 result, which should contain only the false
+    negative at index 13 (true=1, predicted=0).
+
+    Asserts:
+        - The false-positive row is excluded from the class_id=1 result.
+        - The false-negative row is included in the class_id=1 result.
+    """
+    y_true = pd.Series([0, 1, 0, 1, 0], index=[10, 11, 12, 13, 14])
+    y_pred_proba = np.array(
         [
-            [0.8, 0.2],  # Correct prediction
-            [0.3, 0.7],  # Incorrect prediction
-            [0.2, 0.8],  # Correct prediction
-            [0.6, 0.4],  # Incorrect prediction
-            [0.7, 0.3],  # Correct prediction
-            [0.1, 0.9],  # Correct prediction
-            [0.4, 0.6],  # Incorrect prediction
-            [0.3, 0.7],  # Correct prediction
-            [0.9, 0.1],  # Correct prediction
-            [0.4, 0.6],  # Incorrect prediction
+            [0.8, 0.2],
+            [0.1, 0.9],
+            [0.3, 0.7],
+            [0.7, 0.3],
+            [0.6, 0.4],
         ]
     )
-    return y_true, y_pred, probas
+    id2label = {0: "neg", 1: "pos"}
 
-
-@pytest.fixture
-def regression_predictions():
-    """Provides target and prediction data for regression error diagnostics.
-
-    Returns:
-        tuple: y_true and y_pred for regression
-    """
-    y_true = np.array([10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0])
-    y_pred = np.array([12.0, 18.0, 31.0, 45.0, 49.0, 57.0, 75.0, 77.0, 85.0, 105.0])
-    return y_true, y_pred
-
-
-@pytest.fixture
-def feature_data():
-    """Provides feature data for error analysis.
-
-    Returns:
-        pd.DataFrame: Feature data for diagnostic tests
-    """
-    return pd.DataFrame(
-        {
-            "numeric_feature": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0],
-            "categorical_feature": ["A", "A", "B", "B", "C", "C", "A", "B", "C", "A"],
-        }
+    result = get_top_classification_errors(
+        y_true, y_pred_proba, class_id=1, id2label=id2label
     )
 
+    if 12 in result.index:
+        raise AssertionError()
+    if 13 not in result.index:
+        raise AssertionError()
 
-def test_errorsdiagnostics_init_sets_problem_type():
-    """Tests ErrorDiagnostics initialization sets problem type correctly.
+
+def test_get_top_classification_errors_returns_empty_dataframe_for_zero_false_negatives():
+    """Tests an empty DataFrame is returned when a class has zero false negatives.
 
     Asserts:
-        - Problem type is set correctly
-        - Invalid problem types raise error
+        - The result is an empty DataFrame when every instance of class 0 is
+          predicted correctly.
     """
-    # Test classification
-    diag_cls = ErrorDiagnostics(problem_type="classification")
-    if diag_cls.problem_type != "classification":
-        raise AssertionError()
+    y_true = pd.Series([0, 1])
+    y_pred_proba = np.array([[0.9, 0.1], [0.1, 0.9]])
+    id2label = {0: "neg", 1: "pos"}
 
-    # Test regression
-    diag_reg = ErrorDiagnostics(problem_type="regression")
-    if diag_reg.problem_type != "regression":
-        raise AssertionError()
-
-    # Test invalid type
-    with pytest.raises(ValueError):
-        ErrorDiagnostics(problem_type="invalid_type")
-
-
-def test_errorsdiagnostics_compute_classification_errors(
-    classification_predictions, feature_data
-):
-    """Tests compute_errors method for classification problems.
-
-    Args:
-        classification_predictions: Classification predictions fixture
-        feature_data: Feature data fixture
-
-    Asserts:
-        - Error DataFrame is created with correct structure
-        - Errors are identified correctly
-        - Probability information is included
-        - Feature data is merged correctly
-    """
-    y_true, y_pred, probas = classification_predictions
-
-    diag = ErrorDiagnostics(problem_type="classification")
-    error_df = diag.compute_errors(y_true, y_pred, X=feature_data, probas=probas)
-
-    # Check DataFrame structure
-    if not isinstance(error_df, pd.DataFrame):
-        raise AssertionError()
-    if "y_true" not in error_df.columns:
-        raise AssertionError()
-    if "y_pred" not in error_df.columns:
-        raise AssertionError()
-    if "error" not in error_df.columns:
-        raise AssertionError()
-    if "proba_true_class" not in error_df.columns:
-        raise AssertionError()
-    if "numeric_feature" not in error_df.columns:
-        raise AssertionError()
-    if "categorical_feature" not in error_df.columns:
-        raise AssertionError()
-
-    # Check error identification
-    if error_df["error"].sum() != 4:
-        raise AssertionError()
-
-    # Verify probability calculations
-    # For errors with true class 0, proba_true_class should be 1 - proba[:, 1]
-    # For errors with true class 1, proba_true_class should be proba[:, 1]
-    error_indices = np.where(y_true != y_pred)[0]
-    for i in error_indices:
-        true_class = y_true[i]
-        if true_class == 0:
-            expected_proba = probas[i, 0]
-        else:
-            expected_proba = probas[i, 1]
-        if not abs(error_df.loc[i, "proba_true_class"] - expected_proba) < 1e-10:
-            raise AssertionError()
-
-
-def test_errorsdiagnostics_compute_regression_errors(
-    regression_predictions, feature_data
-):
-    """Tests compute_errors method for regression problems.
-
-    Args:
-        regression_predictions: Regression predictions fixture
-        feature_data: Feature data fixture
-
-    Asserts:
-        - Error DataFrame includes absolute and squared errors
-        - Error percentages are calculated correctly
-        - Feature data is merged correctly
-    """
-    y_true, y_pred = regression_predictions
-
-    diag = ErrorDiagnostics(problem_type="regression")
-    error_df = diag.compute_errors(y_true, y_pred, X=feature_data)
-
-    # Check DataFrame structure
-    if not isinstance(error_df, pd.DataFrame):
-        raise AssertionError()
-    if "y_true" not in error_df.columns:
-        raise AssertionError()
-    if "y_pred" not in error_df.columns:
-        raise AssertionError()
-    if "absolute_error" not in error_df.columns:
-        raise AssertionError()
-    if "squared_error" not in error_df.columns:
-        raise AssertionError()
-    if "percentage_error" not in error_df.columns:
-        raise AssertionError()
-    if "numeric_feature" not in error_df.columns:
-        raise AssertionError()
-    if "categorical_feature" not in error_df.columns:
-        raise AssertionError()
-
-    # Check error calculations
-    expected_abs_errors = np.abs(y_true - y_pred)
-    expected_squared_errors = (y_true - y_pred) ** 2
-    expected_pct_errors = np.abs((y_true - y_pred) / y_true) * 100
-
-    np.testing.assert_array_almost_equal(
-        error_df["absolute_error"].values, expected_abs_errors
-    )
-    np.testing.assert_array_almost_equal(
-        error_df["squared_error"].values, expected_squared_errors
-    )
-    np.testing.assert_array_almost_equal(
-        error_df["percentage_error"].values, expected_pct_errors
+    result = get_top_classification_errors(
+        y_true, y_pred_proba, class_id=0, id2label=id2label
     )
 
+    if not result.empty:
+        raise AssertionError()
 
-def test_errorsdiagnostics_compute_errors_without_features(classification_predictions):
-    """Tests compute_errors method without feature data.
 
-    Args:
-        classification_predictions: Classification predictions fixture
+def test_get_top_classification_errors_truncates_to_top_n_by_error_magnitude():
+    """Tests top_n truncation sorted by descending error magnitude for false negatives.
 
     Asserts:
-        - Method works without feature data
-        - Error metrics are still calculated correctly
+        - Result length is capped at top_n.
+        - Rows are ordered by descending (predicted_confidence - true_class_probability).
     """
-    y_true, y_pred, probas = classification_predictions
-
-    diag = ErrorDiagnostics(problem_type="classification")
-    error_df = diag.compute_errors(y_true, y_pred, probas=probas)
-
-    # Basic checks
-    if not isinstance(error_df, pd.DataFrame):
-        raise AssertionError()
-    if "y_true" not in error_df.columns:
-        raise AssertionError()
-    if "y_pred" not in error_df.columns:
-        raise AssertionError()
-    if "error" not in error_df.columns:
-        raise AssertionError()
-    if "proba_true_class" not in error_df.columns:
-        raise AssertionError()
-
-    # No feature columns should be present
-    if "numeric_feature" in error_df.columns:
-        raise AssertionError()
-    if "categorical_feature" in error_df.columns:
-        raise AssertionError()
-
-
-def test_errorsdiagnostics_compute_errors_without_probabilities(
-    classification_predictions, feature_data
-):
-    """Tests compute_errors method without probability data for classification.
-
-    Args:
-        classification_predictions: Classification predictions fixture
-        feature_data: Feature data fixture
-
-    Asserts:
-        - Method works without probability data
-        - Error identification still works correctly
-    """
-    y_true, y_pred, _ = classification_predictions
-
-    diag = ErrorDiagnostics(problem_type="classification")
-    error_df = diag.compute_errors(y_true, y_pred, X=feature_data)
-
-    # Basic checks
-    if not isinstance(error_df, pd.DataFrame):
-        raise AssertionError()
-    if "y_true" not in error_df.columns:
-        raise AssertionError()
-    if "y_pred" not in error_df.columns:
-        raise AssertionError()
-    if "error" not in error_df.columns:
-        raise AssertionError()
-
-    # No probability column should be present
-    if "proba_true_class" in error_df.columns:
-        raise AssertionError()
-
-    # Error identification should still work
-    if error_df["error"].sum() != 4:
-        raise AssertionError()
-
-
-def test_errorsdiagnostics_basic_classification_flow(classification_predictions):
-    """Reduced legacy plotting test: ensure compute_errors produces expected columns."""
-    y_true, y_pred, probas = classification_predictions
-    diag = ErrorDiagnostics("classification")
-    error_df = diag.compute_errors(y_true, y_pred, probas=probas)
-    if not {"y_true", "y_pred", "error"} <= set(error_df.columns):
-        raise AssertionError()
-
-
-def test_errorsdiagnostics_basic_regression_flow(regression_predictions):
-    """Tests that compute_errors produces absolute and squared error columns for regression."""
-    y_true, y_pred = regression_predictions
-    df = ErrorDiagnostics("regression").compute_errors(y_true, y_pred)
-    if not {"absolute_error", "squared_error"} <= set(df.columns):
-        raise AssertionError()
-
-
-def test_errorsdiagnostics_feature_merge(classification_predictions, feature_data):
-    """Tests that compute_errors merges the provided feature columns into the output."""
-    y_true, y_pred, probas = classification_predictions
-    diag = ErrorDiagnostics("classification")
-    df = diag.compute_errors(y_true, y_pred, X=feature_data, probas=probas)
-    if not set(feature_data.columns) <= set(df.columns):
-        raise AssertionError()
-
-
-def test_errorsdiagnostics_misclassified_subset(
-    classification_predictions, feature_data
-):
-    """Tests that misclassified rows can be filtered from the compute_errors output."""
-    y_true, y_pred, _ = classification_predictions
-    df = ErrorDiagnostics("classification").compute_errors(
-        y_true, y_pred, X=feature_data
+    y_true = pd.Series([1, 1, 1, 1, 0], index=[0, 1, 2, 3, 4])
+    y_pred_proba = np.array(
+        [
+            [0.9, 0.1],
+            [0.6, 0.4],
+            [0.55, 0.45],
+            [0.51, 0.49],
+            [0.9, 0.1],
+        ]
     )
-    mis = df[df.error == 1]
-    if mis.shape[0] != 4:
+    id2label = {0: "neg", 1: "pos"}
+
+    result = get_top_classification_errors(
+        y_true, y_pred_proba, class_id=1, id2label=id2label, top_n=2
+    )
+
+    if len(result) != 2:
+        raise AssertionError()
+    if list(result.index) != [0, 1]:
         raise AssertionError()
 
 
-def test_errorsdiagnostics_regression_errors_have_expected_columns(
-    regression_predictions,
-):
-    """Tests that regression compute_errors output includes all expected error columns."""
-    y_true, y_pred = regression_predictions
-    df = ErrorDiagnostics("regression").compute_errors(y_true, y_pred)
-    if not {"error", "absolute_error", "squared_error"} <= set(df.columns):
-        raise AssertionError()
+def test_display_classification_errors_runs_without_raising():
+    """Tests display_classification_errors renders without raising, including empty results.
+
+    Asserts:
+        - The function completes without raising for a mix of non-empty and
+          empty per-class error DataFrames.
+    """
+    y_true = pd.Series([0, 1, 0, 1, 0], index=[10, 11, 12, 13, 14])
+    y_pred_proba = np.array(
+        [
+            [0.8, 0.2],
+            [0.1, 0.9],
+            [0.3, 0.7],
+            [0.7, 0.3],
+            [0.6, 0.4],
+        ]
+    )
+    id2label = {0: "neg", 1: "pos"}
+    errors_by_class = {
+        class_id: get_top_classification_errors(
+            y_true, y_pred_proba, class_id=class_id, id2label=id2label
+        )
+        for class_id in id2label
+    }
+
+    display_classification_errors(errors_by_class, id2label)
 
 
 if __name__ == "__main__":

@@ -156,7 +156,7 @@ class CrossFeatureGenerator:
         for combo in tqdm(
             self.feature_combinations_, desc=f"Fitting {self.degree}-way combinations"
         ):
-            combo_name = "X".join(combo)
+            combo_name = self.separator.join(combo)
             combo_list = list(combo)
             is_numerical = self._is_numerical_combo(df, combo_list)
 
@@ -189,7 +189,7 @@ class CrossFeatureGenerator:
         Returns:
             pd.Series: Transformed values for the chunk.
         """
-        combo_name = "X".join(combo)
+        combo_name = self.separator.join(combo)
         combo_list = list(combo)
 
         if combo_name in self.numerical_combos_:
@@ -230,11 +230,11 @@ class CrossFeatureGenerator:
         n_chunks = (n_rows + self.chunk_size - 1) // self.chunk_size
 
         new_columns_dict = {
-            "X".join(combo): np.empty(
+            self.separator.join(combo): np.empty(
                 n_rows,
                 dtype=(
                     np.float32
-                    if "X".join(combo) in self.numerical_combos_
+                    if self.separator.join(combo) in self.numerical_combos_
                     else np.int32
                 ),
             )
@@ -282,7 +282,7 @@ class CrossFeatureGenerator:
             chunk = df.iloc[start_idx:end_idx]
 
             for combo in batch_combos:
-                combo_name = "X".join(combo)
+                combo_name = self.separator.join(combo)
                 result = self._transform_chunk(chunk, combo)
                 new_columns_dict[combo_name][start_idx:end_idx] = result.values
 
@@ -308,7 +308,7 @@ class CrossFeatureGenerator:
             list[str]: List of generated feature names.
         """
         return (
-            ["X".join(combo) for combo in self.feature_combinations_]
+            [self.separator.join(combo) for combo in self.feature_combinations_]
             if self.feature_combinations_
             else []
         )

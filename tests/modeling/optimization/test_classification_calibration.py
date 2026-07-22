@@ -1,4 +1,5 @@
-import importlib.util
+"""Tests for kvbiii_ml.modeling.optimization.classification_calibration module."""
+
 import os
 
 os.environ["MPLBACKEND"] = "Agg"
@@ -8,28 +9,23 @@ import pandas as pd
 import pytest
 from sklearn.datasets import make_classification
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import (
-    BaseCrossValidator,
-    StratifiedKFold,
-    train_test_split,
-)
-
-HAS_MATPLOTLIB = importlib.util.find_spec("matplotlib") is not None
+from sklearn.model_selection import StratifiedKFold
 
 from kvbiii_ml.modeling.optimization.classification_calibration import (
     ClassificationCalibrator,
 )
+from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
+
+_VALID_SELECTION_METRIC_NAMES = [None, "ECE", "Brier Score", "Accuracy"]
 
 
-class SimpleCVProvider:
-    """Minimal CV provider used in tests."""
+@pytest.fixture
+def binary_calibration_data() -> tuple[pd.DataFrame, pd.Series]:
+    """Provides a binary classification dataset for calibration testing.
 
-    def __init__(self, cv: BaseCrossValidator) -> None:
-        self.cv = cv
-
-
-def _binary_dataset() -> tuple[pd.DataFrame, pd.Series]:
-    """Create a binary classification dataset."""
+    Returns:
+        tuple[pd.DataFrame, pd.Series]: Feature matrix and binary target vector.
+    """
     x_arr, y_arr = make_classification(
         n_samples=300,
         n_features=8,
@@ -37,11 +33,17 @@ def _binary_dataset() -> tuple[pd.DataFrame, pd.Series]:
         n_redundant=1,
         random_state=17,
     )
-    return pd.DataFrame(x_arr), pd.Series(y_arr)
+    x_df = pd.DataFrame(x_arr, columns=[f"feature_{i}" for i in range(8)])
+    return x_df, pd.Series(y_arr, name="target")
 
 
-def _multiclass_dataset() -> tuple[pd.DataFrame, pd.Series]:
-    """Create a multiclass classification dataset."""
+@pytest.fixture
+def multiclass_calibration_data() -> tuple[pd.DataFrame, pd.Series]:
+    """Provides a multiclass classification dataset for calibration testing.
+
+    Returns:
+        tuple[pd.DataFrame, pd.Series]: Feature matrix and multiclass target vector.
+    """
     x_arr, y_arr = make_classification(
         n_samples=360,
         n_features=10,
@@ -50,101 +52,295 @@ def _multiclass_dataset() -> tuple[pd.DataFrame, pd.Series]:
         n_classes=3,
         random_state=17,
     )
-    return pd.DataFrame(x_arr), pd.Series(y_arr)
+    x_df = pd.DataFrame(x_arr, columns=[f"feature_{i}" for i in range(10)])
+    return x_df, pd.Series(y_arr, name="target")
 
 
-def _to_binary_proba(proba: np.ndarray) -> np.ndarray:
-    """Normalize probability output to a binary vector."""
-    if proba.ndim == 2 and proba.shape[1] == 2:
-        return proba[:, 1]
-    return proba
+@pytest.fixture
+def multiclass_logistic_regression_estimator(test_settings) -> LogisticRegression:
+    """Provides a LogisticRegression estimator compatible with multiclass targets.
 
+    The shared ``logistic_regression_estimator`` fixture uses the liblinear solver,
+    which does not support more than two classes, so multiclass calibration tests
+    use this lbfgs-solver variant instead.
 
-def test_calibrator_binary_returns_estimator() -> None:
-    """Ensure the calibrator returns a fitted estimator for binary targets."""
-    x_df, y_ser = _binary_dataset()
-    cv_trainer = SimpleCVProvider(
-        cv=StratifiedKFold(n_splits=3, shuffle=True, random_state=17),
+    Args:
+        test_settings: Test configuration fixture.
+
+    Returns:
+        LogisticRegression: Configured multiclass-capable estimator.
+    """
+    return LogisticRegression(
+        max_iter=200, random_state=test_settings.SEED, solver="lbfgs"
     )
-    model = LogisticRegression(max_iter=500, solver="lbfgs")
-    calibrator = ClassificationCalibrator(
-        estimator=model,
-        cross_validator=cv_trainer,
+
+
+@pytest.fixture
+def calibration_cv_trainer(test_settings) -> CrossValidationTrainer:
+    """Provides a CrossValidationTrainer configured for calibration testing.
+
+    Args:
+        test_settings: Test configuration fixture.
+
+    Returns:
+        CrossValidationTrainer: Configured trainer with a stratified 3-fold splitter.
+    """
+    return CrossValidationTrainer(
         metric_name="Log Loss",
+        problem_type="classification",
+        cv=StratifiedKFold(n_splits=3, shuffle=True, random_state=test_settings.SEED),
+        verbose=False,
     )
-    best_estimator = calibrator.fit(x_df, y_ser)
-    proba = best_estimator.predict_proba(x_df.iloc[:12])
-    if proba.shape[0] != 12:
+
+
+@pytest.mark.parametrize("selection_metric_name", _VALID_SELECTION_METRIC_NAMES)
+def test_classificationcalibrator_init_accepts_valid_selection_metric_names(
+    selection_metric_name, logistic_regression_estimator, calibration_cv_trainer
+):
+    """Tests initialization accepts None, built-in, and METRICS-key selection names.
+
+    Args:
+        selection_metric_name (str | None): Selection metric under test.
+        logistic_regression_estimator (LogisticRegression): Configured estimator.
+        calibration_cv_trainer (CrossValidationTrainer): Configured CV trainer.
+
+    Asserts:
+        - No exception is raised for any recognised selection metric name
+        - The stored selection_metric_name matches the constructor argument
+    """
+    calibrator = ClassificationCalibrator(
+        estimator=logistic_regression_estimator,
+        cross_validator=calibration_cv_trainer,
+        selection_metric_name=selection_metric_name,
+    )
+
+    if calibrator.selection_metric_name != selection_metric_name:
         raise AssertionError()
 
-    plot_proba = _to_binary_proba(best_estimator.predict_proba(x_df))
-    if HAS_MATPLOTLIB:
-        calibrator.plot_calibration_curves(
-            y_true=y_ser,
-            proba_by_name={"Best": plot_proba},
-            model_name="Binary",
+
+def test_classificationcalibrator_init_raises_error_for_invalid_selection_metric_name(
+    logistic_regression_estimator, calibration_cv_trainer
+):
+    """Tests initialization rejects unrecognised selection metric names.
+
+    Args:
+        logistic_regression_estimator (LogisticRegression): Configured estimator.
+        calibration_cv_trainer (CrossValidationTrainer): Configured CV trainer.
+
+    Asserts:
+        - ValueError is raised for a name that is neither None, a built-in, nor a METRICS key
+    """
+    with pytest.raises(ValueError, match="is not recognised"):
+        ClassificationCalibrator(
+            estimator=logistic_regression_estimator,
+            cross_validator=calibration_cv_trainer,
+            selection_metric_name="NotARealMetric",
         )
 
 
-def test_calibrator_multiclass_returns_estimator() -> None:
-    """Ensure the calibrator returns a fitted estimator for multiclass targets."""
-    x_df, y_ser = _multiclass_dataset()
-    cv_trainer = SimpleCVProvider(
-        cv=StratifiedKFold(n_splits=3, shuffle=True, random_state=17),
-    )
-    model = LogisticRegression(max_iter=500, solver="lbfgs")
+def test_classificationcalibrator_fit_binary_produces_scores_and_best_method(
+    binary_calibration_data, logistic_regression_estimator, calibration_cv_trainer
+):
+    """Tests fit on binary data populates calibration scores and best method.
+
+    Args:
+        binary_calibration_data (tuple): Feature matrix and binary target vector.
+        logistic_regression_estimator (LogisticRegression): Configured estimator.
+        calibration_cv_trainer (CrossValidationTrainer): Configured CV trainer.
+
+    Asserts:
+        - fit() returns self for chaining
+        - calibration_scores_df_ is populated with an Uncalibrated row
+        - best_method_ is one of the evaluated calibration strategies
+    """
+    X, y = binary_calibration_data
     calibrator = ClassificationCalibrator(
-        estimator=model,
-        cross_validator=cv_trainer,
-        metric_name="Log Loss",
-        id2label={0: "A", 1: "B", 2: "C"},
+        estimator=logistic_regression_estimator, cross_validator=calibration_cv_trainer
     )
-    best_estimator = calibrator.fit(x_df, y_ser)
-    proba = best_estimator.predict_proba(x_df.iloc[:12])
-    if proba.shape[0] != 12:
+
+    fitted = calibrator.fit(X, y)
+
+    if fitted is not calibrator:
+        raise AssertionError()
+    if calibrator.calibration_scores_df_.empty:
+        raise AssertionError()
+    if "Uncalibrated" not in calibrator.calibration_scores_df_.index:
+        raise AssertionError()
+    if calibrator.best_method_ not in {"Uncalibrated", "Isotonic", "Sigmoid"}:
         raise AssertionError()
 
-    plot_proba = best_estimator.predict_proba(x_df)
-    if HAS_MATPLOTLIB:
-        calibrator.plot_calibration_curves(
-            y_true=y_ser,
-            proba_by_name={"Best": plot_proba},
-            model_name="Multiclass",
-        )
 
+def test_classificationcalibrator_fit_multiclass_produces_scores_and_best_method(
+    multiclass_calibration_data,
+    multiclass_logistic_regression_estimator,
+    calibration_cv_trainer,
+):
+    """Tests fit on multiclass data populates calibration scores and best method.
 
-def test_calibrator_supports_explicit_validation_split() -> None:
-    """Ensure explicit validation inputs are honored."""
-    x_df, y_ser = _binary_dataset()
-    X_train, X_valid, y_train, y_valid = train_test_split(
-        x_df,
-        y_ser,
-        test_size=0.25,
-        stratify=y_ser,
-        random_state=17,
-    )
-    cv_trainer = SimpleCVProvider(
-        cv=StratifiedKFold(n_splits=3, shuffle=True, random_state=17),
-    )
-    model = LogisticRegression(max_iter=500, solver="lbfgs")
+    Args:
+        multiclass_calibration_data (tuple): Feature matrix and multiclass target vector.
+        multiclass_logistic_regression_estimator (LogisticRegression): Configured
+            multiclass-capable estimator.
+        calibration_cv_trainer (CrossValidationTrainer): Configured CV trainer.
+
+    Asserts:
+        - fit() returns self for chaining
+        - calibration_scores_df_ is populated with an Uncalibrated row
+        - best_method_ is one of the evaluated calibration strategies
+    """
+    X, y = multiclass_calibration_data
     calibrator = ClassificationCalibrator(
-        estimator=model,
-        cross_validator=cv_trainer,
-        metric_name="Log Loss",
+        estimator=multiclass_logistic_regression_estimator,
+        cross_validator=calibration_cv_trainer,
     )
-    plot_flag = HAS_MATPLOTLIB
-    best_estimator = calibrator.fit(
-        X_train,
-        y_train,
-        X_valid=X_valid,
-        y_valid=y_valid,
-        plot=plot_flag,
-        model_name="Binary",
+
+    fitted = calibrator.fit(X, y)
+
+    if fitted is not calibrator:
+        raise AssertionError()
+    if calibrator.calibration_scores_df_.empty:
+        raise AssertionError()
+    if "Uncalibrated" not in calibrator.calibration_scores_df_.index:
+        raise AssertionError()
+    if calibrator.best_method_ not in {"Uncalibrated", "Isotonic", "Sigmoid"}:
+        raise AssertionError()
+
+
+def test_classificationcalibrator_predict_proba_raises_runtimeerror_before_fit(
+    logistic_regression_estimator, calibration_cv_trainer
+):
+    """Tests predict_proba raises before fit() has been called.
+
+    Args:
+        logistic_regression_estimator (LogisticRegression): Configured estimator.
+        calibration_cv_trainer (CrossValidationTrainer): Configured CV trainer.
+
+    Asserts:
+        - RuntimeError is raised instructing the caller to fit first
+    """
+    calibrator = ClassificationCalibrator(
+        estimator=logistic_regression_estimator, cross_validator=calibration_cv_trainer
     )
-    proba = best_estimator.predict_proba(X_valid.iloc[:12])
-    if proba.shape[0] != 12:
+
+    with pytest.raises(RuntimeError, match=r"Call fit\(\) before predict_proba\(\)\."):
+        calibrator.predict_proba(pd.DataFrame({"feature_0": [0.1, 0.2]}))
+
+
+def test_classificationcalibrator_predict_raises_runtimeerror_before_fit(
+    logistic_regression_estimator, calibration_cv_trainer
+):
+    """Tests predict raises before fit() has been called.
+
+    Args:
+        logistic_regression_estimator (LogisticRegression): Configured estimator.
+        calibration_cv_trainer (CrossValidationTrainer): Configured CV trainer.
+
+    Asserts:
+        - RuntimeError is raised instructing the caller to fit first
+    """
+    calibrator = ClassificationCalibrator(
+        estimator=logistic_regression_estimator, cross_validator=calibration_cv_trainer
+    )
+
+    with pytest.raises(RuntimeError, match=r"Call fit\(\) before predict_proba\(\)\."):
+        calibrator.predict(pd.DataFrame({"feature_0": [0.1, 0.2]}))
+
+
+def test_classificationcalibrator_plot_calibration_curves_raises_runtimeerror_before_fit(
+    logistic_regression_estimator, calibration_cv_trainer
+):
+    """Tests plot_calibration_curves raises before fit() has been called.
+
+    Args:
+        logistic_regression_estimator (LogisticRegression): Configured estimator.
+        calibration_cv_trainer (CrossValidationTrainer): Configured CV trainer.
+
+    Asserts:
+        - RuntimeError is raised instructing the caller to fit first
+    """
+    calibrator = ClassificationCalibrator(
+        estimator=logistic_regression_estimator, cross_validator=calibration_cv_trainer
+    )
+
+    with pytest.raises(
+        RuntimeError, match=r"Call fit\(\) before plot_calibration_curves\(\)\."
+    ):
+        calibrator.plot_calibration_curves()
+
+
+def test_classificationcalibrator_predict_proba_and_predict_work_after_fit_binary(
+    binary_calibration_data, logistic_regression_estimator, calibration_cv_trainer
+):
+    """Tests predict_proba and predict succeed after fit() on binary data.
+
+    Args:
+        binary_calibration_data (tuple): Feature matrix and binary target vector.
+        logistic_regression_estimator (LogisticRegression): Configured estimator.
+        calibration_cv_trainer (CrossValidationTrainer): Configured CV trainer.
+
+    Asserts:
+        - predict_proba returns a (n_samples, 2) matrix with rows summing to 1
+        - predict returns labels drawn from the observed class set
+    """
+    X, y = binary_calibration_data
+    calibrator = ClassificationCalibrator(
+        estimator=logistic_regression_estimator, cross_validator=calibration_cv_trainer
+    )
+    calibrator.fit(X, y)
+
+    proba = calibrator.predict_proba(X.iloc[:20])
+    preds = calibrator.predict(X.iloc[:20])
+
+    if proba.shape != (20, 2):
+        raise AssertionError()
+    if not np.allclose(proba.sum(axis=1), 1.0, atol=1e-6):
+        raise AssertionError()
+    if not (np.all(proba >= 0.0) and np.all(proba <= 1.0)):
+        raise AssertionError()
+    if preds.shape != (20,):
+        raise AssertionError()
+    if not set(np.unique(preds)).issubset(set(np.unique(y))):
+        raise AssertionError()
+
+
+def test_classificationcalibrator_predict_proba_and_predict_work_after_fit_multiclass(
+    multiclass_calibration_data,
+    multiclass_logistic_regression_estimator,
+    calibration_cv_trainer,
+):
+    """Tests predict_proba and predict succeed after fit() on multiclass data.
+
+    Args:
+        multiclass_calibration_data (tuple): Feature matrix and multiclass target vector.
+        multiclass_logistic_regression_estimator (LogisticRegression): Configured
+            multiclass-capable estimator.
+        calibration_cv_trainer (CrossValidationTrainer): Configured CV trainer.
+
+    Asserts:
+        - predict_proba returns a (n_samples, 3) matrix with rows summing to 1
+        - predict returns labels drawn from the observed class set
+    """
+    X, y = multiclass_calibration_data
+    calibrator = ClassificationCalibrator(
+        estimator=multiclass_logistic_regression_estimator,
+        cross_validator=calibration_cv_trainer,
+    )
+    calibrator.fit(X, y)
+
+    proba = calibrator.predict_proba(X.iloc[:20])
+    preds = calibrator.predict(X.iloc[:20])
+
+    if proba.shape != (20, 3):
+        raise AssertionError()
+    if not np.allclose(proba.sum(axis=1), 1.0, atol=1e-6):
+        raise AssertionError()
+    if not (np.all(proba >= 0.0) and np.all(proba <= 1.0)):
+        raise AssertionError()
+    if preds.shape != (20,):
+        raise AssertionError()
+    if not set(np.unique(preds)).issubset(set(np.unique(y))):
         raise AssertionError()
 
 
 if __name__ == "__main__":
-    raise SystemExit(pytest.main([__file__]))
+    print("Run this file with pytest to execute tests.")

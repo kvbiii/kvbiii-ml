@@ -1,285 +1,206 @@
 """Tests for kvbiii_ml.modeling.optimization.cutoff_tuning module."""
 
-from unittest.mock import patch
-
 import numpy as np
+import optuna
 import pandas as pd
 import pytest
-from sklearn.metrics import f1_score
+from sklearn.datasets import make_classification
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import StratifiedKFold
 
-from kvbiii_ml.modeling.optimization.cutoff_tuning import (
-    apply_optimal_cutoff,
-    evaluate_cutoffs,
-    find_optimal_cutoff,
-)
-
-
-@pytest.fixture
-def binary_classification_predictions():
-    """Provides actual targets and predicted probabilities for binary classification.
-
-    Returns:
-        tuple: y_true, y_probas for testing cutoff optimization
-    """
-    np.random.seed(42)
-
-    # Create target values (0/1)
-    y_true = np.random.choice([0, 1], size=1000)
-
-    # Create prediction probabilities with some correlation to true values
-    base_probs = np.random.random(1000) * 0.5  # Base random component
-    # Add signal component (higher probs for actual 1s)
-    y_probas = base_probs + y_true * 0.3 + np.random.normal(0, 0.1, 1000)
-    # Clip to valid probability range
-    y_probas = np.clip(y_probas, 0, 1)
-
-    return y_true, y_probas
+from kvbiii_ml.modeling.optimization.cutoff_tuning import CutoffTunerCV
+from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
 
 @pytest.fixture
-def multi_class_probabilities():
-    """Provides predicted probabilities for multiclass classification.
+def binary_cutoff_data() -> tuple[pd.DataFrame, pd.Series]:
+    """Provides a binary classification dataset for cutoff tuning testing.
 
     Returns:
-        tuple: y_true, y_probas for testing multiclass cutoff optimization
+        tuple[pd.DataFrame, pd.Series]: Feature matrix and binary target vector.
     """
-    np.random.seed(42)
-
-    # Create target values (0/1/2)
-    y_true = np.random.choice([0, 1, 2], size=1000)
-
-    # Create prediction probabilities matrix (samples x classes)
-    y_probas = np.zeros((1000, 3))
-
-    # Base random component for all classes
-    for i in range(3):
-        y_probas[:, i] = np.random.random(1000) * 0.3
-
-    # Add signal component (higher probs for correct class)
-    for i in range(1000):
-        true_class = y_true[i]
-        y_probas[i, true_class] += 0.5
-
-    # Normalize to sum to 1
-    y_probas = y_probas / y_probas.sum(axis=1, keepdims=True)
-
-    return y_true, y_probas
+    x_arr, y_arr = make_classification(
+        n_samples=200,
+        n_features=6,
+        n_informative=4,
+        n_redundant=1,
+        random_state=17,
+    )
+    x_df = pd.DataFrame(x_arr, columns=[f"feature_{i}" for i in range(6)])
+    return x_df, pd.Series(y_arr, name="target")
 
 
-def test_find_optimal_cutoff_binary_classification(binary_classification_predictions):
-    """Tests find_optimal_cutoff for binary classification problems.
+@pytest.fixture
+def multiclass_cutoff_data() -> tuple[pd.DataFrame, pd.Series]:
+    """Provides a multiclass classification dataset for cutoff tuning testing.
+
+    Returns:
+        tuple[pd.DataFrame, pd.Series]: Feature matrix and multiclass target vector.
+    """
+    x_arr, y_arr = make_classification(
+        n_samples=240,
+        n_features=8,
+        n_informative=5,
+        n_redundant=1,
+        n_classes=3,
+        random_state=17,
+    )
+    x_df = pd.DataFrame(x_arr, columns=[f"feature_{i}" for i in range(8)])
+    return x_df, pd.Series(y_arr, name="target")
+
+
+@pytest.fixture
+def multiclass_logistic_regression_estimator(test_settings) -> LogisticRegression:
+    """Provides a LogisticRegression estimator compatible with multiclass targets.
+
+    The shared ``logistic_regression_estimator`` fixture uses the liblinear solver,
+    which does not support more than two classes, so multiclass cutoff tests use
+    this lbfgs-solver variant instead.
 
     Args:
-        binary_classification_predictions: y_true, y_probas fixture
+        test_settings: Test configuration fixture.
 
-    Asserts:
-        - Function returns optimal cutoff value
-        - Optimal cutoff maximizes specified metric
-        - Default metric and cutoff range work as expected
+    Returns:
+        LogisticRegression: Configured multiclass-capable estimator.
     """
-    y_true, y_probas = binary_classification_predictions
-
-    # Test with f1 score metric
-    optimal_cutoff = find_optimal_cutoff(
-        y_true, y_probas, metric="f1", cutoff_range=np.arange(0.1, 0.9, 0.1)
+    return LogisticRegression(
+        max_iter=200, random_state=test_settings.SEED, solver="lbfgs"
     )
 
-    # Check returned value is a valid cutoff
-    if not isinstance(optimal_cutoff, float):
-        raise AssertionError()
-    if not 0 <= optimal_cutoff <= 1:
-        raise AssertionError()
 
-    # Verify optimal cutoff performance is better than default 0.5
-    predictions_default = (y_probas >= 0.5).astype(int)
-    predictions_optimal = (y_probas >= optimal_cutoff).astype(int)
+@pytest.fixture
+def cutoff_cv_trainer(test_settings) -> CrossValidationTrainer:
+    """Provides a CrossValidationTrainer configured for cutoff tuning testing.
 
-    f1_default = f1_score(y_true, predictions_default)
-    f1_optimal = f1_score(y_true, predictions_optimal)
+    Args:
+        test_settings: Test configuration fixture.
 
-    if not f1_optimal >= f1_default:
-        raise AssertionError()
+    Returns:
+        CrossValidationTrainer: Configured trainer with a stratified 3-fold splitter.
+    """
+    return CrossValidationTrainer(
+        metric_name="Balanced Accuracy",
+        problem_type="classification",
+        cv=StratifiedKFold(n_splits=3, shuffle=True, random_state=test_settings.SEED),
+        verbose=False,
+    )
 
 
-@patch("kvbiii_ml.modeling.optimization.cutoff_tuning.roc_curve")
-def test_find_optimal_cutoff_with_roc_optimization(
-    mock_roc_curve, binary_classification_predictions
+def test_cutofftunercv_tune_binary_produces_single_best_cutoff(
+    binary_cutoff_data, logistic_regression_estimator, cutoff_cv_trainer
 ):
-    """Tests find_optimal_cutoff using ROC curve optimization.
+    """Tests tune() on binary data returns a study and a single best cutoff.
 
     Args:
-        mock_roc_curve: Mocked roc_curve function
-        binary_classification_predictions: y_true, y_probas fixture
+        binary_cutoff_data (tuple): Feature matrix and binary target vector.
+        logistic_regression_estimator (LogisticRegression): Configured estimator.
+        cutoff_cv_trainer (CrossValidationTrainer): Configured CV trainer.
 
     Asserts:
-        - ROC curve is used when method='roc'
-        - Correct cutoff is determined from ROC curve
-        - J-statistic (Youden's index) is calculated correctly
+        - tune() returns an optuna Study
+        - best_cutoffs has shape (1,)
+        - best_cutoffs value falls within the searched (0, 1) range
     """
-    y_true, y_probas = binary_classification_predictions
+    X, y = binary_cutoff_data
+    tuner = CutoffTunerCV(
+        estimator=logistic_regression_estimator,
+        cross_validator=cutoff_cv_trainer,
+        n_trials=5,
+        seed=17,
+    )
 
-    # Mock ROC curve output
-    fpr = np.array([0.0, 0.1, 0.2, 0.5, 1.0])
-    tpr = np.array([0.0, 0.7, 0.8, 0.9, 1.0])
-    thresholds = np.array([1.0, 0.8, 0.6, 0.4, 0.0])
-    mock_roc_curve.return_value = (fpr, tpr, thresholds)
+    study = tuner.tune(X, y)
 
-    # Best J-statistic should be at index 1 (tpr - fpr = 0.7 - 0.1 = 0.6)
-    optimal_cutoff = find_optimal_cutoff(y_true, y_probas, method="roc")
-
-    # Check ROC curve was called
-    mock_roc_curve.assert_called_once()
-
-    # Implementation selects threshold at max J-statistic (here 0.6 given array ordering)
-    if optimal_cutoff != 0.6:
+    if not isinstance(study, optuna.study.Study):
+        raise AssertionError()
+    if tuner.best_cutoffs.shape != (1,):
+        raise AssertionError()
+    if not 0.0 <= tuner.best_cutoffs[0] <= 1.0:
         raise AssertionError()
 
 
-def test_evaluate_cutoffs_returns_performance_metrics(
-    binary_classification_predictions,
+def test_cutofftunercv_tune_multiclass_produces_per_class_best_cutoffs(
+    multiclass_cutoff_data, multiclass_logistic_regression_estimator, cutoff_cv_trainer
 ):
-    """Tests evaluate_cutoffs returns performance metrics for different cutoffs.
+    """Tests tune() on multiclass data returns one cutoff per class.
 
     Args:
-        binary_classification_predictions: y_true, y_probas fixture
+        multiclass_cutoff_data (tuple): Feature matrix and multiclass target vector.
+        multiclass_logistic_regression_estimator (LogisticRegression): Configured
+            multiclass-capable estimator.
+        cutoff_cv_trainer (CrossValidationTrainer): Configured CV trainer.
 
     Asserts:
-        - Returns DataFrame with metrics for each cutoff
-        - Metrics are calculated correctly
-        - DataFrame has expected structure
+        - best_cutoffs has shape (n_classes,)
+        - every cutoff falls within the searched (0, 1) range
     """
-    y_true, y_probas = binary_classification_predictions
-    cutoffs = [0.3, 0.5, 0.7]
-
-    result = evaluate_cutoffs(
-        y_true, y_probas, cutoffs, metrics=["accuracy", "precision", "recall", "f1"]
+    X, y = multiclass_cutoff_data
+    tuner = CutoffTunerCV(
+        estimator=multiclass_logistic_regression_estimator,
+        cross_validator=cutoff_cv_trainer,
+        n_trials=5,
+        seed=17,
     )
 
-    # Check return structure
-    if not isinstance(result, pd.DataFrame):
-        raise AssertionError()
-    if "cutoff" not in result.columns:
-        raise AssertionError()
-    if "accuracy" not in result.columns:
-        raise AssertionError()
-    if "precision" not in result.columns:
-        raise AssertionError()
-    if "recall" not in result.columns:
-        raise AssertionError()
-    if "f1" not in result.columns:
-        raise AssertionError()
+    tuner.tune(X, y)
 
-    # Check all cutoffs are evaluated
-    if len(result) != len(cutoffs):
+    n_classes = y.nunique()
+    if tuner.best_cutoffs.shape != (n_classes,):
         raise AssertionError()
-    if set(result["cutoff"]) != set(cutoffs):
-        raise AssertionError()
-
-    # Verify metrics are within valid ranges
-    if not ((0 <= result["accuracy"]).all() and (result["accuracy"] <= 1).all()):
-        raise AssertionError()
-    if not ((0 <= result["precision"]).all() and (result["precision"] <= 1).all()):
-        raise AssertionError()
-    if not ((0 <= result["recall"]).all() and (result["recall"] <= 1).all()):
-        raise AssertionError()
-    if not ((0 <= result["f1"]).all() and (result["f1"] <= 1).all()):
+    if not np.all((tuner.best_cutoffs >= 0.0) & (tuner.best_cutoffs <= 1.0)):
         raise AssertionError()
 
 
-def test_apply_optimal_cutoff_binary_classification(binary_classification_predictions):
-    """Tests apply_optimal_cutoff for binary classification.
+def test_cutofftunercv_predict_raises_runtimeerror_before_tune(
+    logistic_regression_estimator, cutoff_cv_trainer
+):
+    """Tests predict() raises before tune() has been called.
 
     Args:
-        binary_classification_predictions: y_true, y_probas fixture
+        logistic_regression_estimator (LogisticRegression): Configured estimator.
+        cutoff_cv_trainer (CrossValidationTrainer): Configured CV trainer.
 
     Asserts:
-        - Function applies cutoff correctly to probabilities
-        - Returns binary predictions
-        - Works with different cutoff values
+        - RuntimeError is raised instructing the caller to tune first
     """
-    y_true, y_probas = binary_classification_predictions
-
-    # Test with default cutoff (0.5)
-    predictions_default = apply_optimal_cutoff(y_probas)
-    if not set(np.unique(predictions_default)).issubset({0, 1}):
-        raise AssertionError()
-    if predictions_default.shape != y_true.shape:
-        raise AssertionError()
-
-    # Test with custom cutoff
-    custom_cutoff = 0.7
-    predictions_custom = apply_optimal_cutoff(y_probas, cutoff=custom_cutoff)
-
-    # Check predictions match cutoff
-    expected_predictions = (y_probas >= custom_cutoff).astype(int)
-    np.testing.assert_array_equal(predictions_custom, expected_predictions)
-
-
-def test_apply_optimal_cutoff_multiclass(multi_class_probabilities):
-    """Tests apply_optimal_cutoff for multiclass classification.
-
-    Args:
-        multi_class_probabilities: y_true, y_probas fixture for multiclass
-
-    Asserts:
-        - Function handles multiclass probability matrices
-        - Returns class predictions
-        - Argmax is used to determine predictions
-    """
-    y_true, y_probas = multi_class_probabilities
-
-    # Apply cutoff to multiclass probabilities
-    # Functional API only supports binary; emulate multiclass via argmax directly
-    predictions = np.argmax(y_probas, axis=1)
-
-    # Check predictions have expected shape and values
-    if predictions.shape != y_true.shape:
-        raise AssertionError()
-    if not set(np.unique(predictions)).issubset({0, 1, 2}):
-        raise AssertionError()
-
-    # Check predictions match argmax of probabilities
-    expected_predictions = np.argmax(y_probas, axis=1)
-    np.testing.assert_array_equal(predictions, expected_predictions)
-
-
-def test_find_optimal_cutoff_with_custom_metric(binary_classification_predictions):
-    """Tests find_optimal_cutoff with custom metric function.
-
-    Args:
-        binary_classification_predictions: y_true, y_probas fixture
-
-    Asserts:
-        - Custom metric function is used correctly
-        - Function returns optimal cutoff for custom metric
-        - Custom metric receives predicted classes (not probabilities)
-    """
-    y_true, y_probas = binary_classification_predictions
-
-    # Define custom metric (e.g., specificity)
-    def custom_metric(y_true, y_pred):
-        true_negatives = sum((y_true == 0) & (y_pred == 0))
-        false_positives = sum((y_true == 0) & (y_pred == 1))
-        return (
-            true_negatives / (true_negatives + false_positives)
-            if (true_negatives + false_positives) > 0
-            else 0
-        )
-
-    # Find optimal cutoff using custom metric
-    optimal_cutoff = find_optimal_cutoff(
-        y_true, y_probas, metric=custom_metric, cutoff_range=np.arange(0.1, 0.9, 0.1)
+    tuner = CutoffTunerCV(
+        estimator=logistic_regression_estimator, cross_validator=cutoff_cv_trainer
     )
 
-    # Check returned value is a valid cutoff
-    if not isinstance(optimal_cutoff, float):
-        raise AssertionError()
-    if not 0 <= optimal_cutoff <= 1:
-        raise AssertionError()
+    with pytest.raises(RuntimeError, match=r"Call tune\(\) before predict\(\)\."):
+        tuner.predict(pd.DataFrame({"feature_0": [0.1, 0.2]}))
 
-    # Higher cutoff should generally improve specificity for this metric
-    # Any valid cutoff in range acceptable; previous >0.5 assumption removed
-    if not 0 <= optimal_cutoff <= 1:
+
+def test_cutofftunercv_predict_after_tune_returns_expected_predictions(
+    binary_cutoff_data, logistic_regression_estimator, cutoff_cv_trainer
+):
+    """Tests predict() after tune() returns integer class predictions of expected length.
+
+    Args:
+        binary_cutoff_data (tuple): Feature matrix and binary target vector.
+        logistic_regression_estimator (LogisticRegression): Configured estimator.
+        cutoff_cv_trainer (CrossValidationTrainer): Configured CV trainer.
+
+    Asserts:
+        - Predictions length matches the input sample count
+        - Predictions are integer-valued and drawn from the observed class set
+    """
+    X, y = binary_cutoff_data
+    tuner = CutoffTunerCV(
+        estimator=logistic_regression_estimator,
+        cross_validator=cutoff_cv_trainer,
+        n_trials=5,
+        seed=17,
+    )
+    tuner.tune(X, y)
+
+    predictions = tuner.predict(X)
+
+    if len(predictions) != len(X):
+        raise AssertionError()
+    if not np.issubdtype(predictions.dtype, np.integer):
+        raise AssertionError()
+    if not set(np.unique(predictions)).issubset(set(np.unique(y))):
         raise AssertionError()
 
 

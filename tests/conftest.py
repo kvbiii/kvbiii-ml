@@ -46,23 +46,23 @@ def test_settings() -> TestSettings:
 
 
 @pytest.fixture
-def sample_dataframe(test_cfg: TestSettings) -> pd.DataFrame:
+def sample_dataframe(test_settings: TestSettings) -> pd.DataFrame:
     """Provides a sample DataFrame for testing purposes.
 
     Args:
-        test_cfg (TestSettings): Test settings fixture.
+        test_settings (TestSettings): Test settings fixture.
 
     Returns:
         pd.DataFrame: Sample DataFrame with mixed data types for comprehensive testing.
     """
-    np.random.seed(test_cfg.SEED)
+    np.random.seed(test_settings.SEED)
     return pd.DataFrame(
         {
-            "numeric_1": np.random.rand(test_cfg.N_SAMPLES),
-            "numeric_2": np.random.rand(test_cfg.N_SAMPLES),
-            "categorical_1": np.random.choice(["A", "B", "C"], size=test_cfg.N_SAMPLES),
-            "categorical_2": np.random.choice(["X", "Y"], size=test_cfg.N_SAMPLES),
-            "integer_1": np.random.randint(0, 10, size=test_cfg.N_SAMPLES),
+            "numeric_1": np.random.rand(test_settings.N_SAMPLES),
+            "numeric_2": np.random.rand(test_settings.N_SAMPLES),
+            "categorical_1": np.random.choice(["A", "B", "C"], size=test_settings.N_SAMPLES),
+            "categorical_2": np.random.choice(["X", "Y"], size=test_settings.N_SAMPLES),
+            "integer_1": np.random.randint(0, 10, size=test_settings.N_SAMPLES),
         }
     )
 
@@ -163,7 +163,6 @@ def mock_estimator() -> Mock:
         ["feature_0", "feature_1", "feature_2", "feature_3", "feature_4"]
     )
 
-    # Configure fit method to accept various parameters
     def mock_fit(X, y, **kwargs):
         return estimator
 
@@ -179,7 +178,7 @@ def mock_transformer() -> Mock:
     Returns:
         Mock: Mock transformer with fit, transform, and fit_transform methods configured.
     """
-    transformer = Mock()  # Remove spec=TransformerMixin restriction
+    transformer = Mock()
     transformer.fit.return_value = transformer
     transformer.transform.return_value = pd.DataFrame({"transformed": [1, 2, 3, 4, 5]})
     transformer.fit_transform.return_value = pd.DataFrame(
@@ -201,9 +200,8 @@ def mock_processor() -> Mock:
     """
     processor = Mock()
 
-    # Return data that maintains the same feature structure
     def mock_fit_resample(X, y):
-        return X.copy(), y.copy()  # Return the same data structure
+        return X.copy(), y.copy()
 
     processor.fit_resample = Mock(side_effect=mock_fit_resample)
     return processor
@@ -293,7 +291,6 @@ def sample_probabilities(test_settings: TestSettings) -> np.ndarray:
     """
     np.random.seed(test_settings.SEED)
     probs = np.random.rand(test_settings.N_SAMPLES, 2)
-    # Normalize to make valid probabilities
     return probs / probs.sum(axis=1, keepdims=True)
 
 

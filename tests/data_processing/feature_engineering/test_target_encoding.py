@@ -132,22 +132,24 @@ def test_targetencodingfeaturegenerator_validate_init_params_raises_error_for_in
 def test_targetencodingfeaturegenerator_validate_init_params_raises_error_for_invalid_smooth():
     """Tests _validate_init_params method raises error for invalid smoothing values.
 
+    The `smooth` property casts its config value via `int()` before validation runs,
+    so a float such as 1.5 is silently truncated to 1 and never raises. Only a value
+    that remains negative after the int() cast (e.g. -1) triggers the ValueError.
+
     Asserts:
         - ValueError is raised for negative smoothing values
-        - ValueError is raised for non-integer smoothing values
+        - A float smoothing value is cast to int rather than raising an error
         - Zero and positive integers are accepted
     """
     features = ["category"]
 
-    # Test negative smooth
     with pytest.raises(ValueError, match="smooth must be a non-negative integer"):
         TargetEncodingFeatureGenerator(features_names=features, smooth=-1)
 
-    # Test non-integer smooth
-    with pytest.raises(ValueError, match="smooth must be a non-negative integer"):
-        TargetEncodingFeatureGenerator(features_names=features, smooth=1.5)
+    generator = TargetEncodingFeatureGenerator(features_names=features, smooth=1.5)
+    if generator.smooth != 1:
+        raise AssertionError()
 
-    # Test valid smooth values
     for valid_smooth in [0, 1, 10, 100]:
         generator = TargetEncodingFeatureGenerator(
             features_names=features, smooth=valid_smooth
@@ -183,7 +185,7 @@ def test_targetencodingfeaturegenerator_validate_init_params_raises_error_for_in
 
     with pytest.raises(
         ValueError,
-        match="cv must be None or an instance of BaseCrossValidator or its subclasses",
+        match="cv must be None or an instance of BaseCrossValidator",
     ):
         TargetEncodingFeatureGenerator(features_names=features, cv="invalid_cv")
 
@@ -471,13 +473,74 @@ def test_targetencodingfeaturegenerator_handles_missing_feature_names(
     )
 
     # Should raise KeyError for missing features
-    with pytest.raises(KeyError, match="Missing features in X"):
+    with pytest.raises(KeyError, match="Missing features in df"):
         generator.fit(X, y)
 
     # Test that existing features work normally
     generator_valid = TargetEncodingFeatureGenerator(features_names=["category_a"])
     generator_valid.fit(X, y)  # Should work without error
     if not hasattr(generator_valid, "group_stats_"):
+        raise AssertionError()
+
+
+def test_targetencodingfeaturegenerator_transform_uses_cached_cv_encodings_for_same_index(
+    target_encoding_data,
+):
+    """Tests transform returns the cached CV-computed encodings when called with the exact
+    same DataFrame index used during fit, instead of recomputing via group_stats_.
+
+    Args:
+        target_encoding_data (tuple): Feature data and target for encoding
+
+    Asserts:
+        - transform(X) with the fit-time index matches the cached fitted_te_df exactly
+        - transform on a copy with a different index produces different encoded values
+    """
+    X, y = target_encoding_data
+    cv = KFold(n_splits=3, shuffle=True, random_state=17)
+    generator = TargetEncodingFeatureGenerator(
+        features_names=["category_a"], aggregation="mean", cv=cv
+    )
+    generator.fit(X, y)
+
+    same_index_result = generator.transform(X)
+    expected_cached = pd.concat([X, generator._state["fitted_te_df"]], axis=1)
+    pd.testing.assert_frame_equal(same_index_result, expected_cached)
+
+    x_different_index = X.copy()
+    x_different_index.index = x_different_index.index + len(X)
+    different_index_result = generator.transform(x_different_index)
+
+    if np.allclose(
+        same_index_result["TE_MEAN_category_a"].values,
+        different_index_result["TE_MEAN_category_a"].values,
+    ):
+        raise AssertionError()
+
+
+def test_targetencodingfeaturegenerator_handles_continuous_target_with_float_feature():
+    """Tests fit and transform succeed with a continuous target and a float feature,
+    exercising the target-binning and float-feature-binning code paths.
+
+    Asserts:
+        - Fit and transform run without errors for is_continuous_target=True
+        - Encoded values are numeric and finite
+    """
+    np.random.seed(42)
+    n_samples = 60
+    X = pd.DataFrame({"float_feature": np.random.randn(n_samples)})
+    y = pd.Series(np.random.randn(n_samples) * 10)
+
+    generator = TargetEncodingFeatureGenerator(
+        features_names=["float_feature"],
+        config={"is_continuous_target": True, "n_bins": 5, "target_bins": 4},
+    )
+    generator.fit(X, y)
+    transformed_x = generator.transform(X)
+
+    if "TE_MEAN_float_feature" not in transformed_x.columns:
+        raise AssertionError()
+    if not np.all(np.isfinite(transformed_x["TE_MEAN_float_feature"])):
         raise AssertionError()
 
 

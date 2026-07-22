@@ -42,13 +42,12 @@ def test_basetrainer_fit_estimator_handles_eval_set_parameter(
 
     Asserts:
         - eval_set parameter is included when available in estimator signature
-        - Validation data is properly formatted as list of tuples
+        - Validation data is formatted as [(X_train, y_train), (X_valid, y_valid)]
         - Other parameters are still handled correctly
     """
     mock_estimator = Mock()
     mock_estimator.fit.return_value = mock_estimator
 
-    # Mock signature to include eval_set parameter
     with patch("kvbiii_ml.modeling.training.base_trainer.signature") as mock_sig:
         mock_sig.return_value.parameters = {"eval_set": Mock(), "verbose": Mock()}
 
@@ -61,12 +60,16 @@ def test_basetrainer_fit_estimator_handles_eval_set_parameter(
             sample_series,
             X_valid=X_valid,
             y_valid=y_valid,
+            verbose=False,
         )
 
         call_args = mock_estimator.fit.call_args
         if "eval_set" not in call_args.kwargs:
             raise AssertionError()
-        if call_args.kwargs["eval_set"] != [(X_valid, y_valid)]:
+        if call_args.kwargs["eval_set"] != [
+            (sample_dataframe, sample_series),
+            (X_valid, y_valid),
+        ]:
             raise AssertionError()
         if call_args.kwargs["verbose"] is not False:
             raise AssertionError()
@@ -317,29 +320,27 @@ def test_basetrainer_predict_proba_returns_probabilities_when_data_provided(
     np.testing.assert_array_equal(probabilities, expected_proba)
 
 
-def test_basetrainer_predict_proba_returns_positive_class_for_binary_classification(
+def test_basetrainer_predict_proba_returns_full_matrix_for_binary_classification(
     mock_estimator,
 ):
-    """Tests predict_proba method returns only positive class probabilities for binary classification.
+    """Tests predict_proba method returns the full probability matrix for binary classification.
 
     Args:
         mock_estimator (Mock): Mock estimator with predict_proba method
 
     Asserts:
-        - Binary classification probabilities are reduced to positive class only
-        - Shape is reduced from (n_samples, 2) to (n_samples,)
-        - Positive class probabilities (column 1) are returned
+        - Binary classification probabilities are returned unchanged
+        - Shape stays (n_samples, 2), not reduced to (n_samples,)
+        - Both class probability columns are returned
     """
     X_test = pd.DataFrame({"feature": [1, 2, 3]})
-    # Binary classification probabilities
     binary_proba = np.array([[0.8, 0.2], [0.3, 0.7], [0.9, 0.1]])
     mock_estimator.predict_proba.return_value = binary_proba
 
     probabilities = BaseTrainer.predict_proba(mock_estimator, X_test)
 
-    expected = binary_proba[:, 1]  # Positive class only
-    np.testing.assert_array_equal(probabilities, expected)
-    if probabilities.shape != (3,):
+    np.testing.assert_array_equal(probabilities, binary_proba)
+    if probabilities.shape != (3, 2):
         raise AssertionError()
 
 

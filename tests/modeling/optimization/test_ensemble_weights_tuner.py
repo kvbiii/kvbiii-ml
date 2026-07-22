@@ -205,7 +205,7 @@ class TestEnsembleWeightTunerCV:
             estimators=[logistic_regression_estimator], cross_validator=cross_validator
         )
 
-        preds_list = [np.array([1.0, 2.0, 3.0]), np.array([2.0, 4.0, 6.0])]
+        preds_list = [pd.Series([1.0, 2.0, 3.0]), pd.Series([2.0, 4.0, 6.0])]
         weights = np.array([0.3, 0.7])
 
         result = tuner._blend_predictions(preds_list, weights)
@@ -235,8 +235,8 @@ class TestEnsembleWeightTunerCV:
         )
 
         preds_list = [
-            np.array([[0.2, 0.8], [0.6, 0.4]]),
-            np.array([[0.3, 0.7], [0.5, 0.5]]),
+            pd.DataFrame([[0.2, 0.8], [0.6, 0.4]]),
+            pd.DataFrame([[0.3, 0.7], [0.5, 0.5]]),
         ]
         weights = np.array([0.4, 0.6])
 
@@ -244,7 +244,6 @@ class TestEnsembleWeightTunerCV:
 
         if result.shape != (2, 2):
             raise AssertionError()
-        # Check that probabilities sum to 1
         np.testing.assert_array_almost_equal(result.sum(axis=1), [1.0, 1.0])
 
     def test_ensembleweighttuner_objective_regression_metric(
@@ -269,12 +268,11 @@ class TestEnsembleWeightTunerCV:
             cross_validator=cross_validator,
         )
 
-        # Mock trial
         mock_trial = Mock()
-        mock_trial.suggest_float.side_effect = [0.3, 0.7]  # Two weights
+        mock_trial.suggest_float.side_effect = [0.3, 0.7]
 
-        y_true = np.array([1.0, 2.0, 3.0])
-        preds_list = [np.array([1.1, 2.1, 3.1]), np.array([0.9, 1.9, 2.9])]
+        y_true = pd.Series([1.0, 2.0, 3.0])
+        preds_list = [pd.Series([1.1, 2.1, 3.1]), pd.Series([0.9, 1.9, 2.9])]
 
         result = tuner._objective(mock_trial, y_true, preds_list)
 
@@ -305,14 +303,13 @@ class TestEnsembleWeightTunerCV:
             cross_validator=cross_validator,
         )
 
-        # Mock trial
         mock_trial = Mock()
         mock_trial.suggest_float.side_effect = [0.4, 0.6]
 
-        y_true = np.array([0, 1, 0])
+        y_true = pd.Series([0, 1, 0])
         preds_list = [
-            np.array([0.2, 0.8, 0.3]),  # Probabilities for class 1
-            np.array([0.1, 0.9, 0.2]),
+            pd.Series([0.2, 0.8, 0.3]),
+            pd.Series([0.1, 0.9, 0.2]),
         ]
 
         result = tuner._objective(mock_trial, y_true, preds_list)
@@ -345,12 +342,11 @@ class TestEnsembleWeightTunerCV:
             allow_negative_weights=True,
         )
 
-        # Mock trial with negative weights
         mock_trial = Mock()
         mock_trial.suggest_float.side_effect = [-0.3, 0.7]
 
-        y_true = np.array([1.0, 2.0, 3.0])
-        preds_list = [np.array([1.1, 2.1, 3.1]), np.array([0.9, 1.9, 2.9])]
+        y_true = pd.Series([1.0, 2.0, 3.0])
+        preds_list = [pd.Series([1.1, 2.1, 3.1]), pd.Series([0.9, 1.9, 2.9])]
 
         result = tuner._objective(mock_trial, y_true, preds_list)
 
@@ -395,14 +391,13 @@ class TestEnsembleWeightTunerCV:
         tuner = EnsembleWeightTunerCV(
             estimators=[logistic_regression_estimator, logistic_regression_estimator],
             cross_validator=cross_validator,
-            n_trials=2,  # Small number for testing
+            n_trials=2,
         )
 
-        # Mock _perform_cv to avoid actual training
         tuner._perform_cv = Mock(
             return_value=(
-                np.array([0, 1, 0, 1]),
-                [np.array([0.2, 0.8, 0.3, 0.7]), np.array([0.1, 0.9, 0.2, 0.8])],
+                pd.Series([0, 1, 0, 1]),
+                [pd.Series([0.2, 0.8, 0.3, 0.7]), pd.Series([0.1, 0.9, 0.2, 0.8])],
             )
         )
 
@@ -446,7 +441,7 @@ class TestEnsembleWeightTunerCV:
 
         y_true, preds_list = tuner._perform_cv(X, y)
 
-        if not isinstance(y_true, np.ndarray):
+        if not isinstance(y_true, pd.Series):
             raise AssertionError()
         if not isinstance(preds_list, list):
             raise AssertionError()
@@ -565,12 +560,11 @@ class TestEnsembleWeightTunerCV:
         tuner = EnsembleWeightTunerCV(
             estimators=[logistic_regression_estimator],
             cross_validator=cross_validator,
-            n_trials=1,  # Minimal for testing
+            n_trials=1,
         )
 
-        # Mock _perform_cv for quick testing
         tuner._perform_cv = Mock(
-            return_value=(np.array([0, 1, 0]), [np.array([0.2, 0.8, 0.3])])
+            return_value=(pd.Series([0, 1, 0]), [pd.Series([0.2, 0.8, 0.3])])
         )
 
         tuner.tune(X, y)

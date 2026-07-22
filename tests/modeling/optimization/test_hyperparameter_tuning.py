@@ -1,286 +1,235 @@
 """Tests for kvbiii_ml.modeling.optimization.hyperparameter_tuning module."""
 
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import numpy as np
+import optuna
 import pandas as pd
 import pytest
+from sklearn.datasets import make_classification
+from sklearn.model_selection import StratifiedKFold, train_test_split
 
-from kvbiii_ml.modeling.optimization.hyperparameter_tuning import (
-    evaluate_hyperparameters,
-    find_best_hyperparameters,
-    optimize_hyperparameters,
+from kvbiii_ml.modeling.optimization.hyperparameter_tuning import RandomSearchCV
+from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
+
+
+@pytest.fixture
+def hyperparam_classification_data() -> tuple[pd.DataFrame, pd.Series]:
+    """Provides a binary classification dataset for hyperparameter tuning testing.
+
+    Returns:
+        tuple[pd.DataFrame, pd.Series]: Feature matrix and binary target vector.
+    """
+    x_arr, y_arr = make_classification(
+        n_samples=180,
+        n_features=5,
+        n_informative=3,
+        n_redundant=1,
+        random_state=21,
+    )
+    x_df = pd.DataFrame(x_arr, columns=[f"col_{i}" for i in range(5)])
+    return x_df, pd.Series(y_arr, name="target")
+
+
+@pytest.fixture
+def hyperparam_cv_trainer(test_settings) -> CrossValidationTrainer:
+    """Provides a CrossValidationTrainer configured for hyperparameter tuning testing.
+
+    Args:
+        test_settings: Test configuration fixture.
+
+    Returns:
+        CrossValidationTrainer: Configured trainer with a stratified 3-fold splitter.
+    """
+    return CrossValidationTrainer(
+        metric_name="Accuracy",
+        problem_type="classification",
+        cv=StratifiedKFold(n_splits=3, shuffle=True, random_state=test_settings.SEED),
+        verbose=False,
+    )
+
+
+@pytest.fixture
+def real_optuna_trial() -> optuna.trial.Trial:
+    """Provides a real Optuna trial obtained from a local study via ask().
+
+    Returns:
+        optuna.trial.Trial: A live trial usable with suggest_* methods.
+    """
+    study = optuna.create_study()
+    return study.ask()
+
+
+def test_randomsearchcv_tune_uses_holdout_when_valid_data_provided(
+    hyperparam_classification_data, logistic_regression_estimator, hyperparam_cv_trainer
+):
+    """Tests tune() takes the hold-out branch when X_valid/y_valid are supplied.
+
+    Args:
+        hyperparam_classification_data (tuple): Feature matrix and binary target vector.
+        logistic_regression_estimator (LogisticRegression): Configured estimator.
+        hyperparam_cv_trainer (CrossValidationTrainer): Configured CV trainer.
+
+    Asserts:
+        - tune() returns an optuna Study with a completed best trial
+        - The searched hyperparameter appears in best_params
+    """
+    X, y = hyperparam_classification_data
+    X_train, X_valid, y_train, y_valid = train_test_split(
+        X, y, test_size=0.3, random_state=17, stratify=y
+    )
+    tuner = RandomSearchCV(cross_validator=hyperparam_cv_trainer, n_trials=3, seed=17)
+    params_grid = {"C": ("float", [0.01, 1.0], {"log": True})}
+
+    study = tuner.tune(
+        logistic_regression_estimator,
+        X_train,
+        y_train,
+        params_grid,
+        X_valid=X_valid,
+        y_valid=y_valid,
+    )
+
+    if study.best_value is None:
+        raise AssertionError()
+    if "C" not in study.best_params:
+        raise AssertionError()
+
+
+def test_randomsearchcv_tune_uses_cross_validation_when_no_valid_data(
+    hyperparam_classification_data, logistic_regression_estimator, hyperparam_cv_trainer
+):
+    """Tests tune() takes the CV branch when no hold-out data is supplied.
+
+    Args:
+        hyperparam_classification_data (tuple): Feature matrix and binary target vector.
+        logistic_regression_estimator (LogisticRegression): Configured estimator.
+        hyperparam_cv_trainer (CrossValidationTrainer): Configured CV trainer.
+
+    Asserts:
+        - tune() returns an optuna Study with a completed best trial
+        - The searched hyperparameter appears in best_params
+    """
+    X, y = hyperparam_classification_data
+    tuner = RandomSearchCV(cross_validator=hyperparam_cv_trainer, n_trials=3, seed=17)
+    params_grid = {"C": ("float", [0.01, 1.0], {"log": True})}
+
+    study = tuner.tune(logistic_regression_estimator, X, y, params_grid)
+
+    if study.best_value is None:
+        raise AssertionError()
+    if "C" not in study.best_params:
+        raise AssertionError()
+
+
+def test_randomsearchcv_tune_downsamples_when_rows_exceed_max_samples(
+    logistic_regression_estimator, hyperparam_cv_trainer
+):
+    """Tests tune() completes without error when the dataset exceeds max_samples.
+
+    Args:
+        logistic_regression_estimator (LogisticRegression): Configured estimator.
+        hyperparam_cv_trainer (CrossValidationTrainer): Configured CV trainer.
+
+    Asserts:
+        - The CV objective downsamples rows above max_samples and still completes
+        - tune() returns an optuna Study with a valid best_value
+    """
+    np.random.seed(17)
+    x_arr, y_arr = make_classification(
+        n_samples=60,
+        n_features=5,
+        n_informative=3,
+        random_state=17,
+    )
+    X = pd.DataFrame(x_arr, columns=[f"feature_{i}" for i in range(5)])
+    y = pd.Series(y_arr, name="target")
+
+    tuner = RandomSearchCV(
+        cross_validator=hyperparam_cv_trainer, n_trials=3, seed=17, max_samples=30
+    )
+    params_grid = {"C": ("float", [0.01, 1.0], {"log": True})}
+
+    study = tuner.tune(logistic_regression_estimator, X, y, params_grid)
+
+    if study.best_value is None:
+        raise AssertionError()
+
+
+@pytest.mark.parametrize(
+    ("param_type", "param_value", "param_kwargs", "expected_type"),
+    [
+        ("int", [1, 10], {}, int),
+        ("float", [0.01, 1.0], {"log": True}, float),
+        ("float", [0.0, 1.0], {"step": 0.1}, float),
+        ("categorical", ["a", "b", "c"], {}, str),
+    ],
 )
-
-
-@pytest.fixture
-def tuning_data(test_settings):
-    """Provides data for hyperparameter tuning testing.
-
-    Args:
-        test_settings: Test configuration fixture
-
-    Returns:
-        tuple: X, y data for hyperparameter optimization
-    """
-    np.random.seed(test_settings.SEED)
-    X = pd.DataFrame(
-        {
-            "feature1": np.random.normal(0, 1, 100),
-            "feature2": np.random.normal(0, 1, 100),
-            "feature3": np.random.normal(0, 1, 100),
-        }
-    )
-    y = (X["feature1"] > 0).astype(int)
-    return X, y
-
-
-@pytest.fixture
-def sample_param_grid():
-    """Provides a sample parameter grid for hyperparameter tuning.
-
-    Returns:
-        dict: Parameter grid for testing
-    """
-    return {
-        "learning_rate": [0.01, 0.1, 0.3],
-        "max_depth": [3, 5, 7],
-        "min_child_weight": [1, 3, 5],
-    }
-
-
-@patch("kvbiii_ml.modeling.optimization.hyperparameter_tuning.optuna")
-def test_optimize_hyperparameters_uses_optuna_correctly(
-    mock_optuna, tuning_data, mock_estimator, sample_param_grid
+def test_randomsearchcv_get_param_samples_expected_types(
+    real_optuna_trial, param_type, param_value, param_kwargs, expected_type
 ):
-    """Tests optimize_hyperparameters uses Optuna correctly.
+    """Tests get_param samples values of the expected type for each supported param_type.
 
     Args:
-        mock_optuna: Mocked Optuna library
-        tuning_data: X, y data fixture
-        mock_estimator: Mock estimator
-        sample_param_grid: Parameter grid fixture
+        real_optuna_trial (optuna.trial.Trial): Live trial fixture.
+        param_type (str): Parameter type under test.
+        param_value (list): Bounds or choices for the parameter.
+        param_kwargs (dict): Extra keyword arguments (log/step).
+        expected_type (type): Expected Python type of the sampled value.
 
     Asserts:
-        - Optuna study is created with correct parameters
-        - Objective function is passed to optimize
-        - Best parameters and values are returned
+        - The sampled value is an instance of the expected type
+        - Numeric values fall within the requested bounds
     """
-    X, y = tuning_data
+    tuner = RandomSearchCV(cross_validator=Mock(), n_trials=1, seed=17)
 
-    # Configure mock study
-    mock_study = Mock()
-    mock_optuna.create_study.return_value = mock_study
-    mock_study.best_params = {"learning_rate": 0.1, "max_depth": 5}
-    mock_study.best_value = 0.95
-
-    result = optimize_hyperparameters(
-        mock_estimator,
-        X,
-        y,
-        param_distributions=sample_param_grid,
-        n_trials=20,
-        cv=3,
-        metric="accuracy",
-        direction="maximize",
+    value = tuner.get_param(
+        real_optuna_trial, "param", (param_type, param_value, param_kwargs)
     )
 
-    # Check Optuna was used correctly
-    mock_optuna.create_study.assert_called_once()
-    if mock_optuna.create_study.call_args[1]["direction"] != "maximize":
+    if not isinstance(value, expected_type):
         raise AssertionError()
-
-    # Check study optimize was called
-    mock_study.optimize.assert_called_once()
-    if mock_study.optimize.call_args[1]["n_trials"] != 20:
-        raise AssertionError()
-
-    # Check return value structure
-    if "best_params" not in result:
-        raise AssertionError()
-    if "best_score" not in result:
-        raise AssertionError()
-    if result["best_params"] != mock_study.best_params:
-        raise AssertionError()
-    if result["best_score"] != mock_study.best_value:
-        raise AssertionError()
+    if param_type in {"int", "float"}:
+        low, high = param_value
+        if not low <= value <= high:
+            raise AssertionError()
+    else:
+        if value not in param_value:
+            raise AssertionError()
 
 
-@patch("kvbiii_ml.modeling.optimization.hyperparameter_tuning.GridSearchCV")
-def test_find_best_hyperparameters_with_grid_search(
-    mock_grid_search, tuning_data, mock_estimator, sample_param_grid
-):
-    """Tests find_best_hyperparameters using GridSearchCV.
+def test_randomsearchcv_get_param_returns_constant_without_sampling(real_optuna_trial):
+    """Tests get_param returns the first element for a constant param_type.
 
     Args:
-        mock_grid_search: Mocked GridSearchCV
-        tuning_data: X, y data fixture
-        mock_estimator: Mock estimator
-        sample_param_grid: Parameter grid fixture
+        real_optuna_trial (optuna.trial.Trial): Live trial fixture.
 
     Asserts:
-        - GridSearchCV is created with correct parameters
-        - Grid search is fitted with data
-        - Best parameters and score are returned
+        - The returned value equals the constant's sole list entry
     """
-    X, y = tuning_data
+    tuner = RandomSearchCV(cross_validator=Mock(), n_trials=1, seed=17)
 
-    # Configure mock grid search
-    grid_instance = Mock()
-    mock_grid_search.return_value = grid_instance
-    grid_instance.best_params_ = {"learning_rate": 0.1, "max_depth": 5}
-    grid_instance.best_score_ = 0.95
-    grid_instance.cv_results_ = {"mean_test_score": np.array([0.9, 0.95, 0.85])}
+    value = tuner.get_param(real_optuna_trial, "param", ("constant", ["fixed_value"]))
 
-    result = find_best_hyperparameters(
-        mock_estimator,
-        X,
-        y,
-        param_grid=sample_param_grid,
-        cv=3,
-        scoring="accuracy",
-        method="grid",
-    )
-
-    # Check GridSearchCV was created correctly
-    mock_grid_search.assert_called_once()
-    if mock_grid_search.call_args[1]["estimator"] is not mock_estimator:
-        raise AssertionError()
-    if mock_grid_search.call_args[1]["param_grid"] is not sample_param_grid:
-        raise AssertionError()
-    if mock_grid_search.call_args[1]["cv"] != 3:
-        raise AssertionError()
-    if mock_grid_search.call_args[1]["scoring"] != "accuracy":
-        raise AssertionError()
-
-    # Check fit was called
-    grid_instance.fit.assert_called_once_with(X, y)
-
-    # Check return value structure
-    if "best_params" not in result:
-        raise AssertionError()
-    if "best_score" not in result:
-        raise AssertionError()
-    if "cv_results" not in result:
-        raise AssertionError()
-    if result["best_params"] != grid_instance.best_params_:
-        raise AssertionError()
-    if result["best_score"] != grid_instance.best_score_:
+    if value != "fixed_value":
         raise AssertionError()
 
 
-@patch("kvbiii_ml.modeling.optimization.hyperparameter_tuning.RandomizedSearchCV")
-def test_find_best_hyperparameters_with_random_search(
-    mock_random_search, tuning_data, mock_estimator, sample_param_grid
+def test_randomsearchcv_get_param_raises_error_for_unknown_param_type(
+    real_optuna_trial,
 ):
-    """Tests find_best_hyperparameters using RandomizedSearchCV.
+    """Tests get_param raises ValueError for an unsupported param_type.
 
     Args:
-        mock_random_search: Mocked RandomizedSearchCV
-        tuning_data: X, y data fixture
-        mock_estimator: Mock estimator
-        sample_param_grid: Parameter grid fixture
+        real_optuna_trial (optuna.trial.Trial): Live trial fixture.
 
     Asserts:
-        - RandomizedSearchCV is created with correct parameters
-        - Random search is fitted with data
-        - Best parameters and score are returned
+        - ValueError is raised mentioning the unknown param_type
     """
-    X, y = tuning_data
+    tuner = RandomSearchCV(cross_validator=Mock(), n_trials=1, seed=17)
 
-    # Configure mock random search
-    random_instance = Mock()
-    mock_random_search.return_value = random_instance
-    random_instance.best_params_ = {"learning_rate": 0.1, "max_depth": 5}
-    random_instance.best_score_ = 0.95
-    random_instance.cv_results_ = {"mean_test_score": np.array([0.9, 0.95, 0.85])}
-
-    result = find_best_hyperparameters(
-        mock_estimator,
-        X,
-        y,
-        param_grid=sample_param_grid,
-        cv=3,
-        scoring="accuracy",
-        method="random",
-        n_iter=10,
-    )
-
-    # Check RandomizedSearchCV was created correctly
-    mock_random_search.assert_called_once()
-    if mock_random_search.call_args[1]["estimator"] is not mock_estimator:
-        raise AssertionError()
-    if mock_random_search.call_args[1]["param_distributions"] is not sample_param_grid:
-        raise AssertionError()
-    if mock_random_search.call_args[1]["cv"] != 3:
-        raise AssertionError()
-    if mock_random_search.call_args[1]["scoring"] != "accuracy":
-        raise AssertionError()
-    if mock_random_search.call_args[1]["n_iter"] != 10:
-        raise AssertionError()
-
-    # Check fit was called
-    random_instance.fit.assert_called_once_with(X, y)
-
-    # Check return value structure
-    if "best_params" not in result:
-        raise AssertionError()
-    if "best_score" not in result:
-        raise AssertionError()
-    if result["best_params"] != random_instance.best_params_:
-        raise AssertionError()
-    if result["best_score"] != random_instance.best_score_:
-        raise AssertionError()
-
-
-@patch("kvbiii_ml.modeling.optimization.hyperparameter_tuning.cross_val_score")
-def test_evaluate_hyperparameters_uses_cross_validation(
-    mock_cv_score, tuning_data, mock_estimator
-):
-    """Tests evaluate_hyperparameters uses cross-validation correctly.
-
-    Args:
-        mock_cv_score: Mocked cross_val_score function
-        tuning_data: X, y data fixture
-        mock_estimator: Mock estimator
-
-    Asserts:
-        - cross_val_score is called with correct parameters
-        - Parameters are applied to estimator
-        - Score and statistics are returned
-    """
-    X, y = tuning_data
-    params = {"learning_rate": 0.1, "max_depth": 5}
-
-    # Configure mock
-    mock_cv_score.return_value = np.array([0.94, 0.96, 0.95])
-
-    score = evaluate_hyperparameters(
-        mock_estimator, X, y, params, cv=3, scoring="accuracy"
-    )
-
-    # Check parameters were set
-    mock_estimator.set_params.assert_called_once_with(**params)
-
-    # Check cross_val_score was called correctly
-    mock_cv_score.assert_called_once()
-    call_args = mock_cv_score.call_args[0]
-    if call_args[0] is not mock_estimator:
-        raise AssertionError()
-    if call_args[1] is not X:
-        raise AssertionError()
-    if call_args[2] is not y:
-        raise AssertionError()
-
-    call_kwargs = mock_cv_score.call_args[1]
-    if call_kwargs["cv"] != 3:
-        raise AssertionError()
-    if call_kwargs["scoring"] != "accuracy":
-        raise AssertionError()
-
-    # Check returned score is mean of CV scores
-    if score != np.mean([0.94, 0.96, 0.95]):
-        raise AssertionError()
+    with pytest.raises(ValueError, match="Unknown param_type"):
+        tuner.get_param(real_optuna_trial, "param", ("weird_type", [1, 2]))
 
 
 if __name__ == "__main__":
