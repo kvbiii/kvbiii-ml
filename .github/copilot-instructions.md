@@ -1,1 +1,23 @@
-IyBDb3BpbG90IENvZGUgUmV2aWV3IEluc3RydWN0aW9ucwoKQXBwbHkgdGhlc2UgZ3VpZGVsaW5lcyB3aGVuIHJldmlld2luZyBjaGFuZ2VzIHRvIFB5dGhvbiBmaWxlcyAoYCoucHlgKSBpbiB0aGlzIHJlcG9zaXRvcnkuCgojIyBUeXBlIEhpbnRzCgpGbGFnIGFueSBwdWJsaWMgZnVuY3Rpb24sIG1ldGhvZCwgb3IgYF9faW5pdF9fYCBzaWduYXR1cmUgbWlzc2luZyB0eXBlIGhpbnRzLiBVc2UgbW9kZXJuIHN5bnRheDogYHN0ciB8IE5vbmVgIChub3QgYE9wdGlvbmFsW3N0cl1gKSwgYGxpc3Rbc3RyXWAgKG5vdCBgTGlzdFtzdHJdYCksIGBkaWN0W3N0ciwgaW50XWAgKG5vdCBgRGljdFtzdHIsIGludF1gKS4KCiMjIEltcG9ydHMKCkltcG9ydHMgbXVzdCBiZSBncm91cGVkIGludG8gdGhyZWUgc2VjdGlvbnMg4oCUIHN0YW5kYXJkIGxpYnJhcnksIHRoaXJkLXBhcnR5LCBsb2NhbC93b3Jrc3BhY2Ug4oCUIHNlcGFyYXRlZCBieSBhIGJsYW5rIGxpbmUsIGFscGhhYmV0aWNhbGx5IHNvcnRlZCB3aXRoaW4gZWFjaCBncm91cC4gRmxhZyB3aWxkY2FyZCBpbXBvcnRzIChgZnJvbSBtb2R1bGUgaW1wb3J0ICpgKSBhbmQgaW1wb3J0cyBwbGFjZWQgaW5zaWRlIGZ1bmN0aW9ucyBvciBjb25kaXRpb25hbHMuCgojIyBFeGNlcHRpb24gSGFuZGxpbmcKCkZsYWcgYmFyZSBgZXhjZXB0OmAgb3Igc2lsZW50IGBleGNlcHQgRXhjZXB0aW9uOiBwYXNzYC4gRXhjZXB0aW9ucyBzaG91bGQgYmUgY2F1Z2h0IHdpdGggYSBzcGVjaWZpYyB0eXBlIGFuZCByZS1yYWlzZWQgd2l0aCBjb250ZXh0OiBgcmFpc2UgTmV3RXJyb3IoLi4uKSBmcm9tIGV4Y2AuIE5ldmVyIHN3YWxsb3cgZXhjZXB0aW9ucyBzaWxlbnRseS4KCiMjIERvY3N0cmluZ3MKCkV2ZXJ5IHB1YmxpYyBmdW5jdGlvbiwgbWV0aG9kLCBhbmQgY2xhc3MgbmVlZHMgYSBHb29nbGUtc3R5bGUgZG9jc3RyaW5nIChBcmdzL1JldHVybnMvUmFpc2VzIHdoZXJlIHJlbGV2YW50KS4gUHJpdmF0ZSAoYF9gLXByZWZpeGVkKSBmdW5jdGlvbnMgbmVlZCBhdCBsZWFzdCBhIG9uZS1saW5lIGRvY3N0cmluZyBpZiBub24tdHJpdmlhbC4gRG8gbm90IGZsYWcgbWlzc2luZyBtb2R1bGUtbGV2ZWwgZG9jc3RyaW5ncyDigJQgdGhpcyByZXBvIGludGVudGlvbmFsbHkgb21pdHMgdGhlbS4KCiMjIFNjb3BlCgpEbyBub3QgZmxhZyBmb3JtYXR0aW5nIChxdW90ZSBzdHlsZSwgbGluZSBsZW5ndGgsIHRyYWlsaW5nIGNvbW1hcykgb3IgbmFtaW5nIGNvbnZlbnRpb25zIOKAlCB0aG9zZSBhcmUgYWxyZWFkeSBlbmZvcmNlZCBieSBgYmxhY2tgIGFuZCBgcHlsaW50YCBpbiBDSS4gRm9jdXMgcmV2aWV3IGNvbW1lbnRzIG9uIGNvcnJlY3RuZXNzLCB0aGUgcnVsZXMgYWJvdmUsIGFuZCBhbGdvcml0aG1pYyBjb21wbGV4aXR5IChlLmcuLCBPKG7CsikgcGF0dGVybnMgd2hlcmUgYSBzZXQvZGljdCBsb29rdXAgd291bGQgc3VmZmljZSkuCg==
+# Copilot Code Review Instructions
+
+Apply these guidelines when reviewing changes to Python files (`*.py`) in this repository.
+
+## Type Hints
+
+Flag any public function, method, or `__init__` signature missing type hints. Use modern syntax: `str | None` (not `Optional[str]`), `list[str]` (not `List[str]`), `dict[str, int]` (not `Dict[str, int]`).
+
+## Imports
+
+Imports must be grouped into three sections — standard library, third-party, local/workspace — separated by a blank line, alphabetically sorted within each group. Flag wildcard imports (`from module import *`) and imports placed inside functions or conditionals.
+
+## Exception Handling
+
+Flag bare `except:` or silent `except Exception: pass`. Exceptions should be caught with a specific type and re-raised with context: `raise NewError(...) from exc`. Never swallow exceptions silently.
+
+## Docstrings
+
+Every public function, method, and class needs a Google-style docstring (Args/Returns/Raises where relevant). Private (`_`-prefixed) functions need at least a one-line docstring if non-trivial. Do not flag missing module-level docstrings — this repo intentionally omits them.
+
+## Scope
+
+Do not flag formatting (quote style, line length, trailing commas) or naming conventions — those are already enforced by `black` and `pylint` in CI. Focus review comments on correctness, the rules above, and algorithmic complexity (e.g., O(n²) patterns where a set/dict lookup would suffice).
