@@ -77,7 +77,7 @@ class FeatureGenerationPipeline:
 
     @staticmethod
     def _coerce_to_dataframe(
-        result: object, step: object, X_before: pd.DataFrame
+        result: object, step: object, x_before: pd.DataFrame
     ) -> pd.DataFrame:
         """Coerce a step's transform() output back into a pd.DataFrame.
 
@@ -88,9 +88,9 @@ class FeatureGenerationPipeline:
         fall back to the pre-transform columns when the shape is unchanged.
 
         Args:
-            result (object): The raw output of step.transform(X_before).
+            result (object): The raw output of step.transform(x_before).
             step (object): The pipeline step that produced result.
-            X_before (pd.DataFrame): The DataFrame passed into step.transform().
+            x_before (pd.DataFrame): The DataFrame passed into step.transform().
 
         Returns:
             pd.DataFrame: result coerced into a DataFrame with the original index.
@@ -109,12 +109,12 @@ class FeatureGenerationPipeline:
         result_array = np.asarray(result)
         if result_array.ndim == 1:
             result_array = result_array.reshape(-1, 1)
-        if columns is None and result_array.shape[1] == len(X_before.columns):
-            columns = list(X_before.columns)
+        if columns is None and result_array.shape[1] == len(x_before.columns):
+            columns = list(x_before.columns)
         if columns is None:
             columns = [f"feature_{i}" for i in range(result_array.shape[1])]
 
-        return pd.DataFrame(result_array, index=X_before.index, columns=columns)
+        return pd.DataFrame(result_array, index=x_before.index, columns=columns)
 
     def fit(self, X: pd.DataFrame, y: pd.Series = None) -> "FeatureGenerationPipeline":
         """
@@ -163,8 +163,8 @@ class FeatureGenerationPipeline:
 
             transform = getattr(step, "transform", None)
             if callable(transform):
-                X_before = X
-                X = self._coerce_to_dataframe(transform(X), step, X_before)
+                x_before = X
+                X = self._coerce_to_dataframe(transform(X), step, x_before)
                 if step.__class__.__name__ == "CrossFeatureGenerator":
                     cross_new_cols = [c for c in X.columns if c not in base_cols]
                     encodable_cols.update(cross_new_cols)
@@ -185,8 +185,8 @@ class FeatureGenerationPipeline:
         """
         X = self.custom_features_generation_before_preprocessing(X)
         for step in self.preprocessing_steps:
-            X_before = X
-            X = self._coerce_to_dataframe(step.transform(X), step, X_before)
+            x_before = X
+            X = self._coerce_to_dataframe(step.transform(X), step, x_before)
         X = self.custom_features_generation_after_preprocessing(X)
 
         if self.final_features is not None:

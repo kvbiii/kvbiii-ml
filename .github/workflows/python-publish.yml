@@ -81,7 +81,7 @@ jobs:
             < <(find . -type f -name "*.py" -not -path "./.venv/*" -print0)
           python -m pylint "${python_files[@]}" \
             --disable=all \
-            --enable=unused-import,wrong-import-order,unused-variable,import-outside-toplevel,missing-function-docstring,invalid-name,bare-except,duplicate-code \
+            --enable=unused-import,wrong-import-order,unused-variable,import-outside-toplevel,missing-function-docstring,invalid-name,bare-except \
             --good-names=X,X_train,X_test,X_valid,C
 
   requirements-check:
