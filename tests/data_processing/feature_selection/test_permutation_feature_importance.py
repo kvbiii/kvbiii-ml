@@ -5,8 +5,6 @@ from unittest.mock import Mock
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import KFold
 
 from kvbiii_ml.data_processing.feature_selection import (
     permutation_feature_importance as permutation_module,
@@ -17,11 +15,20 @@ from kvbiii_ml.data_processing.feature_selection.model_importance_rfe import (
 from kvbiii_ml.data_processing.feature_selection.permutation_feature_importance import (
     PermutationRecursiveFeatureElimination,
 )
-from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
-N_SAMPLES = 16
-N_SPLITS = 2
-RANDOM_STATE = 17
+from ._test_support import (
+    HISTORY_COLUMNS,
+    RANDOM_STATE,
+    assert_empty_history_returns_no_selection,
+    assert_rfe_run_summary_starts_with_full_feature_set,
+    build_cross_validator,
+    build_fast_estimator,
+)
+from ._test_support import (
+    build_small_classification_data as small_classification_data_factory,
+)
+
+_build_estimator = build_fast_estimator
 
 
 class _FakeImportanceResult:
@@ -37,26 +44,16 @@ class _FakeImportanceResult:
 
 
 @pytest.fixture
-def small_classification_data() -> tuple[pd.DataFrame, pd.Series]:
+def small_classification_data():
     """Provides a tiny synthetic binary classification dataset.
 
     Returns:
         tuple[pd.DataFrame, pd.Series]: Feature matrix and binary target vector.
     """
-    rng = np.random.default_rng(RANDOM_STATE)
-    X = pd.DataFrame(
-        {
-            "f0": rng.normal(size=N_SAMPLES),
-            "f1": rng.normal(size=N_SAMPLES),
-            "f2": rng.normal(size=N_SAMPLES),
-            "f3": rng.normal(size=N_SAMPLES),
-        }
-    )
-    y = pd.Series(((X["f0"] + X["f1"]) > 0).astype(int), name="target")
-    return X, y
+    return small_classification_data_factory()
 
 
-def _build_cv(n_jobs_scoring: str = "Accuracy") -> CrossValidationTrainer:
+def _build_cv(n_jobs_scoring: str = "Accuracy"):
     """Builds a fast CrossValidationTrainer for permutation RFE tests.
 
     Args:
@@ -65,24 +62,7 @@ def _build_cv(n_jobs_scoring: str = "Accuracy") -> CrossValidationTrainer:
     Returns:
         CrossValidationTrainer: Configured trainer with a tiny 2-fold KFold splitter.
     """
-    return CrossValidationTrainer(
-        problem_type="classification",
-        metric_name=n_jobs_scoring,
-        cv=KFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE),
-        preprocessing_pipeline=None,
-        verbose=False,
-    )
-
-
-def _build_estimator() -> RandomForestClassifier:
-    """Builds a fast RandomForestClassifier estimator for tests.
-
-    Returns:
-        RandomForestClassifier: Small, fast-fitting estimator.
-    """
-    return RandomForestClassifier(
-        n_estimators=5, max_depth=2, random_state=RANDOM_STATE
-    )
+    return build_cross_validator(metric_name=n_jobs_scoring)
 
 
 def test_permutationrfe_run_raises_valueerror_for_unknown_protected_feature(
@@ -128,7 +108,7 @@ def test_permutationrfe_compute_fold_importances_averages_across_folds():
     columns = ["f0", "f1", "f2"]
     fold_results = iter([np.array([0.1, 0.2, 0.3]), np.array([0.3, 0.0, 0.3])])
 
-    def _fake_permutation_importance(_estimator, _X, _y, **_kwargs):
+    def _fake_permutation_importance(_estimator, _x, _y, **_kwargs):
         """Returns the next queued deterministic fake importance result."""
         return _FakeImportanceResult(next(fold_results))
 
@@ -297,24 +277,10 @@ def test_permutationrfe_select_features_weighted_score_empty_history_returns_non
     selector = PermutationRecursiveFeatureElimination(
         estimator=_build_estimator(), cross_validator=_build_cv(), steps=2, n_repeats=1
     )
-    empty_history = pd.DataFrame(
-        columns=[
-            "step",
-            "n_features_removed",
-            "n_features_remaining",
-            "removed_feature_name",
-            "metric_value",
-            "metric_change",
-            "importance_score",
-        ]
-    )
+    empty_history = pd.DataFrame(columns=HISTORY_COLUMNS)
 
     selected, best_metric = selector.select_features_weighted_score(empty_history)
-
-    if selected != []:
-        raise AssertionError()
-    if best_metric is not None:
-        raise AssertionError()
+    assert_empty_history_returns_no_selection(selected, best_metric)
 
 
 def test_permutationrfe_run_returns_valid_summary_end_to_end(small_classification_data):
@@ -344,25 +310,7 @@ def test_permutationrfe_run_returns_valid_summary_end_to_end(small_classificatio
         verbose=False,
     )
 
-    result = selector.run(X, y)
-
-    if set(result.keys()) != {
-        "selected_features",
-        "selected_features_names",
-        "history",
-    }:
-        raise AssertionError()
-    history = result["history"]
-    if int(history.iloc[0]["step"]) != 0:
-        raise AssertionError()
-    if int(history.iloc[0]["n_features_remaining"]) != X.shape[1]:
-        raise AssertionError()
-    if not (0 < len(result["selected_features"]) <= X.shape[1]):
-        raise AssertionError()
-    if not set(result["selected_features"]).issubset(set(X.columns)):
-        raise AssertionError()
-    if result["selected_features_names"] != result["selected_features"]:
-        raise AssertionError()
+    assert_rfe_run_summary_starts_with_full_feature_set(selector.run(X, y), X)
 
 
 if __name__ == "__main__":

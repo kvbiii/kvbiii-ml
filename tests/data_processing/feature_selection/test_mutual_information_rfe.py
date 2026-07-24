@@ -4,12 +4,17 @@ import numpy as np
 import pandas as pd
 import pytest
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import KFold
 
 from kvbiii_ml.data_processing.feature_selection.mutual_information_rfe import (
     MutualInformationRecursiveFeatureElimination,
 )
-from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
+
+from ._test_support import (
+    assert_rfe_run_result_has_nonempty_history,
+    assert_selected_features_subset_of_columns,
+    assert_selection_is_nonnull_list_with_metric,
+    build_cross_validator,
+)
 
 
 @pytest.fixture
@@ -27,19 +32,13 @@ def mi_rfe_data() -> tuple[pd.DataFrame, pd.Series]:
     return X, y
 
 
-def _build_cv() -> CrossValidationTrainer:
+def _build_cv():
     """Builds a CrossValidationTrainer configured for accuracy-based classification CV.
 
     Returns:
         CrossValidationTrainer: Trainer wired for 3-fold classification CV.
     """
-    return CrossValidationTrainer(
-        problem_type="classification",
-        metric_name="Accuracy",
-        cv=KFold(n_splits=3, shuffle=True, random_state=17),
-        preprocessing_pipeline=None,
-        verbose=False,
-    )
+    return build_cross_validator(n_splits=3)
 
 
 def _build_selector(
@@ -196,10 +195,7 @@ def test_select_features_weighted_score_edge():
         ]
     )
     selected, best_metric = selector.select_features_weighted_score(history, alpha=0.8)
-    if not isinstance(selected, list):
-        raise AssertionError()
-    if best_metric is None:
-        raise AssertionError()
+    assert_selection_is_nonnull_list_with_metric(selected, best_metric)
 
 
 def test_select_features_weighted_score_prefers_best_metric_step():
@@ -317,21 +313,10 @@ def test_run_returns_selected_features(mi_rfe_data: tuple[pd.DataFrame, pd.Serie
         verbose=False,
     )
     result = selector.run(X, y)
-    if set(result.keys()) != {
-        "selected_features",
-        "selected_features_names",
-        "history",
-    }:
-        raise AssertionError()
-    history = result["history"]
-    if history.empty:
-        raise AssertionError()
+    history = assert_rfe_run_result_has_nonempty_history(result)
     if history.iloc[0]["step"] != 1:
         raise AssertionError()
-    if not len(result["selected_features"]) <= X.shape[1]:
-        raise AssertionError()
-    if not set(result["selected_features"]).issubset(set(X.columns)):
-        raise AssertionError()
+    assert_selected_features_subset_of_columns(result, X)
 
 
 def test_run_respects_protected_features(mi_rfe_data: tuple[pd.DataFrame, pd.Series]):

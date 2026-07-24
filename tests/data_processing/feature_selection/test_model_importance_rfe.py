@@ -3,47 +3,33 @@
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import KFold
 
 from kvbiii_ml.data_processing.feature_selection.model_importance_rfe import (
     ModelImportanceRecursiveFeatureElimination,
 )
-from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
-N_SAMPLES = 16
-N_SPLITS = 2
-RANDOM_STATE = 17
+from ._test_support import (
+    HISTORY_COLUMNS,
+    assert_empty_history_returns_no_selection,
+    assert_rfe_run_summary_starts_with_full_feature_set,
+    build_cross_validator,
+    build_fast_estimator,
+)
+from ._test_support import (
+    build_small_classification_data as small_classification_data_factory,
+)
 
-HISTORY_COLUMNS = [
-    "step",
-    "n_features_removed",
-    "n_features_remaining",
-    "removed_feature_name",
-    "metric_value",
-    "metric_change",
-    "importance_score",
-]
+_build_estimator = build_fast_estimator
 
 
 @pytest.fixture
-def small_classification_data() -> tuple[pd.DataFrame, pd.Series]:
+def small_classification_data():
     """Provides a tiny synthetic binary classification dataset.
 
     Returns:
         tuple[pd.DataFrame, pd.Series]: Feature matrix and binary target vector.
     """
-    rng = np.random.default_rng(RANDOM_STATE)
-    X = pd.DataFrame(
-        {
-            "f0": rng.normal(size=N_SAMPLES),
-            "f1": rng.normal(size=N_SAMPLES),
-            "f2": rng.normal(size=N_SAMPLES),
-            "f3": rng.normal(size=N_SAMPLES),
-        }
-    )
-    y = pd.Series(((X["f0"] + X["f1"]) > 0).astype(int), name="target")
-    return X, y
+    return small_classification_data_factory()
 
 
 def _build_cv(metric_name: str = "Accuracy", problem_type: str = "classification"):
@@ -57,24 +43,7 @@ def _build_cv(metric_name: str = "Accuracy", problem_type: str = "classification
     Returns:
         CrossValidationTrainer: Configured trainer with a tiny 2-fold KFold splitter.
     """
-    return CrossValidationTrainer(
-        problem_type=problem_type,
-        metric_name=metric_name,
-        cv=KFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE),
-        preprocessing_pipeline=None,
-        verbose=False,
-    )
-
-
-def _build_estimator() -> RandomForestClassifier:
-    """Builds a fast RandomForestClassifier estimator for tests.
-
-    Returns:
-        RandomForestClassifier: Small, fast-fitting estimator with feature_importances_.
-    """
-    return RandomForestClassifier(
-        n_estimators=5, max_depth=2, random_state=RANDOM_STATE
-    )
+    return build_cross_validator(metric_name=metric_name, problem_type=problem_type)
 
 
 @pytest.mark.parametrize(
@@ -242,10 +211,7 @@ def test_modelimportancerfe_select_features_weighted_score_empty_history_returns
 
     selected, best_metric = selector.select_features_weighted_score(empty_history)
 
-    if selected != []:
-        raise AssertionError()
-    if best_metric is not None:
-        raise AssertionError()
+    assert_empty_history_returns_no_selection(selected, best_metric)
 
 
 def test_modelimportancerfe_run_raises_valueerror_for_unknown_protected_feature(
@@ -296,23 +262,7 @@ def test_modelimportancerfe_run_returns_valid_summary_end_to_end(
 
     result = selector.run(X, y)
 
-    if set(result.keys()) != {
-        "selected_features",
-        "selected_features_names",
-        "history",
-    }:
-        raise AssertionError()
-    history = result["history"]
-    if int(history.iloc[0]["step"]) != 0:
-        raise AssertionError()
-    if int(history.iloc[0]["n_features_remaining"]) != X.shape[1]:
-        raise AssertionError()
-    if not (0 < len(result["selected_features"]) <= X.shape[1]):
-        raise AssertionError()
-    if not set(result["selected_features"]).issubset(set(X.columns)):
-        raise AssertionError()
-    if result["selected_features_names"] != result["selected_features"]:
-        raise AssertionError()
+    assert_rfe_run_summary_starts_with_full_feature_set(result, X)
 
 
 if __name__ == "__main__":

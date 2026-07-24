@@ -1,7 +1,5 @@
 """Tests for kvbiii_ml.modeling.training.oof_model module."""
 
-from unittest.mock import Mock
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -13,6 +11,8 @@ from sklearn.preprocessing import StandardScaler
 
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 from kvbiii_ml.modeling.training.oof_model import OOFModel
+
+from ._test_support import assert_valid_binary_proba_matrix
 
 
 def test_oofmodel_init_creates_classification_instance(
@@ -362,13 +362,7 @@ def test_oofmodel_predict_proba_returns_averaged_probabilities(
 
     oof.fit(X, y)
     probabilities = oof.predict_proba(X)
-
-    if probabilities.shape != (len(X), 2):
-        raise AssertionError()
-    if not np.allclose(probabilities.sum(axis=1), 1.0):
-        raise AssertionError()
-    if not (np.all(probabilities >= 0) and np.all(probabilities <= 1)):
-        raise AssertionError()
+    assert_valid_binary_proba_matrix(probabilities, len(X))
 
 
 def test_oofmodel_predict_proba_raises_error_for_regression(
@@ -400,36 +394,6 @@ def test_oofmodel_predict_proba_raises_error_for_regression(
         ValueError, match="predict_proba is only available for classification"
     ):
         oof.predict_proba(X)
-
-
-def test_oofmodel_order_x_for_estimator_reorders_features_correctly(sample_dataframe):
-    """Tests CrossValidationTrainer._order_x_for_estimator reorders features for OOFModel.
-
-    Args:
-        sample_dataframe (pd.DataFrame): Sample feature data with multiple columns
-
-    Asserts:
-        - Features are reordered when estimator has feature_names_in_ attribute
-        - Original DataFrame is returned when estimator lacks feature ordering info
-        - Column order matches estimator's expected feature names
-    """
-    mock_estimator = Mock()
-    mock_estimator.feature_names_in_ = ["categorical_1", "numeric_1", "integer_1"]
-
-    reordered_x = CrossValidationTrainer._order_x_for_estimator(
-        sample_dataframe, mock_estimator
-    )
-
-    expected_order = ["categorical_1", "numeric_1", "integer_1"]
-    if list(reordered_x.columns) != expected_order:
-        raise AssertionError()
-
-    mock_estimator_no_features = Mock(spec=[])
-    result_x = CrossValidationTrainer._order_x_for_estimator(
-        sample_dataframe, mock_estimator_no_features
-    )
-
-    pd.testing.assert_frame_equal(result_x, sample_dataframe)
 
 
 def test_oofmodel_predict_handles_estimators_without_predict_proba():

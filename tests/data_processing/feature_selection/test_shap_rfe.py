@@ -5,13 +5,18 @@ import pandas as pd
 import pytest
 from sklearn.base import BaseEstimator
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import KFold
 
 from kvbiii_ml.data_processing.feature_selection import shap_rfe as shap_rfe_module
 from kvbiii_ml.data_processing.feature_selection.shap_rfe import (
     ShapRecursiveFeatureElimination,
 )
-from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
+
+from ._test_support import (
+    assert_rfe_run_result_has_nonempty_history,
+    assert_selected_features_subset_of_columns,
+    assert_selection_is_nonnull_list_with_metric,
+    build_cross_validator,
+)
 
 
 @pytest.fixture
@@ -66,15 +71,9 @@ def patch_compute_shap_values(monkeypatch: pytest.MonkeyPatch):
     yield
 
 
-def _build_cv() -> CrossValidationTrainer:
+def _build_cv():
     """Builds a CrossValidationTrainer configured for accuracy-based classification CV."""
-    return CrossValidationTrainer(
-        problem_type="classification",
-        metric_name="Accuracy",
-        cv=KFold(n_splits=3, shuffle=True, random_state=17),
-        preprocessing_pipeline=None,
-        verbose=False,
-    )
+    return build_cross_validator(n_splits=3)
 
 
 def test_removal_schedule_shap():
@@ -124,19 +123,10 @@ def test_run_shap_rfe(shap_rfe_data):
         verbose=False,
     )
     result = selector.run(X, y)
-    if set(result.keys()) != {
-        "selected_features",
-        "selected_features_names",
-        "history",
-    }:
-        raise AssertionError()
-    history = result["history"]
-    if history.empty:
-        raise AssertionError()
+    history = assert_rfe_run_result_has_nonempty_history(result)
     if history.iloc[0]["step"] != 0:
         raise AssertionError()
-    if not len(result["selected_features"]) <= X.shape[1]:
-        raise AssertionError()
+    assert_selected_features_subset_of_columns(result, X)
 
 
 def test_select_features_weighted_score_logic():
@@ -181,10 +171,7 @@ def test_select_features_weighted_score_logic():
         ]
     )
     selected, best_metric = selector.select_features_weighted_score(history, alpha=0.8)
-    if not isinstance(selected, list):
-        raise AssertionError()
-    if best_metric is None:
-        raise AssertionError()
+    assert_selection_is_nonnull_list_with_metric(selected, best_metric)
 
 
 if __name__ == "__main__":

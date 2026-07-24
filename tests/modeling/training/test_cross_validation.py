@@ -12,6 +12,8 @@ from sklearn.preprocessing import StandardScaler
 
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
+from ._test_support import assert_valid_binary_proba_matrix
+
 
 def test_crossvalidationtrainer_init_creates_instance_with_default_cv():
     """Tests CrossValidationTrainer initialization with the default cross-validator.
@@ -372,13 +374,7 @@ def test_crossvalidationtrainer_predict_proba_returns_averaged_probabilities(
     trainer.fit(logistic_regression_estimator, X, y)
 
     probabilities = trainer.predict_proba(X)
-
-    if probabilities.shape != (len(X), 2):
-        raise AssertionError()
-    if not np.allclose(probabilities.sum(axis=1), 1.0):
-        raise AssertionError()
-    if not (np.all(probabilities >= 0) and np.all(probabilities <= 1)):
-        raise AssertionError()
+    assert_valid_binary_proba_matrix(probabilities, len(X))
 
 
 def test_crossvalidationtrainer_order_x_for_estimator_reorders_exact_names(

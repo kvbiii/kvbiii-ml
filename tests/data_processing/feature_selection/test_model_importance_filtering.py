@@ -1,11 +1,7 @@
 """Tests for kvbiii_ml.data_processing.feature_selection.model_importance_filtering module."""
 
-import numpy as np
-import pandas as pd
 import pytest
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import KFold
 from sklearn.pipeline import Pipeline
 
 from kvbiii_ml.data_processing.feature_selection.model_importance_filtering import (
@@ -14,35 +10,27 @@ from kvbiii_ml.data_processing.feature_selection.model_importance_filtering impo
 from kvbiii_ml.data_processing.preprocessing.discretisation.equal_width_discretiser import (
     EqualWidthDiscretiserWithOriginal,
 )
-from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
-N_SAMPLES = 16
-N_SPLITS = 2
-RANDOM_STATE = 17
+from ._test_support import (
+    build_cross_validator,
+    build_fast_estimator,
+    build_small_classification_data,
+)
+
+_build_estimator = build_fast_estimator
 
 
 @pytest.fixture
-def small_classification_data() -> tuple[pd.DataFrame, pd.Series]:
-    """Provides a tiny synthetic binary classification dataset.
+def small_classification_data():
+    """Provides a tiny synthetic binary classification dataset (with a noise column).
 
     Returns:
         tuple[pd.DataFrame, pd.Series]: Feature matrix and binary target vector.
     """
-    rng = np.random.default_rng(RANDOM_STATE)
-    X = pd.DataFrame(
-        {
-            "f0": rng.normal(size=N_SAMPLES),
-            "f1": rng.normal(size=N_SAMPLES),
-            "f2": rng.normal(size=N_SAMPLES),
-            "f3": rng.normal(size=N_SAMPLES),
-            "noise": rng.normal(size=N_SAMPLES),
-        }
-    )
-    y = pd.Series(((X["f0"] + X["f1"]) > 0).astype(int), name="target")
-    return X, y
+    return build_small_classification_data(include_noise=True)
 
 
-def _build_cv(pipeline: Pipeline | None = None) -> CrossValidationTrainer:
+def _build_cv(pipeline: Pipeline | None = None):
     """Builds a fast CrossValidationTrainer for classification tests.
 
     Args:
@@ -51,24 +39,7 @@ def _build_cv(pipeline: Pipeline | None = None) -> CrossValidationTrainer:
     Returns:
         CrossValidationTrainer: Configured trainer with a tiny 2-fold KFold splitter.
     """
-    return CrossValidationTrainer(
-        problem_type="classification",
-        metric_name="Accuracy",
-        cv=KFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE),
-        preprocessing_pipeline=pipeline,
-        verbose=False,
-    )
-
-
-def _build_estimator() -> RandomForestClassifier:
-    """Builds a fast RandomForestClassifier estimator for tests.
-
-    Returns:
-        RandomForestClassifier: Small, fast-fitting estimator with feature_importances_.
-    """
-    return RandomForestClassifier(
-        n_estimators=5, max_depth=2, random_state=RANDOM_STATE
-    )
+    return build_cross_validator(pipeline=pipeline)
 
 
 @pytest.mark.parametrize(
