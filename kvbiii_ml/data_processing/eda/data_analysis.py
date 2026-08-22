@@ -72,29 +72,25 @@ class DataAnalyzer:
         return styled_df
 
     @staticmethod
-    def get_categorical_features(
-        df: pd.DataFrame, unique_threshold: int = 100
-    ) -> list[str]:
-        """Gets categorical features from the DataFrame.
+    def get_categorical_features(df: pd.DataFrame, threshold: int = 100) -> list[str]:
+        """
+        Gets categorical features from the DataFrame.
+        Identifies features as categorical based on data type and number of unique values.
 
         Args:
             df (pd.DataFrame): The input DataFrame.
-            unique_threshold (int, optional): Maximum number of unique values for a
-                feature to be considered categorical. Defaults to 100.
+            threshold (int, optional): Maximum number of unique values for a feature to be considered categorical. Defaults to 100.
 
         Returns:
             list[str]: List of categorical feature names.
         """
-        categorical_features = df.select_dtypes(
-            include=["object", "string", "category"]
-        ).columns
+        categorical_cols = df.select_dtypes(include=["object", "category"]).columns
+        nunique = df.nunique()
+
         categorical_features = [
-            col for col in categorical_features if df[col].nunique() < unique_threshold
+            col for col in categorical_cols if nunique[col] < threshold
         ]
-        categorical_features = list(
-            set(categorical_features) | set(df.columns[df.nunique() == 2])
-        )
-        return sorted(categorical_features)
+        return categorical_features
 
     @staticmethod
     def extract_unique_items(item_list: str | list) -> list[str]:
