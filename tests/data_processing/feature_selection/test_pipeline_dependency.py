@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import pytest
 from feature_engine.encoding import MeanEncoder
 from feature_engine.imputation import MeanMedianImputer
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -159,7 +158,7 @@ def test_build_fallback_treats_inplace_transformer_as_identity():
     Asserts:
         - Every output column maps to itself for both transformers
     """
-    X_align = pd.DataFrame({"cat": ["a", "b", "a", "b"], "num": [1, 2, 3, 4]})
+    X = pd.DataFrame({"cat": ["a", "b", "a", "b"], "num": [1, 2, 3, 4]})
     aligner_pipeline = Pipeline(
         [
             (
@@ -168,13 +167,13 @@ def test_build_fallback_treats_inplace_transformer_as_identity():
             )
         ]
     )
-    aligner_graph = PipelineDependencyGraph.build(aligner_pipeline, X_align)
+    aligner_graph = PipelineDependencyGraph.build(aligner_pipeline, X)
     if aligner_graph.processed_to_raw["cat"] != frozenset({"cat"}):
         raise AssertionError(aligner_graph.processed_to_raw["cat"])
     if aligner_graph.processed_to_raw["num"] != frozenset({"num"}):
         raise AssertionError(aligner_graph.processed_to_raw["num"])
 
-    X_encode = pd.DataFrame(
+    X = pd.DataFrame(
         {
             "cat": ["a", "b", "a", "b", "a", "b"],
             "num": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
@@ -182,7 +181,7 @@ def test_build_fallback_treats_inplace_transformer_as_identity():
     )
     y_encode = pd.Series([1, 0, 1, 0, 1, 0])
     encoder_pipeline = Pipeline([("mean_enc", MeanEncoder(variables=["cat"]))])
-    encoder_graph = PipelineDependencyGraph.build(encoder_pipeline, X_encode, y_encode)
+    encoder_graph = PipelineDependencyGraph.build(encoder_pipeline, X, y_encode)
     if encoder_graph.processed_to_raw["cat"] != frozenset({"cat"}):
         raise AssertionError(encoder_graph.processed_to_raw["cat"])
 
