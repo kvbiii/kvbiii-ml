@@ -136,7 +136,9 @@ def test_optimize_memory_converts_object_to_categorical(sample_mixed_dataframe):
         raise AssertionError()
 
     # Values should be preserved, plus the default "Unknown" fill category
-    if set(optimized_df["object_col"].cat.categories) != set(["X", "Y", "Z", "Unknown"]):
+    if set(optimized_df["object_col"].cat.categories) != set(
+        ["X", "Y", "Z", "Unknown"]
+    ):
         raise AssertionError()
 
     # Check all values match
