@@ -1,13 +1,34 @@
 import gc
+from copy import deepcopy
+from pathlib import Path
+import sys
+
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator
+from sklearn.pipeline import Pipeline
 
+sys.path.append(str(Path(__file__).resolve().parents[3]))
+from kvbiii_ml.data_processing.feature_selection.pipeline_dependency import (
+    PipelineDependencyGraph,
+)
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
 
 class ModelImportanceRecursiveFeatureElimination:
-    """Recursive feature elimination using model's feature_importances_ attribute."""
+    """Recursive feature elimination using model's feature_importances_ attribute.
+
+    Removes the least-important features per a linear-decay removal schedule,
+    recomputing ``feature_importances_`` from a fresh CV fit at every step.
+
+    When the cross-validator holds a column-expansion pipeline, the elimination
+    loop works entirely in *processed* feature space - the post-pipeline column
+    set. Raw input features needed for each step are resolved via a
+    ``PipelineDependencyGraph`` built once from a real baseline pipeline fit.
+
+    ``protected_features`` must be specified as *processed* column names and are
+    validated after the baseline CV run when the processed column set is known.
+    """
 
     def __init__(
         self,
@@ -24,14 +45,17 @@ class ModelImportanceRecursiveFeatureElimination:
 
         Args:
             estimator (BaseEstimator): Estimator with feature_importances_ attribute.
-            cross_validator (CrossValidationTrainer): Cross-validation trainer instance.
+            cross_validator (CrossValidationTrainer): Cross-validation trainer that
+                optionally holds a preprocessing pipeline.  The pipeline is re-fitted
+                per fold at each elimination step via a restricted clone.
             steps (int, optional): Number of elimination iterations. Defaults to 5.
             alpha (float, optional): Weight for the final selection score mix.
                 Defaults to 0.95.
             verbose (bool, optional): Whether to print progress messages.
                 Defaults to True.
-            protected_features (list[str] | None, optional): Features that should
-                never be removed. Defaults to None.
+            protected_features (list[str] | None, optional): Processed column names
+                that should never be removed.  Validated after the baseline CV run
+                against the actual post-pipeline column set. Defaults to None.
             random_state (int | None, optional): Random state for reproducibility.
                 Defaults to 17.
         """
@@ -43,6 +67,7 @@ class ModelImportanceRecursiveFeatureElimination:
         self.protected_features = protected_features or []
         self.metric_direction = self.cross_validator.metric_direction
         self.random_state = random_state
+        self.all_processed_features: list[str] = []
         self.history_schema = {
             "step": int,
             "n_features_removed": int,
@@ -53,31 +78,103 @@ class ModelImportanceRecursiveFeatureElimination:
             "importance_score": float,
         }
 
+    @staticmethod
+    def _restrict_catboost_cat_features(
+        estimator: BaseEstimator,
+        current_features: set[str],
+        post_pipeline_dtypes: pd.Series | None = None,
+    ) -> BaseEstimator:
+        """Return a cloned CatBoost estimator with cat_features filtered to active non-numeric columns.
+
+        A column is kept in cat_features only when all three conditions hold:
+        - it is still present in the active feature set,
+        - it still exists in the post-pipeline output, and
+        - its post-pipeline dtype is non-numeric.
+
+        Returns the original estimator unchanged for non-CatBoost estimators.
+
+        Args:
+            estimator (BaseEstimator): Estimator to potentially update.
+            current_features (set[str]): Feature names still present in this step.
+            post_pipeline_dtypes (pd.Series | None): Column dtypes of the post-pipeline
+                validation data. Defaults to None.
+
+        Returns:
+            BaseEstimator: Updated estimator for CatBoost; original for all others.
+        """
+        if "CatBoost" not in type(estimator).__name__:
+            return estimator
+        original_cats = estimator.get_params().get("cat_features") or []
+        if not original_cats:
+            return estimator
+        if post_pipeline_dtypes is not None:
+            processed_cols = set(post_pipeline_dtypes.index)
+            active_cats = [
+                c
+                for c in original_cats
+                if c in current_features
+                and c in processed_cols
+                and not pd.api.types.is_numeric_dtype(post_pipeline_dtypes[c])
+            ]
+        else:
+            active_cats = [c for c in original_cats if c in current_features]
+        if set(active_cats) == set(original_cats):
+            return estimator
+        updated = deepcopy(estimator)
+        updated.set_params(cat_features=active_cats if active_cats else None)
+        return updated
+
     def run(
         self, X: pd.DataFrame, y: pd.Series | np.ndarray
     ) -> dict[str, list | pd.DataFrame]:
         """
         Run Model Importance RFE and return the selection summary.
 
+        Algorithm:
+            1. Baseline CV - pipeline fit once via PipelineDependencyGraph.build();
+               processed column set and per-column raw dependencies discovered.
+            2. protected_features validated against the post-pipeline column set.
+            3. Each step: dependency graph pruned via restrict(), CV re-run on the
+               restricted pipeline, importances extracted from feature_importances_.
+            4. Least-important features removed per the linear-decay schedule.
+
         Args:
-            X (pd.DataFrame): Feature matrix.
+            X (pd.DataFrame): Feature matrix (raw columns).
             y (pd.Series | np.ndarray): Target array/series aligned with X.
 
         Returns:
             dict[str, list | pd.DataFrame]: Dictionary with keys:
-                - selected_features (list): Final selected features.
+                - selected_features (list): Final selected processed feature names.
                 - selected_features_names (list): Alias of selected_features.
                 - history (pd.DataFrame): Step-wise metrics and removals.
 
         Raises:
-            ValueError: If protected features are missing from the dataset.
+            ValueError: If protected features are not found in the post-pipeline
+                column set.
         """
-        current_features = sorted(list(X.columns))
-        missing_protected = set(self.protected_features) - set(current_features)
+        X = X.reset_index(drop=True)
+        y = pd.Series(y).reset_index(drop=True)
+        all_raw_features: list[str] = sorted(X.columns.tolist())
+
+        pipeline = self.cross_validator.preprocessing_pipeline
+        dependency_graph = PipelineDependencyGraph.build(
+            pipeline, X[all_raw_features], y
+        )
+
+        avg_base_metric, _ = self._cross_val_base_metric(
+            X[all_raw_features], y, dependency_graph
+        )
+
+        self.all_processed_features = list(dependency_graph.processed_columns)
+        all_processed_set = set(self.all_processed_features)
+        missing_protected = set(self.protected_features) - all_processed_set
         if missing_protected:
             raise ValueError(
-                f"Protected features not found in dataset: {missing_protected}"
+                f"Protected features not found in post-pipeline column set: {missing_protected}. "
+                f"Available processed columns: {sorted(all_processed_set)}"
             )
+
+        current_features = list(self.all_processed_features)
 
         summary_df = {
             "selected_features": [],
@@ -87,7 +184,6 @@ class ModelImportanceRecursiveFeatureElimination:
             ),
         }
 
-        avg_base_metric, _ = self._cross_val_base_metric(X, y, current_features)
         summary_df["history"] = pd.concat(
             [
                 summary_df["history"],
@@ -126,8 +222,23 @@ class ModelImportanceRecursiveFeatureElimination:
             )
 
         for step_idx, n_features_to_remove in enumerate(removal_schedule, start=1):
+            current_raw_features, restricted_pipeline = dependency_graph.restrict(
+                current_features
+            )
+            step_estimator = self._restrict_catboost_cat_features(
+                self.estimator,
+                set(current_features),
+                dependency_graph.processed_dtypes,
+            )
+
             importance_scores, fold_base_metric, fold_base_metric_std = (
-                self._cross_val_model_importance(X, y, current_features)
+                self._cross_val_model_importance(
+                    X[current_raw_features],
+                    y,
+                    current_features,
+                    step_estimator,
+                    restricted_pipeline,
+                )
             )
             if self.verbose:
                 print(
@@ -170,7 +281,6 @@ class ModelImportanceRecursiveFeatureElimination:
             self._log_step(
                 summary_df,
                 step_idx,
-                X,
                 current_features,
                 importance_scores,
                 fold_base_metric,
@@ -216,39 +326,54 @@ class ModelImportanceRecursiveFeatureElimination:
         return summary_df
 
     def _cross_val_base_metric(
-        self, X: pd.DataFrame, y: pd.Series, current_features: list[str]
+        self,
+        X: pd.DataFrame,
+        y: pd.Series,
+        dependency_graph: PipelineDependencyGraph,
     ) -> tuple[float, float]:
         """
-        Compute the base metric across validation folds.
+        Compute the baseline metric across validation folds using the full pipeline.
 
         Args:
-            X (pd.DataFrame): Feature matrix.
+            X (pd.DataFrame): Raw feature matrix.
             y (pd.Series): Target values.
-            current_features (list[str]): Features to evaluate.
+            dependency_graph (PipelineDependencyGraph): Baseline graph built from the
+                full pipeline fit, used to bootstrap CatBoost's cat_features.
 
         Returns:
             tuple[float, float]: Average metric and its standard deviation.
         """
-        _, valid_scores, _ = self.cross_validator.fit(
-            self.estimator, X[current_features], y
+        baseline_estimator = self._restrict_catboost_cat_features(
+            self.estimator,
+            set(dependency_graph.processed_columns),
+            dependency_graph.processed_dtypes,
         )
+        _, valid_scores, _ = self.cross_validator.fit(baseline_estimator, X, y)
         gc.collect()
         return float(np.mean(valid_scores)), float(np.std(valid_scores))
 
     def _cross_val_model_importance(
-        self, x_data: pd.DataFrame, y_data: pd.Series, current_features: list[str]
+        self,
+        x_data: pd.DataFrame,
+        y_data: pd.Series,
+        current_processed_features: list[str],
+        step_estimator: BaseEstimator,
+        pipeline_override: Pipeline | None,
     ) -> tuple[dict[str, float], float, float]:
         """
         Compute feature importance from the model's feature_importances_ attribute.
 
         Args:
-            x_data (pd.DataFrame): The input feature DataFrame.
+            x_data (pd.DataFrame): Raw features for this step.
             y_data (pd.Series): The target series.
-            current_features (list[str]): The list of features to use.
+            current_processed_features (list[str]): Processed column names the
+                model sees, in the order feature_importances_ reports them.
+            step_estimator (BaseEstimator): Estimator restricted to active cat features.
+            pipeline_override (Pipeline | None): Restricted pipeline for this step.
 
         Returns:
             tuple[dict[str, float], float, float]: A tuple containing:
-                - A dictionary of average importance scores for each feature.
+                - A dictionary of average importance scores for each processed feature.
                 - The mean baseline validation score across folds.
                 - The standard deviation of the baseline validation score.
 
@@ -256,7 +381,10 @@ class ModelImportanceRecursiveFeatureElimination:
             AttributeError: If the estimator does not have feature_importances_.
         """
         _, valid_scores, _ = self.cross_validator.fit(
-            self.estimator, x_data[current_features], y_data
+            step_estimator,
+            x_data,
+            y_data,
+            preprocessing_pipeline_override=pipeline_override,
         )
         importances = []
         for estimator in self.cross_validator.fitted_estimators_:
@@ -267,11 +395,12 @@ class ModelImportanceRecursiveFeatureElimination:
                 )
             importances.append(estimator.feature_importances_)
 
-        avg_importances = np.mean(importances, axis=0)
+        avg_importances = np.nan_to_num(np.mean(importances, axis=0), nan=0.0)
         avg_importance_map = {
             feature: float(imp)
-            for feature, imp in zip(current_features, avg_importances)
+            for feature, imp in zip(current_processed_features, avg_importances)
         }
+        gc.collect()
         return (
             avg_importance_map,
             float(np.mean(valid_scores)),
@@ -307,7 +436,6 @@ class ModelImportanceRecursiveFeatureElimination:
         self,
         summary_df: dict[str, list | pd.DataFrame],
         step_idx: int,
-        X: pd.DataFrame,
         current_features: list[str],
         importance_scores: dict[str, float],
         fold_base_metric: float,
@@ -319,11 +447,11 @@ class ModelImportanceRecursiveFeatureElimination:
         Args:
             summary_df (dict[str, list | pd.DataFrame]): Summary dict carrying history.
             step_idx (int): Current step number.
-            X (pd.DataFrame): Original input features.
-            current_features (list[str]): Features remaining before removal.
-            importance_scores (dict[str, float]): Importance score for each feature.
+            current_features (list[str]): Processed features remaining before removal.
+                Mutated in place - each removed feature is popped as it is logged.
+            importance_scores (dict[str, float]): Importance score for each processed feature.
             fold_base_metric (float): Base metric for the current set of features.
-            features_to_remove (list[str]): Features to remove this step.
+            features_to_remove (list[str]): Processed features to remove this step.
         """
         for feature in features_to_remove:
             if feature in self.protected_features:
@@ -335,7 +463,7 @@ class ModelImportanceRecursiveFeatureElimination:
                         [
                             {
                                 "step": step_idx,
-                                "n_features_removed": len(X.columns)
+                                "n_features_removed": len(self.all_processed_features)
                                 - len(current_features)
                                 + 1,
                                 "n_features_remaining": len(current_features) - 1,
@@ -442,6 +570,6 @@ if __name__ == "__main__":
             ]
         )
         print("Selected features:", summary["selected_features"])
+        print(f"Number of selected features: {len(summary['selected_features'])}")
 
     _run_demo()
-    print(f"Number of selected features: {len(summary['selected_features'])}")

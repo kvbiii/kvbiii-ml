@@ -53,6 +53,8 @@ def test_categoricalaligner_init_stores_default_parameters():
     Asserts:
         - categorical_features defaults to None
         - fill_values defaults to None
+        - fill_strategy defaults to "constant"
+        - default_value defaults to "Unknown"
         - warn_on_unknown defaults to True
         - categories_ and modes_ start as empty dicts
     """
@@ -60,6 +62,10 @@ def test_categoricalaligner_init_stores_default_parameters():
     if aligner.categorical_features is not None:
         raise AssertionError()
     if aligner.fill_values is not None:
+        raise AssertionError()
+    if aligner.fill_strategy != "constant":
+        raise AssertionError()
+    if aligner.default_value != "Unknown":
         raise AssertionError()
     if aligner.warn_on_unknown is not True:
         raise AssertionError()
@@ -75,16 +81,25 @@ def test_categoricalaligner_init_stores_custom_parameters():
     Asserts:
         - categorical_features list is stored as provided
         - fill_values dict is stored as provided
+        - fill_strategy and default_value are stored as provided
         - warn_on_unknown flag is stored as provided
     """
     features = ["color", "fuel"]
     fill_values = {"color": "Unknown"}
     aligner = CategoricalAligner(
-        categorical_features=features, fill_values=fill_values, warn_on_unknown=False
+        categorical_features=features,
+        fill_values=fill_values,
+        fill_strategy="mode",
+        default_value="Other",
+        warn_on_unknown=False,
     )
     if aligner.categorical_features != features:
         raise AssertionError()
     if aligner.fill_values != fill_values:
+        raise AssertionError()
+    if aligner.fill_strategy != "mode":
+        raise AssertionError()
+    if aligner.default_value != "Other":
         raise AssertionError()
     if aligner.warn_on_unknown is not False:
         raise AssertionError()
@@ -101,7 +116,7 @@ def test_categoricalaligner_create_fill_values_uses_default_value():
     fill_values = CategoricalAligner.create_fill_values(
         df, categorical_features=["color", "fuel", "missing_feature"]
     )
-    if fill_values != {"color": "mode", "fuel": "mode"}:
+    if fill_values != {"color": "Unknown", "fuel": "Unknown"}:
         raise AssertionError()
 
 
@@ -165,7 +180,8 @@ def test_categoricalaligner_fit_computes_modes_and_categories(
 
     Asserts:
         - modes_ contains the most frequent value for each categorical feature
-        - categories_ contains the full observed category set for each feature
+        - categories_ contains the observed category set plus the default
+          "Unknown" fill category for each feature
         - fit returns self
     """
     aligner = CategoricalAligner(categorical_features=["color", "fuel"])
@@ -176,9 +192,9 @@ def test_categoricalaligner_fit_computes_modes_and_categories(
         raise AssertionError()
     if aligner.modes_["fuel"] not in {"petrol", "diesel"}:
         raise AssertionError()
-    if set(aligner.categories_["color"]) != {"red", "blue", "green"}:
+    if set(aligner.categories_["color"]) != {"red", "blue", "green", "Unknown"}:
         raise AssertionError()
-    if set(aligner.categories_["fuel"]) != {"petrol", "diesel", "electric"}:
+    if set(aligner.categories_["fuel"]) != {"petrol", "diesel", "electric", "Unknown"}:
         raise AssertionError()
 
 
@@ -219,10 +235,10 @@ def test_categoricalaligner_fit_skips_features_missing_from_dataframe():
 
 
 def test_categoricalaligner_transform_fills_missing_values():
-    """Tests transform fills NaN values with the fitted fill value.
+    """Tests transform fills NaN values with the default "Unknown" fill value.
 
     Asserts:
-        - NaN entries are replaced with the feature's fill value
+        - NaN entries are replaced with "Unknown" when no fill_values is configured
         - Resulting column is category dtype
     """
     train = pd.DataFrame({"color": pd.Categorical(["red", "blue", "red"])})
@@ -230,36 +246,165 @@ def test_categoricalaligner_transform_fills_missing_values():
     aligner = CategoricalAligner(categorical_features=["color"])
     aligner.fit(train)
     transformed = aligner.transform(test)
-    if transformed.loc[1, "color"] != aligner.modes_["color"]:
+    if transformed.loc[1, "color"] != "Unknown":
         raise AssertionError()
     if not isinstance(transformed["color"].dtype, pd.CategoricalDtype):
+        raise AssertionError()
+
+
+def test_categoricalaligner_fit_handles_nan_in_pre_existing_categorical_column():
+    """Tests fit does not raise when the input column is already categorical with NaN.
+
+    Regression test: pandas forbids filling a Categorical with a value outside its
+    existing categories, so the fill value must be added as a category before fillna.
+
+    Asserts:
+        - fit completes without raising TypeError
+        - The NaN row is filled with the default "Unknown" value
+    """
+    train = pd.DataFrame({"color": pd.Categorical(["red", "blue", None, "red"])})
+    aligner = CategoricalAligner(categorical_features=["color"])
+    aligner.fit(train)
+    if "Unknown" not in aligner.categories_["color"]:
+        raise AssertionError()
+
+
+def test_categoricalaligner_transform_handles_nan_in_pre_existing_categorical_column():
+    """Tests transform does not raise when the input column is already categorical with NaN.
+
+    Regression test: pandas forbids filling a Categorical with a value outside its
+    existing categories, so the fill value must be added as a category before fillna.
+
+    Asserts:
+        - transform completes without raising TypeError
+        - The NaN row is filled with the default "Unknown" value
+        - Unseen categories are still replaced with "Unknown"
+    """
+    train = pd.DataFrame({"color": pd.Categorical(["red", "blue", "red"])})
+    test = pd.DataFrame({"color": pd.Categorical(["red", None, "purple"])})
+    aligner = CategoricalAligner(categorical_features=["color"])
+    aligner.fit(train)
+    transformed = aligner.transform(test)
+    if transformed.loc[1, "color"] != "Unknown":
+        raise AssertionError()
+    if transformed.loc[2, "color"] != "Unknown":
         raise AssertionError()
 
 
 def test_categoricalaligner_transform_replaces_unknown_categories(
     categorical_training_data, categorical_test_data
 ):
-    """Tests transform replaces categories unseen during fit with the fill value.
+    """Tests transform replaces categories unseen during fit with the default fill value.
 
     Args:
         categorical_training_data (pd.DataFrame): Training data.
         categorical_test_data (pd.DataFrame): Test data with unknown categories.
 
     Asserts:
-        - Unknown color and fuel values are replaced with their fitted fill value
+        - Unknown color and fuel values are replaced with "Unknown"
         - Known values are preserved unchanged
     """
     aligner = CategoricalAligner(categorical_features=["color", "fuel"])
+    aligner.fit(categorical_training_data)
+    transformed = aligner.transform(categorical_test_data)
+    if transformed.loc[1, "color"] != "Unknown":
+        raise AssertionError()
+    if transformed.loc[1, "fuel"] != "Unknown":
+        raise AssertionError()
+    if transformed.loc[0, "color"] != "blue":
+        raise AssertionError()
+    if transformed.loc[3, "fuel"] != "electric":
+        raise AssertionError()
+
+
+def test_categoricalaligner_mode_strategy_fills_with_training_mode(
+    categorical_training_data, categorical_test_data
+):
+    """Tests fill_strategy="mode" fills unconfigured features with the training mode.
+
+    Args:
+        categorical_training_data (pd.DataFrame): Training data.
+        categorical_test_data (pd.DataFrame): Test data with unknown categories.
+
+    Asserts:
+        - Unknown values are replaced with each feature's fitted mode, not "Unknown"
+    """
+    aligner = CategoricalAligner(
+        categorical_features=["color", "fuel"], fill_strategy="mode"
+    )
     aligner.fit(categorical_training_data)
     transformed = aligner.transform(categorical_test_data)
     if transformed.loc[1, "color"] != aligner.modes_["color"]:
         raise AssertionError()
     if transformed.loc[1, "fuel"] != aligner.modes_["fuel"]:
         raise AssertionError()
-    if transformed.loc[0, "color"] != "blue":
+
+
+def test_categoricalaligner_constant_strategy_uses_custom_default_value(
+    categorical_training_data, categorical_test_data
+):
+    """Tests fill_strategy="constant" fills unconfigured features with default_value.
+
+    Args:
+        categorical_training_data (pd.DataFrame): Training data.
+        categorical_test_data (pd.DataFrame): Test data with unknown categories.
+
+    Asserts:
+        - Unknown values are replaced with the configured default_value
+    """
+    aligner = CategoricalAligner(
+        categorical_features=["color", "fuel"],
+        fill_strategy="constant",
+        default_value="Brak",
+    )
+    aligner.fit(categorical_training_data)
+    transformed = aligner.transform(categorical_test_data)
+    if transformed.loc[1, "color"] != "Brak":
         raise AssertionError()
-    if transformed.loc[3, "fuel"] != "electric":
+    if transformed.loc[1, "fuel"] != "Brak":
         raise AssertionError()
+
+
+def test_categoricalaligner_fill_values_overrides_strategy_for_configured_features(
+    categorical_training_data, categorical_test_data
+):
+    """Tests fill_values entries win over fill_strategy for configured features.
+
+    Args:
+        categorical_training_data (pd.DataFrame): Training data.
+        categorical_test_data (pd.DataFrame): Test data with unknown categories.
+
+    Asserts:
+        - "color" uses its explicit fill_values entry even under fill_strategy="mode"
+        - "fuel", absent from fill_values, still falls back to the mode strategy
+    """
+    aligner = CategoricalAligner(
+        categorical_features=["color", "fuel"],
+        fill_values={"color": "Puste"},
+        fill_strategy="mode",
+    )
+    aligner.fit(categorical_training_data)
+    transformed = aligner.transform(categorical_test_data)
+    if transformed.loc[1, "color"] != "Puste":
+        raise AssertionError()
+    if transformed.loc[1, "fuel"] != aligner.modes_["fuel"]:
+        raise AssertionError()
+
+
+def test_categoricalaligner_fit_raises_on_invalid_fill_strategy(
+    categorical_training_data,
+):
+    """Tests fit raises ValueError for an unsupported fill_strategy value.
+
+    Args:
+        categorical_training_data (pd.DataFrame): Training data.
+
+    Asserts:
+        - ValueError is raised mentioning the invalid strategy
+    """
+    aligner = CategoricalAligner(categorical_features=["color"], fill_strategy="median")
+    with pytest.raises(ValueError, match="fill_strategy"):
+        aligner.fit(categorical_training_data)
 
 
 def test_categoricalaligner_transform_warns_on_unknown_when_enabled(

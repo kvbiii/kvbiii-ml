@@ -124,6 +124,31 @@ class StringSimilarityEncoderWithOriginal(_WithOriginalBase):
         """
         return self._inner.get_feature_names_out()
 
+    def get_derived_column_dependencies(self) -> dict[str, list[str]]:
+        """Map each per-string similarity column to its single source variable.
+
+        Overrides the base-class default because StringSimilarityEncoder expands
+        one input variable into many output columns (one per unique training
+        string), not the base class's single `{var}_{_suffix}` column. Uses
+        feature_engine's own ``encoder_dict_`` (per-variable list of category
+        strings a dummy column is created for) together with its
+        `{variable}_{category}` / `{variable}_nan` naming, rather than this
+        class's own get_feature_names_out() override, which is separately known
+        to omit the pass-through original column and is not a reliable source
+        of truth here.
+
+        Returns:
+            dict[str, list[str]]: Every `{variable}_{category}` (or
+                `{variable}_nan` for the imputed-missing-value category) column
+                mapped to a single-element list containing its source variable.
+        """
+        dependencies: dict[str, list[str]] = {}
+        for var in self.variables_:
+            for category in self._inner.encoder_dict_[var]:
+                derived_name = f"{var}_nan" if category == "" else f"{var}_{category}"
+                dependencies[derived_name] = [var]
+        return dependencies
+
 
 __all__ = ["StringSimilarityEncoder", "StringSimilarityEncoderWithOriginal"]
 

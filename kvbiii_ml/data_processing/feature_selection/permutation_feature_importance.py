@@ -1,17 +1,58 @@
-import warnings
+from collections.abc import Generator
+from contextlib import contextmanager
 from copy import deepcopy
 from pathlib import Path
 import sys
+import warnings
 
+import joblib.parallel
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator, clone
+from sklearn.base import BaseEstimator
 from sklearn.inspection import permutation_importance
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import FunctionTransformer
+from tqdm import tqdm
 
 sys.path.append(str(Path(__file__).resolve().parents[3]))
+from kvbiii_ml.data_processing.feature_selection.pipeline_dependency import (
+    PipelineDependencyGraph,
+)
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
+
+
+@contextmanager
+def _tqdm_joblib_callback(progress_bar: tqdm) -> Generator[tqdm, None, None]:
+    """Report joblib batch completions to a tqdm bar for the duration of this context.
+
+    ``permutation_importance`` dispatches one joblib task per feature column, but
+    exposes no progress callback of its own. Patching joblib's batch-completion
+    callback is the only way to surface live per-feature progress without
+    reimplementing permutation scoring by hand. The patch is process-global for
+    the duration of the ``with`` block and is always reverted in ``finally``, so
+    it must not be nested with other joblib-progress hooks running concurrently
+    in other threads. joblib's sequential backend (``n_jobs=1``) never invokes
+    this callback, so the bar is topped up to completion on exit as a fallback.
+
+    Args:
+        progress_bar (tqdm): Progress bar to update as joblib batches complete.
+
+    Yields:
+        tqdm: The same progress bar, for convenience.
+    """
+    original_callback = joblib.parallel.BatchCompletionCallBack
+
+    class _TqdmBatchCompletionCallback(original_callback):
+        def __call__(self, *args: object, **kwargs: object) -> object:
+            progress_bar.update(self.batch_size)
+            return super().__call__(*args, **kwargs)
+
+    joblib.parallel.BatchCompletionCallBack = _TqdmBatchCompletionCallback
+    try:
+        yield progress_bar
+    finally:
+        joblib.parallel.BatchCompletionCallBack = original_callback
+        remaining = progress_bar.total - progress_bar.n
+        if remaining > 0:
+            progress_bar.update(remaining)
 
 
 class PermutationRecursiveFeatureElimination:
@@ -21,11 +62,10 @@ class PermutationRecursiveFeatureElimination:
     importance on the processed validation sets, then removes the least-important
     processed features according to a linear-decay schedule.
 
-    When the cross-validator holds a column-expansion pipeline (steps that inherit
-    from ``_FeatureExpansionBase`` and therefore expose a ``_suffix`` attribute),
-    the elimination loop works entirely in *processed* feature space - the
-    post-pipeline column set.  Raw input features are derived from the active
-    processed set at each step and used only as pipeline inputs.
+    When the cross-validator holds a column-expansion pipeline, the elimination
+    loop works entirely in *processed* feature space - the post-pipeline column
+    set. Raw input features needed for each step are resolved via a
+    ``PipelineDependencyGraph`` built once from a real baseline pipeline fit.
 
     ``protected_features`` must be specified as *processed* column names and are
     validated after the baseline CV run when the processed column set is known.
@@ -92,15 +132,15 @@ class PermutationRecursiveFeatureElimination:
         """Run permutation RFE and return the selection summary.
 
         Algorithm:
-            1. Baseline CV - pipeline applied per fold, fold models and fitted pipelines stored.
+            1. Baseline CV - pipeline fit once via PipelineDependencyGraph.build();
+               processed column set and per-column raw dependencies discovered.
             2. Processed validation sets built from fitted pipelines.
-            3. Processed feature list discovered from post-pipeline columns.
-            4. protected_features validated against processed columns.
-            5. raw_to_derived mapping built from pipeline expansion steps.
-            6. Permutation importance computed once in processed space (fixed baseline).
-            7. Removal schedule built from removable processed feature count.
-            8. Each step: print current state, restrict pipeline, re-run CV, record scores.
-            9. Return step-wise DataFrame for manual elbow inspection.
+            3. protected_features validated against processed columns.
+            4. Permutation importance computed once in processed space (fixed baseline).
+            5. Removal schedule built from removable processed feature count.
+            6. Each step: print current state, restrict pipeline via the dependency
+               graph, re-run CV, record scores.
+            7. Return step-wise DataFrame for manual elbow inspection.
 
         Args:
             X (pd.DataFrame): Feature matrix (raw columns).
@@ -129,17 +169,14 @@ class PermutationRecursiveFeatureElimination:
         }
 
         pipeline = self.cross_validator.preprocessing_pipeline
-        post_pipeline_dtypes: pd.Series | None = self._probe_pipeline_dtypes(
+        dependency_graph = PipelineDependencyGraph.build(
             pipeline, X[all_raw_features], y
         )
 
-        _baseline_feature_set = (
-            set(post_pipeline_dtypes.index)
-            if post_pipeline_dtypes is not None
-            else set(all_raw_features)
-        )
         baseline_estimator = self._restrict_catboost_cat_features(
-            self.estimator, _baseline_feature_set, post_pipeline_dtypes
+            self.estimator,
+            set(dependency_graph.processed_columns),
+            dependency_graph.processed_dtypes,
         )
         _, valid_scores, _ = self.cross_validator.fit(
             baseline_estimator, X[all_raw_features], y
@@ -162,9 +199,10 @@ class PermutationRecursiveFeatureElimination:
             )
         ]
 
-        self.all_processed_features: list[str] = fold_data[0][1].columns.tolist()
+        self.all_processed_features: list[str] = list(
+            dependency_graph.processed_columns
+        )
         all_processed_set = set(self.all_processed_features)
-        post_pipeline_dtypes = fold_data[0][1].dtypes
 
         missing_protected = set(self.protected_features) - all_processed_set
         if missing_protected:
@@ -173,9 +211,6 @@ class PermutationRecursiveFeatureElimination:
                 f"Available processed columns: {sorted(all_processed_set)}"
             )
 
-        raw_to_derived = self._build_raw_to_derived(
-            all_raw_features, all_processed_set, pipeline
-        )
         importance_scores = self._compute_fold_importances(fold_data)
 
         removable_processed = [
@@ -184,7 +219,6 @@ class PermutationRecursiveFeatureElimination:
         removal_schedule = self.compute_removal_schedule(len(removable_processed))
 
         current_processed_features: list[str] = list(self.all_processed_features)
-        current_raw_features: list[str] = list(all_raw_features)
         current_valid_scores = valid_scores
 
         summary_df["history"] = pd.concat(
@@ -263,18 +297,13 @@ class PermutationRecursiveFeatureElimination:
                 for f in current_processed_features
                 if f not in set(features_to_remove)
             ]
-            current_raw_features = self._compute_active_raw(
-                all_raw_features, current_processed_features, raw_to_derived
-            )
-
-            restricted_pipeline = self._build_restricted_pipeline(
-                pipeline,
-                current_raw_features,
-                current_processed_features,
-                X[current_raw_features],
+            current_raw_features, restricted_pipeline = dependency_graph.restrict(
+                current_processed_features
             )
             step_estimator = self._restrict_catboost_cat_features(
-                self.estimator, set(current_processed_features), post_pipeline_dtypes
+                self.estimator,
+                set(current_processed_features),
+                dependency_graph.processed_dtypes,
             )
 
             _, current_valid_scores, _ = self.cross_validator.fit(
@@ -329,100 +358,6 @@ class PermutationRecursiveFeatureElimination:
 
         return summary_df
 
-    @staticmethod
-    def _select_features(X: pd.DataFrame, features: list[str]) -> pd.DataFrame:
-        """Select specified features from X, silently skipping any absent ones."""
-        return X[[f for f in features if f in X.columns]]
-
-    @staticmethod
-    def _probe_pipeline_dtypes(
-        pipeline: Pipeline | None,
-        X: pd.DataFrame,
-        y: pd.Series,
-    ) -> pd.Series | None:
-        """Fit-transform the pipeline on a tiny sample to discover output column dtypes.
-
-        Used to detect columns that a pipeline step (e.g. MeanEncoder) converts from
-        categorical strings to numeric, so that CatBoost's cat_features can be filtered
-        before the baseline CV fit.
-
-        Args:
-            pipeline (Pipeline | None): Preprocessing pipeline to probe.
-            X (pd.DataFrame): Raw feature matrix.
-            y (pd.Series): Target vector.
-
-        Returns:
-            pd.Series | None: Column dtype series of the probed output, or None when
-                pipeline is None or the output is not a DataFrame.
-        """
-        if pipeline is None:
-            return None
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            x_probe = clone(pipeline).fit_transform(X.head(10), y.head(10))
-        return x_probe.dtypes if isinstance(x_probe, pd.DataFrame) else None
-
-    @staticmethod
-    def _build_raw_to_derived(
-        all_raw_features: list[str],
-        all_processed_set: set[str],
-        pipeline: Pipeline | None,
-    ) -> dict[str, list[str]]:
-        """Map each raw feature to its derived column names produced by expansion steps.
-
-        Only steps that expose a non-empty ``_suffix`` class attribute (those inheriting
-        from ``_FeatureExpansionBase``) contribute derived columns.  Regular in-place
-        transformers (MeanEncoder, Winsorizer, etc.) do not expand columns and are ignored.
-
-        Args:
-            all_raw_features (list[str]): Raw input column names.
-            all_processed_set (set[str]): Set of all post-pipeline column names.
-            pipeline (Pipeline | None): Preprocessing pipeline or None.
-
-        Returns:
-            dict[str, list[str]]: raw feature → list of derived column names actually
-                present in the processed output.
-        """
-        raw_to_derived: dict[str, list[str]] = {f: [] for f in all_raw_features}
-        if pipeline is None:
-            return raw_to_derived
-        for _, step in pipeline.steps:
-            if not (hasattr(step, "_suffix") and step._suffix):
-                continue
-            suffix = f"_{step._suffix}"
-            for raw_feat in all_raw_features:
-                derived = f"{raw_feat}{suffix}"
-                if derived in all_processed_set:
-                    raw_to_derived[raw_feat].append(derived)
-        return raw_to_derived
-
-    @staticmethod
-    def _compute_active_raw(
-        all_raw: list[str],
-        current_processed: list[str],
-        raw_to_derived: dict[str, list[str]],
-    ) -> list[str]:
-        """Compute the raw input features still needed given the active processed set.
-
-        A raw feature is needed when either its own name appears in the processed set
-        or at least one of its derived expansion columns does.
-
-        Args:
-            all_raw (list[str]): All raw input column names.
-            current_processed (list[str]): Processed feature names still active.
-            raw_to_derived (dict[str, list[str]]): raw → derived column names mapping.
-
-        Returns:
-            list[str]: Raw features required as pipeline input for the current step.
-        """
-        current_processed_set = set(current_processed)
-        return [
-            f
-            for f in all_raw
-            if f in current_processed_set
-            or any(d in current_processed_set for d in raw_to_derived[f])
-        ]
-
     def _compute_fold_importances(self, fold_data: list[tuple]) -> dict[str, float]:
         """Compute mean permutation importance averaged across CV fold models.
 
@@ -445,7 +380,16 @@ class PermutationRecursiveFeatureElimination:
 
         fold_importances: list[pd.Series] = []
         for fold_idx, (est, x_val, y_val) in enumerate(fold_data):
-            with warnings.catch_warnings():
+            with (
+                tqdm(
+                    total=len(x_val.columns),
+                    desc=f"Fold {fold_idx + 1}/{len(fold_data)} - Permuting features",
+                    disable=not self.verbose,
+                    leave=True,
+                ) as progress_bar,
+                _tqdm_joblib_callback(progress_bar),
+                warnings.catch_warnings(),
+            ):
                 warnings.simplefilter("ignore")
                 result = permutation_importance(
                     est,
@@ -461,66 +405,6 @@ class PermutationRecursiveFeatureElimination:
             )
 
         return pd.DataFrame(fold_importances).mean().to_dict()
-
-    @staticmethod
-    def _build_restricted_pipeline(
-        preprocessor: Pipeline | None,
-        current_raw_features: list[str],
-        current_processed_features: list[str],
-        x_current: pd.DataFrame | None = None,
-    ) -> Pipeline | None:
-        """Clone the pipeline, restricting each step and appending a feature selector.
-
-        Steps with an explicit ``variables`` list are filtered to contain only columns
-        present in ``current_raw_features``.  Steps with ``variables=None`` are trial-fitted
-        on a tiny sample to detect compatibility.  A ``FunctionTransformer`` wrapping
-        ``_select_features`` is always appended as the final step so the model receives
-        exactly ``current_processed_features``.
-
-        Args:
-            preprocessor (Pipeline | None): Original preprocessing pipeline.
-            current_raw_features (list[str]): Raw columns still active.
-            current_processed_features (list[str]): Processed columns the model should see.
-            x_current (pd.DataFrame | None): Representative sample used to trial-fit steps
-                with auto-detected variables. Defaults to None.
-
-        Returns:
-            Pipeline | None: Restricted clone with feature selector appended, or None
-                if preprocessor is None.
-        """
-        if preprocessor is None:
-            return None
-
-        raw_set = set(current_raw_features)
-        new_steps: list[tuple[str, BaseEstimator]] = []
-
-        for name, step in preprocessor.steps:
-            cloned_step = clone(step)
-            params = cloned_step.get_params()
-            if isinstance(params.get("variables"), list):
-                filtered = [v for v in params["variables"] if v in raw_set]
-                if not filtered:
-                    continue
-                cloned_step.set_params(variables=filtered)
-            elif params.get("variables") is None and x_current is not None:
-                try:
-                    with warnings.catch_warnings():
-                        warnings.simplefilter("ignore")
-                        clone(step).fit(x_current.head(5))
-                except (ValueError, TypeError, KeyError, AttributeError, IndexError):
-                    continue
-            new_steps.append((name, cloned_step))
-
-        new_steps.append(
-            (
-                "_feature_selector",
-                FunctionTransformer(
-                    func=PermutationRecursiveFeatureElimination._select_features,
-                    kw_args={"features": current_processed_features},
-                ),
-            )
-        )
-        return Pipeline(new_steps)
 
     @staticmethod
     def _restrict_catboost_cat_features(

@@ -250,5 +250,35 @@ def test_with_original_wrapper_transform_before_fit_raises_attributeerror(
         estimator.transform(X)
 
 
+@pytest.mark.parametrize(
+    "estimator_cls, kwargs, dataset_fixture, expected_variables", CONTRACT_CASES
+)
+def test_with_original_wrapper_declares_derived_column_dependencies(
+    estimator_cls, kwargs, dataset_fixture, expected_variables, request
+):
+    """Tests get_derived_column_dependencies() matches transform()'s own naming.
+
+    Args:
+        estimator_cls: Wrapper class under test.
+        kwargs: Constructor keyword arguments for the wrapper.
+        dataset_fixture: Name of the fixture providing (X, y) test data.
+        expected_variables: Variables expected to gain a derived column.
+        request: Pytest fixture request used to resolve dataset_fixture by name.
+
+    Asserts:
+        - Every configured variable maps its `{variable}_{_suffix}` column to
+          itself, and no other keys are present.
+    """
+    X, y = request.getfixturevalue(dataset_fixture)
+    estimator = estimator_cls(**kwargs)
+    estimator.fit(X, y)
+    expected = {f"{v}_{estimator._suffix}": [v] for v in expected_variables}
+    if estimator.get_derived_column_dependencies() != expected:
+        raise AssertionError(
+            f"dependency mismatch for {estimator_cls.__name__}: "
+            f"{estimator.get_derived_column_dependencies()} != {expected}"
+        )
+
+
 if __name__ == "__main__":
     print("Run this file with pytest to execute tests.")

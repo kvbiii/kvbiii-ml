@@ -118,5 +118,37 @@ def test_stringsimilarityencoderwithoriginal_get_feature_names_out_reflects_expa
         )
 
 
+def test_stringsimilarityencoderwithoriginal_declares_dependencies_per_variable(
+    string_similarity_data,
+):
+    """Tests get_derived_column_dependencies() matches transform()'s real output.
+
+    Deliberately checked against transform()'s actual new columns, not against
+    get_feature_names_out() - that method is separately known to omit the
+    pass-through original column and is not a reliable source of truth here.
+
+    Args:
+        string_similarity_data: DataFrame with several distinct training strings.
+
+    Asserts:
+        - The declared dependency keys exactly equal the columns transform()
+          actually adds.
+        - Every declared dependency maps to exactly ["product"].
+    """
+    encoder = StringSimilarityEncoderWithOriginal(variables=["product"])
+    encoder.fit(string_similarity_data)
+    transformed = encoder.transform(string_similarity_data)
+    real_new_columns = {
+        c for c in transformed.columns if c not in string_similarity_data.columns
+    }
+    declared = encoder.get_derived_column_dependencies()
+    if set(declared.keys()) != real_new_columns:
+        raise AssertionError(
+            f"declared keys {set(declared.keys())} != real new columns {real_new_columns}"
+        )
+    if not all(sources == ["product"] for sources in declared.values()):
+        raise AssertionError(f"expected every value to be ['product'], got {declared}")
+
+
 if __name__ == "__main__":
     print("Run this file with pytest to execute tests.")

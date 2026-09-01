@@ -3,9 +3,19 @@
 import numpy as np
 import pandas as pd
 import pytest
+from catboost import CatBoostClassifier
+from feature_engine.encoding import MeanEncoder
+from lightgbm import LGBMClassifier
+from sklearn.pipeline import Pipeline
 
 from kvbiii_ml.data_processing.feature_selection.model_importance_rfe import (
     ModelImportanceRecursiveFeatureElimination,
+)
+from kvbiii_ml.data_processing.preprocessing.categorical_encoding.string_similarity_encoder import (
+    StringSimilarityEncoderWithOriginal,
+)
+from kvbiii_ml.data_processing.preprocessing.discretisation.equal_width_discretiser import (
+    EqualWidthDiscretiserWithOriginal,
 )
 
 from ._test_support import (
@@ -263,6 +273,135 @@ def test_modelimportancerfe_run_returns_valid_summary_end_to_end(
     result = selector.run(X, y)
 
     assert_rfe_run_summary_starts_with_full_feature_set(result, X)
+
+
+def test_modelimportancerfe_run_with_pipeline_expansion_discovers_derived_columns(
+    small_classification_data,
+):
+    """Tests the elimination loop works in processed feature space with an expansion pipeline.
+
+    Args:
+        small_classification_data (tuple): Feature matrix and target fixture.
+
+    Asserts:
+        - all_processed_features includes derived discretised columns
+        - selected_features is a subset of all_processed_features
+    """
+    X, y = small_classification_data
+    pipeline = Pipeline(
+        [
+            (
+                "eq_width",
+                EqualWidthDiscretiserWithOriginal(variables=["f0", "f1"], bins=3),
+            ),
+        ]
+    )
+    selector = ModelImportanceRecursiveFeatureElimination(
+        estimator=_build_estimator(),
+        cross_validator=build_cross_validator(pipeline=pipeline),
+        steps=1,
+        verbose=False,
+    )
+
+    result = selector.run(X, y)
+
+    if not any("_PREPROCESS_EQ_WIDTH" in f for f in selector.all_processed_features):
+        raise AssertionError()
+    if not set(result["selected_features"]).issubset(
+        set(selector.all_processed_features)
+    ):
+        raise AssertionError()
+
+
+def test_modelimportancerfe_run_with_string_similarity_encoder_survives_raw_column_removal():
+    """Regression test proving the raw-vs-processed feature-space fix for RFE elimination.
+
+    StringSimilarityEncoderWithOriginal is a 1-to-many expansion transformer, so this
+    exercises the same dependency-graph resolution proven for ModelImportanceFiltering.
+    The real dependency graph and a real LGBMClassifier fit still run at every step;
+    only the raw "product" column's importance score is patched to the global minimum
+    (after the real fit), guaranteeing it is always the first candidate removed
+    whenever present. This proves the restricted pipeline can still regenerate the
+    protected derived column from just the raw "product" column once "product" itself
+    is no longer selected.
+
+    Asserts:
+        - The raw "product" pass-through column is removed
+        - The protected derived "product_apple" column survives to the final selection
+    """
+    products = ["apple", "orange", "grape", "melon"] * 10
+    rng = np.random.default_rng(17)
+    X = pd.DataFrame(
+        {"product": pd.Categorical(products), "num": rng.normal(size=len(products))}
+    )
+    y = pd.Series((X["num"] > 0).astype(int), name="target")
+
+    pipeline = Pipeline(
+        [("sse", StringSimilarityEncoderWithOriginal(variables=["product"]))]
+    )
+    estimator = LGBMClassifier(n_estimators=5, max_depth=2, verbose=-1, random_state=17)
+    selector = ModelImportanceRecursiveFeatureElimination(
+        estimator=estimator,
+        cross_validator=build_cross_validator(pipeline=pipeline),
+        steps=3,
+        protected_features=["product_apple"],
+        verbose=False,
+    )
+    original_importance = selector._cross_val_model_importance
+
+    def _forced_importance(*args, **kwargs):
+        """Forces "product"'s score to the global minimum whenever it is present."""
+        importance_map, fold_metric, fold_std = original_importance(*args, **kwargs)
+        if "product" in importance_map:
+            importance_map["product"] = min(importance_map.values()) - 1.0
+        return importance_map, fold_metric, fold_std
+
+    selector._cross_val_model_importance = _forced_importance
+
+    result = selector.run(X, y)
+
+    if "product" not in result["history"]["removed_feature_name"].tolist():
+        raise AssertionError("expected the raw pass-through column to be removed")
+    if "product_apple" not in result["selected_features"]:
+        raise AssertionError("expected the protected derived column to survive")
+
+
+def test_modelimportancerfe_run_bootstraps_catboost_cat_features_from_graph_dtypes():
+    """Tests CatBoost cat_features narrows correctly using the dependency graph's dtypes.
+
+    A MeanEncoder converts the raw categorical column to float in place; cat_features
+    must be narrowed away from that now-numeric column, otherwise CatBoost raises on
+    a column declared categorical that is actually numeric.
+
+    Asserts:
+        - run() completes without CatBoost raising a cat-features/dtype error
+        - A non-empty final selection is produced
+    """
+    rng = np.random.default_rng(17)
+    n = 40
+    X = pd.DataFrame(
+        {
+            "cat_col": rng.choice(["a", "b", "c"], size=n).astype(str),
+            "num": rng.normal(size=n),
+        }
+    )
+    y = pd.Series((X["num"] > 0).astype(int), name="target")
+
+    pipeline = Pipeline([("mean_enc", MeanEncoder(variables=["cat_col"]))])
+    estimator = CatBoostClassifier(
+        n_estimators=10, verbose=0, random_state=17, cat_features=["cat_col"]
+    )
+    selector = ModelImportanceRecursiveFeatureElimination(
+        estimator=estimator,
+        cross_validator=build_cross_validator(pipeline=pipeline),
+        steps=1,
+        verbose=False,
+    )
+
+    result = selector.run(X, y)
+
+    if not len(result["selected_features"]) > 0:
+        raise AssertionError()
 
 
 if __name__ == "__main__":
