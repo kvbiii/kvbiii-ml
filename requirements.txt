@@ -10,4 +10,5 @@ optuna>=4.5.0
 pydantic-settings>=2.10.1
 pytest>=8.4.2
 shap>=0.48.0
+tqdm>=4.65.0
 xgboost>=1.7.6
