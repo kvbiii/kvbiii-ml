@@ -35,7 +35,6 @@ class DataCleaner:
         categorical_features = [
             col for col in categorical_cols if nunique[col] < threshold
         ]
-        return categorical_features
         binary_features = [col for col in df.columns if nunique[col] == 2]
 
         return list(set(categorical_features) | set(binary_features))
