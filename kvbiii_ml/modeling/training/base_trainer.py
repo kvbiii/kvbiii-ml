@@ -48,10 +48,12 @@ class BaseTrainer:
         class_name = type(estimator).__name__
         if LGBM_PREFIX in class_name:
 
-            fit_kwargs: dict = {
-                "eval_set": [(X_valid, y_valid)],
-                "callbacks": [log_evaluation(verbose)],
-            }
+            fit_kwargs: dict = {"callbacks": [log_evaluation(verbose)]}
+            if "eval_X" in signature(estimator.fit).parameters:
+                fit_kwargs["eval_X"] = X_valid
+                fit_kwargs["eval_y"] = y_valid
+            else:
+                fit_kwargs["eval_set"] = [(X_valid, y_valid)]
             cat_cols = X_valid.select_dtypes(
                 include=["category", "object"]
             ).columns.tolist()
@@ -111,7 +113,19 @@ class BaseTrainer:
                 if estimator.__class__.__name__.startswith("LGBM"):
                     fit_params["callbacks"] = [log_evaluation(verbose)]
 
-        if "eval_set" in sig.parameters and X_valid is not None and y_valid is not None:
+        is_lgbm = estimator.__class__.__name__.startswith(LGBM_PREFIX)
+        if (
+            is_lgbm
+            and "eval_X" in sig.parameters
+            and "eval_y" in sig.parameters
+            and X_valid is not None
+            and y_valid is not None
+        ):
+            fit_params["eval_X"] = (X_train, X_valid)
+            fit_params["eval_y"] = (y_train, y_valid)
+        elif (
+            "eval_set" in sig.parameters and X_valid is not None and y_valid is not None
+        ):
             eval_set = [(X_train, y_train), (X_valid, y_valid)]
 
             if (

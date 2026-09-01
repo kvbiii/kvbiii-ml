@@ -1,7 +1,11 @@
 import warnings
+from typing import Literal
 
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
+
+DEFAULT_FILL_VALUE = "Unknown"
+FILL_STRATEGIES = ("mode", "constant")
 
 
 class CategoricalAligner(BaseEstimator, TransformerMixin):
@@ -14,6 +18,8 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
         self,
         categorical_features: list[str] | None = None,
         fill_values: dict[str, str] | None = None,
+        fill_strategy: Literal["mode", "constant"] = "constant",
+        default_value: str = DEFAULT_FILL_VALUE,
         warn_on_unknown: bool = True,
     ):
         """
@@ -24,13 +30,25 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
                 List of categorical features names. If None, auto-detects object
                 and category columns during fit. Defaults to None.
             fill_values (dict[str, str] | None, optional):
-                Feature-specific fill values for unknown categories. Defaults to None.
+                Feature-specific fill values for unknown categories, keyed by feature
+                name (e.g. {"color": "Puste"}). Features listed here always use their
+                configured value, regardless of fill_strategy. Defaults to None.
+            fill_strategy (Literal["mode", "constant"], optional):
+                Strategy used for features not present in fill_values. "mode" fills
+                with each feature's training-data mode; "constant" fills with
+                default_value. Defaults to "constant".
+            default_value (str, optional):
+                Constant fill value used by the "constant" fill_strategy, and as the
+                fallback for "mode" when a feature has no observed mode (e.g. all-NaN
+                training column). Defaults to "Unknown".
             warn_on_unknown (bool, optional):
                 Whether to raise warnings when unknown categories are found.
                 Defaults to True.
         """
         self.categorical_features = categorical_features
         self.fill_values = fill_values
+        self.fill_strategy = fill_strategy
+        self.default_value = default_value
         self.warn_on_unknown = warn_on_unknown
         self.categories_ = {}
         self.modes_ = {}
@@ -41,7 +59,7 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
         df: pd.DataFrame,
         categorical_features: list[str] | None = None,
         custom_fills: dict[str, str] | None = None,
-        default_value: str = "mode",
+        default_value: str = DEFAULT_FILL_VALUE,
     ) -> dict[str, str]:
         """
         Helper method to create fill_values dictionary for categorical features.
@@ -53,7 +71,7 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
             custom_fills (dict[str, str] | None, optional): Custom fill values for specific
                 features. Defaults to None.
             default_value (str, optional): Default fill value for features not in custom_fills.
-                Use "mode" for mode-based filling or any string value. Defaults to "mode".
+                Defaults to "Unknown".
 
         Returns:
             dict[str, str]: Dictionary mapping feature names to fill values.
@@ -78,7 +96,15 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
 
         Returns:
             CategoricalAligner: Fitted transformer.
+
+        Raises:
+            ValueError: If fill_strategy is not one of "mode" or "constant".
         """
+        if self.fill_strategy not in FILL_STRATEGIES:
+            raise ValueError(
+                f"fill_strategy must be one of {FILL_STRATEGIES}, got "
+                f"'{self.fill_strategy}'."
+            )
         df = df.copy()
         if self.categorical_features is None:
             self.categorical_features = df.select_dtypes(
@@ -89,11 +115,11 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
                 continue
             mode_series = df[feature].mode(dropna=True)
             self.modes_[feature] = (
-                str(mode_series[0]) if not mode_series.empty else "Unknown"
+                str(mode_series[0]) if not mode_series.empty else self.default_value
             )
             fill_value = self._get_fill_value(feature)
-            df[feature] = (
-                df[feature].fillna(fill_value).astype("str").astype("category")
+            df[feature] = self._fillna_as_str(df[feature], fill_value).astype(
+                "category"
             )
             cats = df[feature].cat.categories.tolist()
             if fill_value not in cats:
@@ -116,7 +142,7 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
             if feature not in df.columns:
                 continue
             fill_value = self._get_fill_value(feature)
-            df[feature] = df[feature].fillna(fill_value).astype("str")
+            df[feature] = self._fillna_as_str(df[feature], fill_value)
             unknown_mask = ~df[feature].isin(categories)
             unknown_count = unknown_mask.sum()
             if self.warn_on_unknown and unknown_count > 0:
@@ -143,6 +169,27 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
             df[feature] = df[feature].astype("category").cat.set_categories(categories)
         return df
 
+    def _fillna_as_str(self, series: pd.Series, fill_value: str) -> pd.Series:
+        """Fill NaNs with fill_value and cast to string dtype.
+
+        Adds fill_value as a category first when series is already categorical,
+        since pandas forbids filling a Categorical with a value outside its
+        existing categories.
+
+        Args:
+            series (pd.Series): Series to fill, possibly of categorical dtype.
+            fill_value (str): Value to replace NaNs with.
+
+        Returns:
+            pd.Series: String-dtype series with NaNs replaced by fill_value.
+        """
+        if (
+            isinstance(series.dtype, pd.CategoricalDtype)
+            and fill_value not in series.cat.categories
+        ):
+            series = series.cat.add_categories([fill_value])
+        return series.fillna(fill_value).astype("str")
+
     def _get_fill_value(self, feature: str) -> str:
         """Get the fill value for a feature.
 
@@ -155,7 +202,9 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
         fill_values = self.fill_values or {}
         if feature in fill_values:
             return fill_values[feature]
-        return self.modes_.get(feature, "Unknown")
+        if self.fill_strategy == "mode":
+            return self.modes_.get(feature, self.default_value)
+        return self.default_value
 
 
 if __name__ == "__main__":

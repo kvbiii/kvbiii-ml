@@ -232,5 +232,77 @@ def test_randomsearchcv_get_param_raises_error_for_unknown_param_type(
         tuner.get_param(real_optuna_trial, "param", ("weird_type", [1, 2]))
 
 
+def test_randomsearchcv_tune_prints_trial_and_summary_lines_when_verbose(
+    hyperparam_classification_data,
+    logistic_regression_estimator,
+    hyperparam_cv_trainer,
+    capsys,
+):
+    """Tests tune() prints a start line, one line per trial, and a finish summary.
+
+    Args:
+        hyperparam_classification_data (tuple): Feature matrix and binary target vector.
+        logistic_regression_estimator (LogisticRegression): Configured estimator.
+        hyperparam_cv_trainer (CrossValidationTrainer): Configured CV trainer.
+        capsys: Pytest fixture capturing stdout/stderr.
+
+    Asserts:
+        - The starting summary line is printed
+        - At least one per-trial line per requested trial is printed
+        - The final best-trial summary is printed
+    """
+    X, y = hyperparam_classification_data
+    tuner = RandomSearchCV(
+        cross_validator=hyperparam_cv_trainer, n_trials=3, seed=17, verbose=True
+    )
+    params_grid = {"C": ("float", [0.01, 1.0], {"log": True})}
+
+    tuner.tune(logistic_regression_estimator, X, y, params_grid)
+
+    out = capsys.readouterr().out
+    if "Starting random search" not in out:
+        raise AssertionError()
+    if out.count("Trial ") < 3:
+        raise AssertionError()
+    if "Best" not in out:
+        raise AssertionError()
+
+
+def test_randomsearchcv_tune_is_silent_and_restores_verbosity_when_not_verbose(
+    hyperparam_classification_data,
+    logistic_regression_estimator,
+    hyperparam_cv_trainer,
+    capsys,
+):
+    """Tests tune() prints nothing and does not leak Optuna's global log verbosity.
+
+    Args:
+        hyperparam_classification_data (tuple): Feature matrix and binary target vector.
+        logistic_regression_estimator (LogisticRegression): Configured estimator.
+        hyperparam_cv_trainer (CrossValidationTrainer): Configured CV trainer.
+        capsys: Pytest fixture capturing stdout/stderr.
+
+    Asserts:
+        - Nothing is printed to stdout or stderr during tune()
+        - Optuna's global logging verbosity is restored to its pre-call value afterward
+    """
+    X, y = hyperparam_classification_data
+    tuner = RandomSearchCV(
+        cross_validator=hyperparam_cv_trainer, n_trials=3, seed=17, verbose=False
+    )
+    params_grid = {"C": ("float", [0.01, 1.0], {"log": True})}
+    previous_verbosity = optuna.logging.get_verbosity()
+
+    tuner.tune(logistic_regression_estimator, X, y, params_grid)
+
+    captured = capsys.readouterr()
+    if captured.out != "":
+        raise AssertionError()
+    if captured.err != "":
+        raise AssertionError()
+    if optuna.logging.get_verbosity() != previous_verbosity:
+        raise AssertionError()
+
+
 if __name__ == "__main__":
     print("Run this file with pytest to execute tests.")

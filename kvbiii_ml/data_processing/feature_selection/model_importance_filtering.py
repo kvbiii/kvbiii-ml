@@ -1,5 +1,4 @@
 import gc
-import warnings
 from copy import deepcopy
 from pathlib import Path
 import sys
@@ -7,11 +6,13 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator, clone
+from sklearn.base import BaseEstimator
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import FunctionTransformer
 
 sys.path.append(str(Path(__file__).resolve().parents[3]))
+from kvbiii_ml.data_processing.feature_selection.pipeline_dependency import (
+    PipelineDependencyGraph,
+)
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
 
@@ -23,10 +24,10 @@ class ModelImportanceFiltering:
     repeats until no removable feature remains below the threshold or ``max_steps``
     is reached.
 
-    When the cross-validator holds a column-expansion pipeline (steps that inherit
-    from ``_FeatureExpansionBase`` and expose a ``_suffix`` attribute), the
-    elimination loop works in *processed* feature space - the post-pipeline column
-    set.  Raw input features are derived from the active processed set at each step.
+    When the cross-validator holds a column-expansion pipeline, the elimination
+    loop works in *processed* feature space - the post-pipeline column set. Raw
+    input features needed for each step are resolved via a
+    ``PipelineDependencyGraph`` built once from a real baseline pipeline fit.
 
     ``protected_features`` must be specified as *processed* column names and are
     validated after the baseline CV run when the processed column set is known.
@@ -100,159 +101,6 @@ class ModelImportanceFiltering:
             raise ValueError("protected_features must be a list of strings.")
 
     # ─────────────────────────── static pipeline helpers ────────────────────────────
-
-    @staticmethod
-    def _select_features(X: pd.DataFrame, features: list[str]) -> pd.DataFrame:
-        """Select specified features from X, silently skipping any absent ones."""
-        return X[[f for f in features if f in X.columns]]
-
-    @staticmethod
-    def _probe_pipeline_dtypes(
-        pipeline: Pipeline | None,
-        X: pd.DataFrame,
-        y: pd.Series,
-    ) -> pd.Series | None:
-        """Fit-transform the pipeline on a tiny sample to discover output column dtypes.
-
-        Used to detect columns that a pipeline step (e.g. MeanEncoder) converts from
-        categorical strings to numeric, so that CatBoost's cat_features can be filtered
-        before the baseline CV fit.
-
-        Args:
-            pipeline (Pipeline | None): Preprocessing pipeline to probe.
-            X (pd.DataFrame): Raw feature matrix.
-            y (pd.Series): Target vector.
-
-        Returns:
-            pd.Series | None: Column dtype series of the probed output, or None when
-                pipeline is None or the output is not a DataFrame.
-        """
-        if pipeline is None:
-            return None
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            x_probe = clone(pipeline).fit_transform(X.head(10), y.head(10))
-        return x_probe.dtypes if isinstance(x_probe, pd.DataFrame) else None
-
-    @staticmethod
-    def _build_raw_to_derived(
-        all_raw_features: list[str],
-        all_processed_set: set[str],
-        pipeline: Pipeline | None,
-    ) -> dict[str, list[str]]:
-        """Map each raw feature to its derived column names produced by expansion steps.
-
-        Only steps that expose a non-empty ``_suffix`` class attribute (those inheriting
-        from ``_FeatureExpansionBase``) contribute derived columns.
-
-        Args:
-            all_raw_features (list[str]): Raw input column names.
-            all_processed_set (set[str]): Set of all post-pipeline column names.
-            pipeline (Pipeline | None): Preprocessing pipeline or None.
-
-        Returns:
-            dict[str, list[str]]: raw feature → list of derived column names actually
-                present in the processed output.
-        """
-        raw_to_derived: dict[str, list[str]] = {f: [] for f in all_raw_features}
-        if pipeline is None:
-            return raw_to_derived
-        for _, step in pipeline.steps:
-            if not (hasattr(step, "_suffix") and step._suffix):
-                continue
-            suffix = f"_{step._suffix}"
-            for raw_feat in all_raw_features:
-                derived = f"{raw_feat}{suffix}"
-                if derived in all_processed_set:
-                    raw_to_derived[raw_feat].append(derived)
-        return raw_to_derived
-
-    @staticmethod
-    def _compute_active_raw(
-        all_raw: list[str],
-        current_processed: list[str],
-        raw_to_derived: dict[str, list[str]],
-    ) -> list[str]:
-        """Compute the raw input features still needed given the active processed set.
-
-        A raw feature is needed when either its own name appears in the processed set
-        or at least one of its derived expansion columns does.
-
-        Args:
-            all_raw (list[str]): All raw input column names.
-            current_processed (list[str]): Processed feature names still active.
-            raw_to_derived (dict[str, list[str]]): raw → derived column names mapping.
-
-        Returns:
-            list[str]: Raw features required as pipeline input for the current step.
-        """
-        current_processed_set = set(current_processed)
-        return [
-            f
-            for f in all_raw
-            if f in current_processed_set
-            or any(d in current_processed_set for d in raw_to_derived[f])
-        ]
-
-    @staticmethod
-    def _build_restricted_pipeline(
-        preprocessor: Pipeline | None,
-        current_raw_features: list[str],
-        current_processed_features: list[str],
-        x_current: pd.DataFrame | None = None,
-    ) -> Pipeline | None:
-        """Clone the pipeline, restricting each step and appending a feature selector.
-
-        Steps with an explicit ``variables`` list are filtered to contain only columns
-        present in ``current_raw_features``.  Steps with ``variables=None`` are trial-fitted
-        on a tiny sample to detect compatibility.  A ``FunctionTransformer`` wrapping
-        ``_select_features`` is always appended as the final step so the model receives
-        exactly ``current_processed_features``.
-
-        Args:
-            preprocessor (Pipeline | None): Original preprocessing pipeline.
-            current_raw_features (list[str]): Raw columns still active.
-            current_processed_features (list[str]): Processed columns the model should see.
-            x_current (pd.DataFrame | None): Representative sample used to trial-fit steps
-                with auto-detected variables.  Defaults to None.
-
-        Returns:
-            Pipeline | None: Restricted clone with feature selector appended, or None
-                if preprocessor is None.
-        """
-        if preprocessor is None:
-            return None
-
-        raw_set = set(current_raw_features)
-        new_steps: list[tuple[str, BaseEstimator]] = []
-
-        for name, step in preprocessor.steps:
-            cloned_step = clone(step)
-            params = cloned_step.get_params()
-            if isinstance(params.get("variables"), list):
-                filtered = [v for v in params["variables"] if v in raw_set]
-                if not filtered:
-                    continue
-                cloned_step.set_params(variables=filtered)
-            elif params.get("variables") is None and x_current is not None:
-                try:
-                    with warnings.catch_warnings():
-                        warnings.simplefilter("ignore")
-                        clone(step).fit(x_current.head(5))
-                except (ValueError, TypeError, KeyError, AttributeError, IndexError):
-                    continue
-            new_steps.append((name, cloned_step))
-
-        new_steps.append(
-            (
-                "_feature_selector",
-                FunctionTransformer(
-                    func=ModelImportanceFiltering._select_features,
-                    kw_args={"features": current_processed_features},
-                ),
-            )
-        )
-        return Pipeline(new_steps)
 
     @staticmethod
     def _restrict_catboost_cat_features(
@@ -567,12 +415,12 @@ class ModelImportanceFiltering:
         """Run stepwise model importance filtering and return selection summary.
 
         Algorithm:
-            1. Baseline CV - pipeline applied per fold; processed column set discovered.
+            1. Baseline CV - pipeline fit once via PipelineDependencyGraph.build();
+               processed column set and per-column raw dependencies discovered.
             2. protected_features validated against post-pipeline column set.
-            3. raw_to_derived mapping built from pipeline expansion steps.
-            4. Each step: restricted pipeline built, CV run, importances extracted.
-            5. Features at or below threshold removed; loop repeats.
-            6. Never-removed non-protected features appended to history for completeness.
+            3. Each step: dependency graph pruned via restrict(), CV run, importances extracted.
+            4. Features at or below threshold removed; loop repeats.
+            5. Never-removed non-protected features appended to history for completeness.
 
         Args:
             X (pd.DataFrame): Feature matrix (raw columns).
@@ -595,17 +443,14 @@ class ModelImportanceFiltering:
         all_raw_features: list[str] = sorted(X.columns.tolist())
 
         pipeline = self.cross_validator.preprocessing_pipeline
-        post_pipeline_dtypes: pd.Series | None = self._probe_pipeline_dtypes(
+        dependency_graph = PipelineDependencyGraph.build(
             pipeline, X[all_raw_features], y
         )
 
-        _baseline_feature_set = (
-            set(post_pipeline_dtypes.index)
-            if post_pipeline_dtypes is not None
-            else set(all_raw_features)
-        )
         baseline_estimator = self._restrict_catboost_cat_features(
-            self.estimator, _baseline_feature_set, post_pipeline_dtypes
+            self.estimator,
+            set(dependency_graph.processed_columns),
+            dependency_graph.processed_dtypes,
         )
         _, valid_scores, _ = self.cross_validator.fit(
             baseline_estimator, X[all_raw_features], y
@@ -613,18 +458,7 @@ class ModelImportanceFiltering:
         baseline_metric = float(np.mean(valid_scores))
         baseline_std = float(np.std(valid_scores))
 
-        fold_splits = list(self.cross_validator.cv.split(X[all_raw_features], y))
-        if self.cross_validator.fitted_pipelines_:
-            _, val_idx = fold_splits[0]
-            first_pipe = self.cross_validator.fitted_pipelines_[0]
-            x_val_proc = CrossValidationTrainer._transform_with_pipeline(
-                first_pipe, X[all_raw_features].iloc[val_idx].copy()
-            )
-            self.all_processed_features = x_val_proc.columns.tolist()
-            post_pipeline_dtypes = x_val_proc.dtypes
-        else:
-            self.all_processed_features = list(all_raw_features)
-
+        self.all_processed_features = list(dependency_graph.processed_columns)
         all_processed_set = set(self.all_processed_features)
 
         missing_protected = set(self.protected_features) - all_processed_set
@@ -634,12 +468,7 @@ class ModelImportanceFiltering:
                 f"Available processed columns: {sorted(all_processed_set)}"
             )
 
-        raw_to_derived = self._build_raw_to_derived(
-            all_raw_features, all_processed_set, pipeline
-        )
-
         current_processed_features: list[str] = list(self.all_processed_features)
-        current_raw_features: list[str] = list(all_raw_features)
 
         summary = self._init_summary(current_processed_features, baseline_metric)
         self._log_start(current_processed_features, baseline_metric, baseline_std)
@@ -655,14 +484,13 @@ class ModelImportanceFiltering:
                     print("⏹️  Stopping - only protected features remain.")
                 break
 
-            restricted_pipeline = self._build_restricted_pipeline(
-                pipeline,
-                current_raw_features,
-                current_processed_features,
-                X[current_raw_features],
+            current_raw_features, restricted_pipeline = dependency_graph.restrict(
+                current_processed_features
             )
             step_estimator = self._restrict_catboost_cat_features(
-                self.estimator, set(current_processed_features), post_pipeline_dtypes
+                self.estimator,
+                set(current_processed_features),
+                dependency_graph.processed_dtypes,
             )
 
             importance_scores, fold_metric, fold_std = self._cross_val_model_importance(
@@ -703,9 +531,6 @@ class ModelImportanceFiltering:
                 for f in current_processed_features
                 if f not in set(features_to_remove)
             ]
-            current_raw_features = self._compute_active_raw(
-                all_raw_features, current_processed_features, raw_to_derived
-            )
 
             gc.collect()
 

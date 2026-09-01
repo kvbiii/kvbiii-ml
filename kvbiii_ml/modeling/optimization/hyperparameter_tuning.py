@@ -28,6 +28,7 @@ class RandomSearchCV:
         n_trials: int = 100,
         seed: int = 17,
         max_samples: int = 100000,
+        verbose: bool = True,
     ):
         """Initialize a lightweight random search tuner.
 
@@ -37,14 +38,20 @@ class RandomSearchCV:
             seed (int): Random seed for the sampler. Defaults to 17.
             max_samples (int): Maximum number of rows used during CV objective evaluation.
                 Defaults to 100000.
+            verbose (bool): Print an emoji-styled summary line per trial plus a start/finish
+                report. Optuna's own default per-trial logging is muted for the duration of
+                tune() regardless of this flag, in favor of this consistent formatting.
+                Defaults to True.
         """
         self.cross_validator = cross_validator
         self.n_trials = n_trials
         self.seed = seed
         self.max_samples = max_samples
+        self.verbose = verbose
         self.metric_fn = self.cross_validator.metric_fn
         self.metric_type = self.cross_validator.metric_type
         self.metric_direction = self.cross_validator.metric_direction
+        self.metric_name = self.cross_validator.metric_name
 
     def tune(
         self,
@@ -69,20 +76,34 @@ class RandomSearchCV:
             optuna.study.Study: The configured and optimized study.
         """
         self.params_grid = params_grid
-        study = self.create_study()
         X, y = self.check_x(X), self.check_y(y)
-        if X_valid is not None and y_valid is not None:
-            X_valid = self.check_x(X_valid)
-            y_valid = self.check_y(y_valid)
-            study.optimize(
-                lambda trial: self.objective(trial, estimator, X, y, X_valid, y_valid),
-                n_trials=self.n_trials,
-            )
-        else:
-            study.optimize(
-                lambda trial: self.objective_cv(trial, estimator, X, y),
-                n_trials=self.n_trials,
-            )
+        use_holdout = X_valid is not None and y_valid is not None
+        callbacks = [self._log_trial] if self.verbose else None
+
+        previous_verbosity = optuna.logging.get_verbosity()
+        optuna.logging.set_verbosity(optuna.logging.WARNING)
+        try:
+            study = self.create_study()
+            self._log_start(params_grid, use_holdout)
+            if use_holdout:
+                X_valid = self.check_x(X_valid)
+                y_valid = self.check_y(y_valid)
+                study.optimize(
+                    lambda trial: self.objective(
+                        trial, estimator, X, y, X_valid, y_valid
+                    ),
+                    n_trials=self.n_trials,
+                    callbacks=callbacks,
+                )
+            else:
+                study.optimize(
+                    lambda trial: self.objective_cv(trial, estimator, X, y),
+                    n_trials=self.n_trials,
+                    callbacks=callbacks,
+                )
+            self._log_finish(study)
+        finally:
+            optuna.logging.set_verbosity(previous_verbosity)
         return study
 
     def create_study(self) -> optuna.study.Study:
@@ -100,6 +121,82 @@ class RandomSearchCV:
             sampler=sampler,
             pruner=pruner,
             study_name="Optuna tuning",
+        )
+
+    def _log_start(
+        self, params_grid: dict[str, tuple[str, list[object]]], use_holdout: bool
+    ) -> None:
+        """Print a search-start summary when verbose mode is enabled.
+
+        Args:
+            params_grid (dict[str, tuple[str, list[object]]]): Parameter search space.
+            use_holdout (bool): Whether tuning uses a hold-out split instead of CV.
+        """
+        if not self.verbose:
+            return
+        mode = "hold-out validation" if use_holdout else "cross-validation"
+        print(
+            f"🔍 Starting random search with {self.n_trials} trials via {mode}, "
+            f"target metric: {self.metric_name} ({self.metric_direction}).\n"
+            f"🎛️  Search space: {list(params_grid.keys())}"
+        )
+
+    def _log_trial(
+        self, study: optuna.study.Study, trial: optuna.trial.FrozenTrial
+    ) -> None:
+        """Print a one-line summary for a finished trial.
+
+        Registered as an Optuna study callback, so it fires once per trial in place
+        of Optuna's own default per-trial logging, which is muted for the duration
+        of tune() in favor of formatting consistent with the rest of the package.
+
+        Args:
+            study (optuna.study.Study): The study being optimized.
+            trial (optuna.trial.FrozenTrial): The trial that just finished.
+        """
+        duration = (
+            (trial.datetime_complete - trial.datetime_start).total_seconds()
+            if trial.datetime_complete and trial.datetime_start
+            else float("nan")
+        )
+        if trial.state == optuna.trial.TrialState.PRUNED:
+            print(
+                f"✂️  Trial {trial.number + 1}/{self.n_trials} pruned ({duration:.2f}s)"
+            )
+            return
+        if trial.state != optuna.trial.TrialState.COMPLETE:
+            print(
+                f"⚠️  Trial {trial.number + 1}/{self.n_trials} "
+                f"{trial.state.name.lower()} ({duration:.2f}s)"
+            )
+            return
+        marker = "🌟" if study.best_trial.number == trial.number else "🔁"
+        print(
+            f"{marker} Trial {trial.number + 1}/{self.n_trials} | "
+            f"{self.metric_name}: {trial.value:.6f} | "
+            f"Best: {study.best_value:.6f} (trial {study.best_trial.number + 1}) | "
+            f"{duration:.2f}s | params: {trial.params}"
+        )
+
+    def _log_finish(self, study: optuna.study.Study) -> None:
+        """Print the final best-trial summary when verbose mode is enabled.
+
+        Args:
+            study (optuna.study.Study): The completed study.
+        """
+        if not self.verbose:
+            return
+        n_pruned = sum(t.state == optuna.trial.TrialState.PRUNED for t in study.trials)
+        n_complete = sum(
+            t.state == optuna.trial.TrialState.COMPLETE for t in study.trials
+        )
+        print(
+            f"\n🎯 Best {self.metric_name}: {study.best_value:.6f} "
+            f"(trial {study.best_trial.number + 1}/{self.n_trials})"
+        )
+        print(f"🏆 Best params: {study.best_params}")
+        print(
+            f"✅ Completed: {n_complete} | ✂️  Pruned: {n_pruned} of {self.n_trials} trials"
         )
 
     def get_param(
@@ -288,12 +385,6 @@ if __name__ == "__main__":
             "learning_rate": ("float", [0.01, 0.3], {"log": True}),
             "min_child_samples": ("int", [5, 50]),
         }
-        study = tuner.tune(estimator=clf, X=x_df, y=y_ser, params_grid=params_grid)
-        print("Best trial:")
-        print(study.best_trial)
-        print("Best params:")
-        print(study.best_params)
-        print("Best value:")
-        print(study.best_value)
+        tuner.tune(estimator=clf, X=x_df, y=y_ser, params_grid=params_grid)
 
     _run_demo()

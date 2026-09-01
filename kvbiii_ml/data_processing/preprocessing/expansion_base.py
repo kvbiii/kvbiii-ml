@@ -101,6 +101,21 @@ class _WithOriginalBase(BaseEstimator, TransformerMixin, abc.ABC):
         }
         return pd.concat([x_orig, pd.DataFrame(new_cols, index=x_orig.index)], axis=1)
 
+    def get_derived_column_dependencies(self) -> dict[str, list[str]]:
+        """Map each derived output column this transformer adds to its source column(s).
+
+        Only covers the new columns transform() appends - pass-through columns are
+        handled generically by any consumer walking a pipeline, for every step
+        regardless of whether it implements this method. Mirrors transform()'s own
+        naming exactly (reads self.variables_ and self._suffix), so it can never
+        drift from what transform() actually produces. Must be called after fit().
+
+        Returns:
+            dict[str, list[str]]: Derived column name mapped to a single-element
+                list containing the raw/source column name it depends on.
+        """
+        return {f"{var}_{self._suffix}": [var] for var in self.variables_}
+
     @contextlib.contextmanager
     def _maybe_suppress_warnings(self):
         """Context manager that activates warning suppression when _suppress_warnings is True."""
