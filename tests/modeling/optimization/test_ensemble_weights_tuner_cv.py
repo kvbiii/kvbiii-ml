@@ -2,6 +2,7 @@ from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
+import optuna
 import pytest
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import roc_auc_score
@@ -205,8 +206,6 @@ def test_objective_prunes_degenerate_weights():
     y_true = pd.Series([1.0, 2.0, 3.0, 4.0])
     preds_list = [pd.Series([1.0, 2.0, 3.0, 4.0]), pd.Series([1.0, 2.0, 3.0, 4.0])]
     fold_boundaries = [0, 2, 4]
-
-    import optuna
 
     with pytest.raises(optuna.TrialPruned):
         tuner._objective(mock_trial, y_true, preds_list, fold_boundaries)
