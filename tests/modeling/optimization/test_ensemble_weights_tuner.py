@@ -1,6 +1,6 @@
 """Tests for EnsembleWeightTunerCV class in ensemble_weights_tuner module."""
 
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import numpy as np
 import optuna
@@ -8,6 +8,21 @@ import pandas as pd
 
 from kvbiii_ml.modeling.optimization.ensemble_weights_tuner import EnsembleWeightTunerCV
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
+
+
+def _mock_trial(*suggested_weights: float) -> Mock:
+    """Builds a Mock Optuna trial that suggests fixed weights and never prunes.
+
+    Args:
+        *suggested_weights (float): Weight values returned in order by suggest_float.
+
+    Returns:
+        Mock: Trial stub compatible with EnsembleWeightTunerCV._objective/_score_weights.
+    """
+    trial = Mock()
+    trial.suggest_float.side_effect = list(suggested_weights)
+    trial.should_prune.return_value = False
+    return trial
 
 
 class TestEnsembleWeightTunerCV:
@@ -46,6 +61,10 @@ class TestEnsembleWeightTunerCV:
         if tuner.allow_negative_weights != False:
             raise AssertionError()
         if tuner.best_weights is not None:
+            raise AssertionError()
+        if tuner.best_score_ is not None:
+            raise AssertionError()
+        if tuner.selection_source_ is not None:
             raise AssertionError()
 
     def test_ensembleweighttuner_init_custom_parameters(
@@ -161,7 +180,7 @@ class TestEnsembleWeightTunerCV:
         Asserts:
             - Study is created with correct direction
             - TPE sampler is configured with proper seed
-            - Hyperband pruner is set
+            - MedianPruner is set (matched to per-fold reporting, unlike Hyperband)
         """
         cross_validator = CrossValidationTrainer(
             metric_name="Roc AUC", problem_type="classification", cv=kfold_cv
@@ -181,7 +200,7 @@ class TestEnsembleWeightTunerCV:
             raise AssertionError()
         if not isinstance(study.sampler, optuna.samplers.TPESampler):
             raise AssertionError()
-        if not isinstance(study.pruner, optuna.pruners.HyperbandPruner):
+        if not isinstance(study.pruner, optuna.pruners.MedianPruner):
             raise AssertionError()
 
     def test_ensembleweighttuner_blend_predictions_1d_regression(
@@ -268,13 +287,13 @@ class TestEnsembleWeightTunerCV:
             cross_validator=cross_validator,
         )
 
-        mock_trial = Mock()
-        mock_trial.suggest_float.side_effect = [0.3, 0.7]
+        mock_trial = _mock_trial(0.3, 0.7)
 
         y_true = pd.Series([1.0, 2.0, 3.0])
         preds_list = [pd.Series([1.1, 2.1, 3.1]), pd.Series([0.9, 1.9, 2.9])]
+        fold_boundaries = [0, 3]
 
-        result = tuner._objective(mock_trial, y_true, preds_list)
+        result = tuner._objective(mock_trial, y_true, preds_list, fold_boundaries)
 
         if not isinstance(result, float):
             raise AssertionError()
@@ -303,20 +322,18 @@ class TestEnsembleWeightTunerCV:
             cross_validator=cross_validator,
         )
 
-        mock_trial = Mock()
-        mock_trial.suggest_float.side_effect = [0.4, 0.6]
+        mock_trial = _mock_trial(0.4, 0.6)
 
         y_true = pd.Series([0, 1, 0])
         preds_list = [
             pd.Series([0.2, 0.8, 0.3]),
             pd.Series([0.1, 0.9, 0.2]),
         ]
+        fold_boundaries = [0, 3]
 
-        result = tuner._objective(mock_trial, y_true, preds_list)
+        result = tuner._objective(mock_trial, y_true, preds_list, fold_boundaries)
 
         if not isinstance(result, float):
-            raise AssertionError()
-        if not 0 <= result <= 1:
             raise AssertionError()
 
     def test_ensembleweighttuner_objective_negative_weights_allowed(
@@ -330,7 +347,7 @@ class TestEnsembleWeightTunerCV:
 
         Asserts:
             - Negative weights are handled correctly
-            - L1 normalization is applied
+            - Weights are normalized to sum to 1 (signed sum, not L1 norm)
         """
         cross_validator = CrossValidationTrainer(
             metric_name="MSE", problem_type="regression", cv=kfold_cv
@@ -342,44 +359,71 @@ class TestEnsembleWeightTunerCV:
             allow_negative_weights=True,
         )
 
-        mock_trial = Mock()
-        mock_trial.suggest_float.side_effect = [-0.3, 0.7]
+        mock_trial = _mock_trial(-0.3, 0.7)
 
         y_true = pd.Series([1.0, 2.0, 3.0])
         preds_list = [pd.Series([1.1, 2.1, 3.1]), pd.Series([0.9, 1.9, 2.9])]
+        fold_boundaries = [0, 3]
 
-        result = tuner._objective(mock_trial, y_true, preds_list)
+        result = tuner._objective(mock_trial, y_true, preds_list, fold_boundaries)
 
         if not isinstance(result, float):
             raise AssertionError()
 
-    @patch("kvbiii_ml.modeling.optimization.ensemble_weights_tuner.optuna.create_study")
+    def test_ensembleweighttuner_objective_prunes_near_zero_weight_sum(
+        self, logistic_regression_estimator, kfold_cv
+    ):
+        """Tests _objective prunes trials whose weights sum too close to zero.
+
+        Args:
+            logistic_regression_estimator (LogisticRegression): Test estimator fixture
+            kfold_cv (KFold): Test cross-validator fixture
+
+        Asserts:
+            - optuna.TrialPruned is raised for a cancelling weight vector
+        """
+        cross_validator = CrossValidationTrainer(
+            metric_name="MSE", problem_type="regression", cv=kfold_cv
+        )
+
+        tuner = EnsembleWeightTunerCV(
+            estimators=[logistic_regression_estimator, logistic_regression_estimator],
+            cross_validator=cross_validator,
+            allow_negative_weights=True,
+        )
+
+        mock_trial = _mock_trial(0.5, -0.5)
+
+        y_true = pd.Series([1.0, 2.0, 3.0])
+        preds_list = [pd.Series([1.1, 2.1, 3.1]), pd.Series([0.9, 1.9, 2.9])]
+        fold_boundaries = [0, 3]
+
+        try:
+            tuner._objective(mock_trial, y_true, preds_list, fold_boundaries)
+        except optuna.TrialPruned:
+            return
+        raise AssertionError(
+            "Expected optuna.TrialPruned for a cancelling weight vector."
+        )
+
     def test_ensembleweighttuner_tune_integration(
         self,
-        mock_create_study,
         binary_classification_data,
         logistic_regression_estimator,
         kfold_cv,
     ):
-        """Tests tune method integration workflow.
+        """Tests tune method integration workflow end to end with a small trial budget.
 
         Args:
-            mock_create_study: Mock optuna.create_study function
             binary_classification_data (tuple): Binary classification dataset fixture
             logistic_regression_estimator (LogisticRegression): Test estimator fixture
             kfold_cv (KFold): Test cross-validator fixture
 
         Asserts:
             - tune method completes successfully
-            - Best weights are set after tuning
-            - Study optimization is called
+            - Best weights, score, and selection source are set after tuning
         """
         X, y = binary_classification_data
-
-        # Mock study
-        mock_study = Mock()
-        mock_study.best_params = {"w0": 0.4, "w1": 0.6}
-        mock_create_study.return_value = mock_study
 
         cross_validator = CrossValidationTrainer(
             metric_name="Accuracy",
@@ -391,13 +435,14 @@ class TestEnsembleWeightTunerCV:
         tuner = EnsembleWeightTunerCV(
             estimators=[logistic_regression_estimator, logistic_regression_estimator],
             cross_validator=cross_validator,
-            n_trials=2,
+            n_trials=3,
         )
 
         tuner._perform_cv = Mock(
             return_value=(
                 pd.Series([0, 1, 0, 1]),
                 [pd.Series([0.2, 0.8, 0.3, 0.7]), pd.Series([0.1, 0.9, 0.2, 0.8])],
+                [0, 2, 4],
             )
         )
 
@@ -407,9 +452,12 @@ class TestEnsembleWeightTunerCV:
             raise AssertionError()
         if len(tuner.best_weights) != 2:
             raise AssertionError()
-        if study != mock_study:
+        if tuner.best_score_ is None:
             raise AssertionError()
-        mock_study.optimize.assert_called_once()
+        if tuner.selection_source_ is None:
+            raise AssertionError()
+        if not isinstance(study, optuna.study.Study):
+            raise AssertionError()
 
     def test_ensembleweighttuner_perform_cv_output_format(
         self, binary_classification_data, logistic_regression_estimator, kfold_cv
@@ -422,9 +470,10 @@ class TestEnsembleWeightTunerCV:
             kfold_cv (KFold): Test cross-validator fixture
 
         Asserts:
-            - Returns tuple with y_true and predictions list
+            - Returns a 3-tuple with y_true, predictions list, and fold boundaries
             - Predictions list has correct length for number of estimators
             - Binary classification probabilities are extracted correctly
+            - Fold boundaries span the full OOF set and match the CV fold count
         """
         X, y = binary_classification_data
 
@@ -439,7 +488,7 @@ class TestEnsembleWeightTunerCV:
             estimators=[logistic_regression_estimator], cross_validator=cross_validator
         )
 
-        y_true, preds_list = tuner._perform_cv(X, y)
+        y_true, preds_list, fold_boundaries = tuner._perform_cv(X, y)
 
         if not isinstance(y_true, pd.Series):
             raise AssertionError()
@@ -450,6 +499,12 @@ class TestEnsembleWeightTunerCV:
         if not len(y_true) > 0:
             raise AssertionError()
         if len(preds_list[0]) != len(y_true):
+            raise AssertionError()
+        if fold_boundaries[0] != 0:
+            raise AssertionError()
+        if fold_boundaries[-1] != len(y_true):
+            raise AssertionError()
+        if len(fold_boundaries) - 1 != kfold_cv.n_splits:
             raise AssertionError()
 
     def test_ensembleweighttuner_weight_normalization_positive_only(
@@ -469,16 +524,16 @@ class TestEnsembleWeightTunerCV:
             metric_name="Accuracy", problem_type="classification", cv=kfold_cv
         )
 
-        EnsembleWeightTunerCV(
+        tuner = EnsembleWeightTunerCV(
             estimators=[logistic_regression_estimator, logistic_regression_estimator],
             cross_validator=cross_validator,
             allow_negative_weights=False,
         )
 
-        # Simulate some weights
-        weights = np.array([0.3, 0.7])
-        normalized = weights / weights.sum()
+        normalized = tuner._normalize_weights(np.array([0.3, 0.7]))
 
+        if normalized is None:
+            raise AssertionError()
         if not np.allclose(normalized.sum(), 1.0):
             raise AssertionError()
         if not all(w >= 0 for w in normalized):
@@ -494,25 +549,24 @@ class TestEnsembleWeightTunerCV:
             kfold_cv (KFold): Test cross-validator fixture
 
         Asserts:
-            - L1 normalization is applied correctly
-            - Sum of absolute values equals 1.0
+            - Signed-sum normalization is applied (not L1 normalization)
+            - Sum of the (signed) values equals 1.0
         """
         cross_validator = CrossValidationTrainer(
             metric_name="MSE", problem_type="regression", cv=kfold_cv
         )
 
-        EnsembleWeightTunerCV(
+        tuner = EnsembleWeightTunerCV(
             estimators=[logistic_regression_estimator, logistic_regression_estimator],
             cross_validator=cross_validator,
             allow_negative_weights=True,
         )
 
-        # Simulate weights with negatives
-        weights = np.array([-0.3, 0.7])
-        l1_norm = np.sum(np.abs(weights))
-        normalized = weights / l1_norm
+        normalized = tuner._normalize_weights(np.array([-0.3, 0.7]))
 
-        if not np.allclose(np.sum(np.abs(normalized)), 1.0):
+        if normalized is None:
+            raise AssertionError()
+        if not np.allclose(np.sum(normalized), 1.0):
             raise AssertionError()
 
     def test_ensembleweighttuner_empty_estimators_list_handling(self, kfold_cv):
@@ -564,7 +618,11 @@ class TestEnsembleWeightTunerCV:
         )
 
         tuner._perform_cv = Mock(
-            return_value=(pd.Series([0, 1, 0]), [pd.Series([0.2, 0.8, 0.3])])
+            return_value=(
+                pd.Series([0, 1, 0]),
+                [pd.Series([0.2, 0.8, 0.3])],
+                [0, 1, 2, 3],
+            )
         )
 
         tuner.tune(X, y)
