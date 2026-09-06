@@ -20,6 +20,8 @@ class KBinsDiscretiserWithOriginal(_WithOriginalSubsetBase):
     discretisers already in this package). Original columns are preserved.
     """
 
+    _suppress_warnings = True
+
     def __init__(
         self,
         n_bins: int = 5,
