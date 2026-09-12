@@ -9,6 +9,8 @@ from kvbiii_ml.data_processing.preprocessing.categorical_encoding import (
     RareLabelEncoderWithOriginal,
     StringSimilarityEncoder,
     StringSimilarityEncoderWithOriginal,
+    TargetEncoder,
+    TargetEncoderWithOriginal,
     WoEEncoder,
     WoEEncoderWithOriginal,
 )
@@ -23,15 +25,22 @@ from kvbiii_ml.data_processing.preprocessing.discretisation import (
     EqualWidthDiscretiserWithOriginal,
     GeometricWidthDiscretiser,
     GeometricWidthDiscretiserWithOriginal,
+    KBinsDiscretiserWithOriginal,
+    KBinsDiscretizer,
 )
 from kvbiii_ml.data_processing.preprocessing.expansion_base import (
     _WithOriginalBase,
+    _WithOriginalSubsetBase,
 )
 from kvbiii_ml.data_processing.preprocessing.outlier_handling import (
     OutlierTrimmer,
     OutlierTrimmerWithOriginal,
     Winsorizer,
     WinsorizerWithOriginal,
+)
+from kvbiii_ml.data_processing.preprocessing.pipeline_dependency import (
+    PipelineDependencyGraph,
+    build_restricted_pipeline,
 )
 from kvbiii_ml.data_processing.preprocessing.variance_stabilizing_transformations import (
     ArcsinTransformer,
@@ -52,12 +61,14 @@ from kvbiii_ml.data_processing.preprocessing.variance_stabilizing_transformation
 
 __all__ = [
     "_WithOriginalBase",
+    "_WithOriginalSubsetBase",
     "ArbitraryDiscretiser",
     "ArbitraryDiscretiserWithOriginal",
     "ArcsinTransformer",
     "ArcsinTransformerWithOriginal",
     "BoxCoxTransformer",
     "BoxCoxTransformerWithOriginal",
+    "build_restricted_pipeline",
     "CountFrequencyEncoder",
     "CountFrequencyEncoderWithOriginal",
     "DecisionTreeDiscretiser",
@@ -70,6 +81,8 @@ __all__ = [
     "EqualWidthDiscretiserWithOriginal",
     "GeometricWidthDiscretiser",
     "GeometricWidthDiscretiserWithOriginal",
+    "KBinsDiscretiserWithOriginal",
+    "KBinsDiscretizer",
     "LogCpTransformer",
     "LogCpTransformerWithOriginal",
     "LogTransformer",
@@ -78,6 +91,7 @@ __all__ = [
     "MeanEncoderWithOriginal",
     "OutlierTrimmer",
     "OutlierTrimmerWithOriginal",
+    "PipelineDependencyGraph",
     "PowerTransformer",
     "PowerTransformerWithOriginal",
     "RareLabelEncoder",
@@ -86,6 +100,8 @@ __all__ = [
     "ReciprocalTransformerWithOriginal",
     "StringSimilarityEncoder",
     "StringSimilarityEncoderWithOriginal",
+    "TargetEncoder",
+    "TargetEncoderWithOriginal",
     "WoEEncoder",
     "WoEEncoderWithOriginal",
     "Winsorizer",

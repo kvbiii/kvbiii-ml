@@ -9,11 +9,11 @@ from kvbiii_ml.data_processing.preprocessing.expansion_base import _WithOriginal
 class EqualFrequencyDiscretiserWithOriginal(_WithOriginalBase):
     """Wraps EqualFrequencyDiscretiser to keep originals and append binned copies.
 
-    Derived columns are named ``{original}_PREPROCESS_EQ_FREQ``. Each variable is split into
+    Derived columns are named ``{original}_PREPROCESS_EQ_FREQ_{q}`` - the bin
+    count is baked into the suffix, since it is the defining parameter of this
+    transformer, rather than using one fixed suffix. Each variable is split into
     ``q`` bins with approximately the same number of observations.
     """
-
-    _suffix = "PREPROCESS_EQ_FREQ"
 
     def __init__(
         self,
@@ -42,6 +42,15 @@ class EqualFrequencyDiscretiserWithOriginal(_WithOriginalBase):
         self.return_object = return_object
         self.return_boundaries = return_boundaries
         self.precision = precision
+
+    @property
+    def _suffix(self) -> str:
+        """Derived-column suffix, dynamically keyed on ``q``.
+
+        Returns:
+            str: e.g. "PREPROCESS_EQ_FREQ_5" for ``q=5``.
+        """
+        return f"PREPROCESS_EQ_FREQ_{self.q}"
 
     def _build_inner(self) -> EqualFrequencyDiscretiser:
         """Return a fresh EqualFrequencyDiscretiser.
