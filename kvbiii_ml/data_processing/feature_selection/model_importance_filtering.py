@@ -10,7 +10,7 @@ from sklearn.base import BaseEstimator
 from sklearn.pipeline import Pipeline
 
 sys.path.append(str(Path(__file__).resolve().parents[3]))
-from kvbiii_ml.data_processing.feature_selection.pipeline_dependency import (
+from kvbiii_ml.data_processing.preprocessing.pipeline_dependency import (
     PipelineDependencyGraph,
 )
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer

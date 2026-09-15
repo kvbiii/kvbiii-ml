@@ -6,6 +6,9 @@ from sklearn.base import BaseEstimator, clone
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer
 
+_RAW_SELECTOR_STEP = "_raw_selector"
+_FEATURE_SELECTOR_STEP = "_feature_selector"
+
 
 def _select_columns(X: pd.DataFrame, features: list[str]) -> pd.DataFrame:
     """Selects specified columns from X, silently skipping any absent ones.
@@ -18,6 +21,23 @@ def _select_columns(X: pd.DataFrame, features: list[str]) -> pd.DataFrame:
         pd.DataFrame: X restricted to the requested columns.
     """
     return X[[f for f in features if f in X.columns]]
+
+
+def _is_internal_selector_step(name: str, step: BaseEstimator) -> bool:
+    """Returns whether a step is restrict()'s own bookkeeping selector, not a user step.
+
+    Args:
+        name (str): The step's name within its pipeline.
+        step (BaseEstimator): The step itself.
+
+    Returns:
+        bool: True if this step was added by a prior restrict() call.
+    """
+    return (
+        name in (_RAW_SELECTOR_STEP, _FEATURE_SELECTOR_STEP)
+        and isinstance(step, FunctionTransformer)
+        and step.func is _select_columns
+    )
 
 
 def _resolve_new_column_sources(
@@ -75,6 +95,7 @@ class PipelineDependencyGraph:
     processed_dtypes: pd.Series | None
     processed_to_raw: dict[str, frozenset[str]]
     pipeline: Pipeline | None
+    step_derivations: list[tuple[str, dict[str, list[str]]]]
 
     @classmethod
     def build(
@@ -84,6 +105,13 @@ class PipelineDependencyGraph:
         y: pd.Series | None = None,
     ) -> "PipelineDependencyGraph":
         """Fits the full pipeline once on real data and extracts its dependency graph.
+
+        Walks the pipeline exactly as given, including any
+        _raw_selector/_feature_selector bookkeeping steps a prior restrict()
+        call already added - so processed_columns always reflects what the
+        pipeline truly outputs right now, even when it was already restricted
+        once. restrict() (not build()) is responsible for not duplicating
+        those bookkeeping steps when it adds its own.
 
         Args:
             pipeline (Pipeline | None): Preprocessing pipeline template, or None
@@ -102,11 +130,12 @@ class PipelineDependencyGraph:
         raw_columns = list(X.columns)
         if pipeline is None:
             identity = {column: frozenset({column}) for column in raw_columns}
-            return cls(raw_columns, list(raw_columns), None, identity, None)
+            return cls(raw_columns, list(raw_columns), None, identity, None, [])
 
         node_to_raw: dict[str, frozenset[str]] = {
             column: frozenset({column}) for column in raw_columns
         }
+        step_derivations: list[tuple[str, dict[str, list[str]]]] = []
         x_running = X.copy()
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -125,6 +154,7 @@ class PipelineDependencyGraph:
                 new_sources = _resolve_new_column_sources(
                     cloned_step, cols_before, cols_after
                 )
+                step_derivations.append((step_name, new_sources))
 
                 for column in cols_after:
                     if column in before_set:
@@ -145,6 +175,7 @@ class PipelineDependencyGraph:
             x_running.dtypes.copy(),
             processed_to_raw,
             pipeline,
+            step_derivations,
         )
 
     def restrict(
@@ -152,11 +183,19 @@ class PipelineDependencyGraph:
     ) -> tuple[list[str], Pipeline | None]:
         """Prunes the graph to the minimal raw inputs and pipeline needed.
 
-        Steps with an explicit ``variables`` list are filtered to the raw
-        columns still needed, and dropped entirely if that filtered list
-        becomes empty. Steps with ``variables=None`` (auto-detect) are left
-        unmodified - they naturally auto-detect fewer columns once fed fewer
-        raw inputs, so no trial-fit is ever needed to "check compatibility".
+        Steps with an explicit ``variables`` list are filtered to only the
+        source columns whose OWN derived output from that specific step is
+        still needed - not every raw column needed anywhere in the pipeline,
+        since a column can be a required pass-through or another step's input
+        without that step's own transformation of it ever being used. Steps
+        are dropped entirely if their filtered list becomes empty. Steps with
+        ``variables=None`` (auto-detect) are left unmodified - they naturally
+        auto-detect fewer columns once fed fewer raw inputs, so no trial-fit
+        is ever needed to "check compatibility". Any _raw_selector/
+        _feature_selector bookkeeping steps a prior restrict() call already
+        added are dropped and replaced by this call's own, rather than kept
+        alongside them - otherwise re-restricting an already-restricted
+        pipeline would collide on duplicate step names.
 
         Args:
             processed_features (list[str]): Processed columns the caller wants
@@ -165,8 +204,8 @@ class PipelineDependencyGraph:
         Returns:
             tuple[list[str], Pipeline | None]: Raw columns needed, in the
                 graph's original column order, and a cloned restricted
-                Pipeline ending in a column-selector step, or None when this
-                graph has no pipeline.
+                Pipeline starting and ending in a column-selector step, or
+                None when this graph has no pipeline.
         """
         raw_needed: set[str] = set()
         for column in processed_features:
@@ -178,14 +217,24 @@ class PipelineDependencyGraph:
         if self.pipeline is None:
             return raw_needed_list, None
 
-        new_steps: list[tuple[str, BaseEstimator]] = []
+        step_survivors = self._resolve_step_survivors(processed_features)
+
+        new_steps: list[tuple[str, BaseEstimator]] = [
+            (
+                _RAW_SELECTOR_STEP,
+                FunctionTransformer(
+                    func=_select_columns, kw_args={"features": raw_needed_list}
+                ),
+            )
+        ]
         for name, step in self.pipeline.steps:
+            if _is_internal_selector_step(name, step):
+                continue
             cloned_step = clone(step)
             variables = cloned_step.get_params().get("variables")
             if isinstance(variables, list):
-                filtered = [
-                    variable for variable in variables if variable in raw_needed
-                ]
+                survivors = step_survivors.get(name, set())
+                filtered = [variable for variable in variables if variable in survivors]
                 if not filtered:
                     continue
                 cloned_step.set_params(variables=filtered)
@@ -193,7 +242,7 @@ class PipelineDependencyGraph:
 
         new_steps.append(
             (
-                "_feature_selector",
+                _FEATURE_SELECTOR_STEP,
                 FunctionTransformer(
                     func=_select_columns,
                     kw_args={"features": list(processed_features)},
@@ -201,3 +250,77 @@ class PipelineDependencyGraph:
             )
         )
         return raw_needed_list, Pipeline(new_steps)
+
+    def _resolve_step_survivors(
+        self, processed_features: list[str]
+    ) -> dict[str, set[str]]:
+        """Walks step_derivations backward to find each step's still-needed source columns.
+
+        Args:
+            processed_features (list[str]): Processed columns the caller wants
+                the restricted pipeline to still produce.
+
+        Returns:
+            dict[str, set[str]]: Step name mapped to the source columns whose
+                own derived output from that step is still required.
+        """
+        needed: set[str] = set(processed_features)
+        step_survivors: dict[str, set[str]] = {}
+        for step_name, new_sources in reversed(self.step_derivations):
+            next_needed: set[str] = set()
+            survivors: set[str] = set()
+            for column in needed:
+                sources = new_sources.get(column)
+                if sources is None:
+                    next_needed.add(column)
+                    continue
+                survivors.update(sources)
+                next_needed.update(sources)
+            step_survivors[step_name] = survivors
+            needed = next_needed
+        return step_survivors
+
+
+def build_restricted_pipeline(
+    pipeline: Pipeline | None,
+    X: pd.DataFrame,
+    selected_features: list[str],
+    y: pd.Series | None = None,
+) -> Pipeline:
+    """Builds a dependency graph and returns a pipeline restricted to selected_features.
+
+    Convenience wrapper around PipelineDependencyGraph.build() followed by
+    restrict() for callers that only need the restricted pipeline itself and
+    have no other use for the intermediate graph. Always returns a real,
+    fit_transform-ready Pipeline, including when pipeline is None - unlike
+    restrict() itself, which returns None in that case.
+
+    Args:
+        pipeline (Pipeline | None): Preprocessing pipeline template, or None
+            to build only a column-selecting pipeline.
+        X (pd.DataFrame): Full raw feature matrix.
+        selected_features (list[str]): Processed columns the returned pipeline
+            should produce.
+        y (pd.Series | None, optional): Target forwarded to each step's fit()
+            during the graph build. Defaults to None.
+
+    Returns:
+        Pipeline: A restricted pipeline ready to fit_transform() directly on
+            the full raw X, ending in a column selector limited to
+            selected_features.
+    """
+    graph = PipelineDependencyGraph.build(pipeline, X, y)
+    _, restricted = graph.restrict(list(selected_features))
+    if restricted is None:
+        restricted = Pipeline(
+            [
+                (
+                    _FEATURE_SELECTOR_STEP,
+                    FunctionTransformer(
+                        func=_select_columns,
+                        kw_args={"features": list(selected_features)},
+                    ),
+                )
+            ]
+        )
+    return restricted
