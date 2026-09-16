@@ -3,7 +3,10 @@ from typing import Any
 import pandas as pd
 from feature_engine.encoding import MeanEncoder
 
-from kvbiii_ml.data_processing.preprocessing.expansion_base import _WithOriginalBase
+from kvbiii_ml.data_processing.preprocessing.expansion_base import (
+    _WithOriginalBase,
+    _cast_numeric_variables_to_object,
+)
 
 
 class MeanEncoderWithOriginal(_WithOriginalBase):
@@ -11,7 +14,17 @@ class MeanEncoderWithOriginal(_WithOriginalBase):
 
     Derived columns are named ``{original}_PREPROCESS_MEAN_ENC``. Each category is replaced
     by the mean of the target within that category (with optional Bayesian smoothing).
-    Original categorical columns are preserved alongside the encoded ones.
+    Original categorical columns are preserved alongside the encoded ones. Any
+    explicitly-named numeric column in ``variables`` (e.g. an already-coded,
+    low-cardinality feature) is internally recast to object dtype before fitting/
+    transforming, since feature_engine's MeanEncoder otherwise rejects numeric
+    input with ``"Some of the variables are not categorical..."`` unless
+    ``ignore_format=True`` is set. This keeps that default-safe behavior for
+    ``variables=None`` auto-detection while still letting a numeric column be
+    used directly when named explicitly. Defaults to ``unseen="encode"`` so a
+    category seen only at transform time is encoded with the fitted prior
+    (global target mean) instead of silently becoming NaN with a
+    ``UserWarning``.
     """
 
     _suffix = "PREPROCESS_MEAN_ENC"
@@ -22,21 +35,27 @@ class MeanEncoderWithOriginal(_WithOriginalBase):
         variables: list[str] | None = None,
         missing_values: str = "raise",
         ignore_format: bool = False,
-        unseen: str = "ignore",
+        unseen: str = "encode",
         smoothing: int | float | str = 0.0,
     ) -> None:
         """
         Initialize MeanEncoderWithOriginal.
 
         Args:
-            variables (list[str] | None, optional): Categorical columns to encode.
-                Defaults to None (auto-detect all object/categorical columns).
+            variables (list[str] | None, optional): Columns to encode. May include
+                numeric columns - they are recast to object dtype internally so
+                they encode without error. Defaults to None (auto-detect all
+                object/categorical columns).
             missing_values (str, optional): How to handle NaN - ``"raise"`` or
                 ``"ignore"``. Defaults to ``"raise"``.
             ignore_format (bool, optional): If True, also encode numeric columns.
                 Defaults to False.
-            unseen (str, optional): Strategy for unseen categories at transform time -
-                ``"ignore"`` or ``"raise"``. Defaults to ``"ignore"``.
+            unseen (str, optional): Strategy for categories seen at transform time
+                but not during fit - ``"encode"`` replaces them with the fitted
+                prior (global target mean), ``"ignore"`` replaces them with NaN
+                and emits a UserWarning, and ``"raise"`` raises a ValueError.
+                Defaults to ``"encode"`` so unseen categories never silently
+                introduce NaN downstream.
             smoothing (int | float | str, optional): Bayesian shrinkage factor.
                 ``0.0`` disables smoothing; higher values pull category means toward
                 the global mean. Defaults to ``0.0``.
@@ -73,7 +92,7 @@ class MeanEncoderWithOriginal(_WithOriginalBase):
             MeanEncoder: Fitted encoder.
         """
         with self._suppress_fe_datetime_warnings():
-            return inner.fit(X, y)
+            return inner.fit(_cast_numeric_variables_to_object(X, self.variables), y)
 
     def _transform_inner(self, inner: MeanEncoder, X: pd.DataFrame) -> pd.DataFrame:
         """Apply the fitted encoder to X.
@@ -86,7 +105,7 @@ class MeanEncoderWithOriginal(_WithOriginalBase):
             pd.DataFrame: DataFrame with mean-encoded column values.
         """
         with self._suppress_fe_datetime_warnings():
-            return inner.transform(X)
+            return inner.transform(_cast_numeric_variables_to_object(X, self.variables))
 
 
 __all__ = ["MeanEncoder", "MeanEncoderWithOriginal"]
