@@ -3,14 +3,26 @@ from typing import Any
 import pandas as pd
 from feature_engine.encoding import CountFrequencyEncoder
 
-from kvbiii_ml.data_processing.preprocessing.expansion_base import _WithOriginalBase
+from kvbiii_ml.data_processing.preprocessing.expansion_base import (
+    _WithOriginalBase,
+    _cast_numeric_variables_to_object,
+)
 
 
 class CountFrequencyEncoderWithOriginal(_WithOriginalBase):
     """Wraps feature_engine CountFrequencyEncoder to keep originals and append encoded copies.
 
     Derived columns are named ``{original}_PREPROCESS_CNT_FREQ``. The original categorical
-    columns are preserved so downstream steps can still access the raw labels.
+    columns are preserved so downstream steps can still access the raw labels. Any
+    explicitly-named numeric column in ``variables`` (e.g. an already-coded,
+    low-cardinality feature) is internally recast to object dtype before fitting/
+    transforming, since feature_engine's CountFrequencyEncoder otherwise rejects
+    numeric input with ``"Some of the variables are not categorical..."`` unless
+    ``ignore_format=True`` is set. This keeps that default-safe behavior for
+    ``variables=None`` auto-detection while still letting a numeric column be
+    used directly when named explicitly. Defaults to ``unseen="encode"`` so a
+    category seen only at transform time is encoded as 0 (zero) instead of
+    silently becoming NaN with a ``UserWarning``.
     """
 
     _suffix = "PREPROCESS_CNT_FREQ"
@@ -21,7 +33,7 @@ class CountFrequencyEncoderWithOriginal(_WithOriginalBase):
         variables: list[str] | None = None,
         missing_values: str = "raise",
         ignore_format: bool = False,
-        unseen: str = "ignore",
+        unseen: str = "encode",
     ) -> None:
         """
         Initialize CountFrequencyEncoderWithOriginal.
@@ -30,14 +42,19 @@ class CountFrequencyEncoderWithOriginal(_WithOriginalBase):
             encoding_method (str, optional): ``"count"`` replaces each category with
                 its absolute count; ``"frequency"`` uses the relative frequency.
                 Defaults to ``"count"``.
-            variables (list[str] | None, optional): Categorical columns to encode.
-                Defaults to None (auto-detect all object/categorical columns).
+            variables (list[str] | None, optional): Columns to encode. May include
+                numeric columns - they are recast to object dtype internally so
+                they encode without error. Defaults to None (auto-detect all
+                object/categorical columns).
             missing_values (str, optional): How to handle NaN - ``"raise"`` or
                 ``"ignore"``. Defaults to ``"raise"``.
             ignore_format (bool, optional): If True, also encode numeric columns.
                 Defaults to False.
-            unseen (str, optional): Strategy for unseen categories at transform time -
-                ``"ignore"`` or ``"raise"``. Defaults to ``"ignore"``.
+            unseen (str, optional): Strategy for categories seen at transform time
+                but not during fit - ``"encode"`` replaces them with 0 (zero),
+                ``"ignore"`` replaces them with NaN and emits a UserWarning, and
+                ``"raise"`` raises a ValueError. Defaults to ``"encode"`` so unseen
+                categories never silently introduce NaN downstream.
         """
         self.encoding_method = encoding_method
         self.variables = variables
@@ -73,7 +90,7 @@ class CountFrequencyEncoderWithOriginal(_WithOriginalBase):
             CountFrequencyEncoder: Fitted encoder.
         """
         with self._suppress_fe_datetime_warnings():
-            return inner.fit(X, y)
+            return inner.fit(_cast_numeric_variables_to_object(X, self.variables), y)
 
     def _transform_inner(
         self, inner: CountFrequencyEncoder, X: pd.DataFrame
@@ -88,7 +105,7 @@ class CountFrequencyEncoderWithOriginal(_WithOriginalBase):
             pd.DataFrame: DataFrame with encoded column values.
         """
         with self._suppress_fe_datetime_warnings():
-            return inner.transform(X)
+            return inner.transform(_cast_numeric_variables_to_object(X, self.variables))
 
 
 __all__ = ["CountFrequencyEncoder", "CountFrequencyEncoderWithOriginal"]
