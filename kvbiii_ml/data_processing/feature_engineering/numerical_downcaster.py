@@ -66,15 +66,32 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
         df = df.copy()
         for column, target_dtype in self.dtype_map_.items():
             if column in df.columns:
+                safe_dtype = self._get_safe_dtype(df[column], target_dtype)
                 try:
-                    df[column] = df[column].astype(target_dtype)
+                    df[column] = df[column].astype(safe_dtype)
                 except (ValueError, TypeError) as e:
                     warnings.warn(
-                        f"Failed to downcast column '{column}' to {target_dtype}: {e}",
+                        f"Failed to downcast column '{column}' to {safe_dtype}: {e}",
                         UserWarning,
                         stacklevel=2,
                     )
         return df
+
+    def _get_safe_dtype(self, series: pd.Series, target_dtype: Any) -> Any:
+        """
+        Adjust a learned integer dtype to float32 when the series being
+        transformed contains non-finite values not seen during fit.
+
+        Args:
+            series (pd.Series): Column data being transformed.
+            target_dtype (Any): Dtype learned during fit for this column.
+
+        Returns:
+            Any: Dtype safe to cast the series to.
+        """
+        if pd.api.types.is_integer_dtype(target_dtype) and series.isna().any():
+            return np.float32
+        return target_dtype
 
     def _get_optimal_dtype(self, series: pd.Series) -> Any:
         """
