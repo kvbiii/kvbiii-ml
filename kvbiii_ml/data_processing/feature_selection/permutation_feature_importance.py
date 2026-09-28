@@ -156,8 +156,6 @@ class PermutationRecursiveFeatureElimination:
             ValueError: When protected features are not found in the post-pipeline
                 column set.
         """
-        X = X.reset_index(drop=True)
-        y = pd.Series(y).reset_index(drop=True)
         all_raw_features: list[str] = sorted(X.columns.tolist())
 
         summary_df: dict[str, list | pd.DataFrame] = {
