@@ -188,14 +188,25 @@ class PipelineDependencyGraph:
         still needed - not every raw column needed anywhere in the pipeline,
         since a column can be a required pass-through or another step's input
         without that step's own transformation of it ever being used. Steps
-        are dropped entirely if their filtered list becomes empty. Steps with
-        ``variables=None`` (auto-detect) are left unmodified - they naturally
-        auto-detect fewer columns once fed fewer raw inputs, so no trial-fit
-        is ever needed to "check compatibility". Any _raw_selector/
-        _feature_selector bookkeeping steps a prior restrict() call already
-        added are dropped and replaced by this call's own, rather than kept
-        alongside them - otherwise re-restricting an already-restricted
-        pipeline would collide on duplicate step names.
+        are dropped entirely if their filtered list becomes empty.
+
+        Steps with ``variables=None`` (auto-detect) that also declare
+        ``get_derived_column_dependencies()`` - this package's own
+        ``_WithOriginalBase``/``_WithOriginalSubsetBase`` family - are
+        converted to an explicit list of just their own still-needed
+        survivors, using the dependencies already recorded during the graph
+        build (no extra trial-fit needed). Auto-detection alone is not
+        enough to shrink these steps correctly: a column can still be fed to
+        an auto-detect step (e.g. it remains a raw input another step needs)
+        even though THIS step's own derived output from it is unused, so
+        leaving ``variables=None`` untouched would keep re-encoding it. A
+        ``variables=None`` step without that contract (e.g. a bare
+        feature_engine transformer used directly) is left unmodified, since
+        narrowing its detected set isn't guaranteed safe without it. Any
+        _raw_selector/_feature_selector bookkeeping steps a prior restrict()
+        call already added are dropped and replaced by this call's own,
+        rather than kept alongside them - otherwise re-restricting an
+        already-restricted pipeline would collide on duplicate step names.
 
         Args:
             processed_features (list[str]): Processed columns the caller wants
@@ -238,6 +249,13 @@ class PipelineDependencyGraph:
                 if not filtered:
                     continue
                 cloned_step.set_params(variables=filtered)
+            elif variables is None and hasattr(
+                cloned_step, "get_derived_column_dependencies"
+            ):
+                survivors = step_survivors.get(name, set())
+                if not survivors:
+                    continue
+                cloned_step.set_params(variables=sorted(survivors))
             new_steps.append((name, cloned_step))
 
         new_steps.append(
