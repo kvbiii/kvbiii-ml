@@ -1,7 +1,9 @@
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
@@ -20,6 +22,19 @@ from kvbiii_ml.evaluation.metrics import (
 )
 from kvbiii_ml.modeling.training.base_trainer import BaseTrainer
 
+SampleWeightFn = Callable[[pd.DataFrame, pd.Series], pd.Series | np.ndarray]
+
+
+@dataclass
+class _FoldResult:
+    """Everything one cross-validation fold produces."""
+
+    train_score: Any
+    valid_score: Any
+    fitted_estimator: BaseEstimator
+    fitted_pipeline: Pipeline | None
+    test_pred: np.ndarray | None
+
 
 class CrossValidationTrainer(BaseTrainer):
     """Cross-validation trainer with an optional per-fold preprocessing pipeline.
@@ -37,6 +52,8 @@ class CrossValidationTrainer(BaseTrainer):
         preprocessing_pipeline: Pipeline | None = None,
         verbose: bool | int = True,
         custom_metric: dict[str, Any] | None = None,
+        n_jobs: int = 1,
+        sample_weight_fn: SampleWeightFn | None = None,
     ) -> None:
         """Initialize the trainer.
 
@@ -54,11 +71,29 @@ class CrossValidationTrainer(BaseTrainer):
             custom_metric (dict[str, Any] | None): Custom metric configuration with keys
                 'name', 'function', and optionally 'metric_type', 'additional_data', and
                 other kwargs. Defaults to None.
+            n_jobs (int): Number of folds trained concurrently. Folds run in threads,
+                which parallelise well because the boosting libraries release the GIL
+                while training; give each estimator its own modest thread count so that
+                n_jobs times the estimator's threads stays within the physical cores.
+                Results are collected in fold order, so every score, fitted estimator,
+                fitted pipeline and averaged test prediction is identical to a
+                sequential run. Defaults to 1, which trains the folds sequentially.
+            sample_weight_fn (SampleWeightFn | None): Optional callable computing
+                per-sample training weights inside each fold. It is called as
+                ``sample_weight_fn(X_train, y_train)`` with the fold's raw training
+                rows (before the preprocessing pipeline, in their original order) and
+                must return one weight per row. Computing weights per fold keeps them
+                relative to that fold's own training window - e.g. a recency decay
+                anchored at the fold's latest row or class-balancing weights derived
+                from the fold's own target - and never exposes validation rows to it.
+                Validation rows are never weighted and scoring stays unweighted.
+                Defaults to None, which trains without weights.
 
         Raises:
-            TypeError: If preprocessing_pipeline is not a Pipeline or None.
-            ValueError: If problem_type is invalid or neither metric_name nor
-                custom_metric is provided.
+            TypeError: If preprocessing_pipeline is not a Pipeline or None, or
+                sample_weight_fn is neither callable nor None.
+            ValueError: If problem_type is invalid, neither metric_name nor
+                custom_metric is provided, or n_jobs is not positive.
         """
         if problem_type not in {"classification", "regression"}:
             raise ValueError("problem_type must be 'classification' or 'regression'.")
@@ -68,6 +103,15 @@ class CrossValidationTrainer(BaseTrainer):
 
         if metric_name is None and custom_metric is None:
             raise ValueError("Either metric_name or custom_metric must be provided.")
+
+        if n_jobs < 1:
+            raise ValueError("n_jobs must be a positive integer.")
+
+        if sample_weight_fn is not None and not callable(sample_weight_fn):
+            raise TypeError(
+                f"sample_weight_fn must be callable or None, "
+                f"got {type(sample_weight_fn).__name__}."
+            )
 
         if metric_name is not None:
             if metric_name not in METRICS:
@@ -91,6 +135,8 @@ class CrossValidationTrainer(BaseTrainer):
         self.cv = cv
         self.preprocessing_pipeline = preprocessing_pipeline
         self.verbose = verbose
+        self.n_jobs = n_jobs
+        self.sample_weight_fn = sample_weight_fn
         self.fit_verbose = self._resolve_fit_verbose(verbose)
 
         self.validate_pipeline()
@@ -218,7 +264,8 @@ class CrossValidationTrainer(BaseTrainer):
 
         The preprocessing pipeline is cloned and re-fitted inside each fold on the
         training split to avoid leakage, then applied to the validation and optional
-        test split.
+        test split. When ``sample_weight_fn`` is set, each fold's training weights are
+        computed from that fold's own training rows.
 
         Args:
             estimator (BaseEstimator): Unfitted estimator to clone and train each fold.
@@ -248,52 +295,53 @@ class CrossValidationTrainer(BaseTrainer):
             else self.preprocessing_pipeline
         )
 
-        iterator = self.cv.split(X, y)
+        splits = list(self.cv.split(X, y))
         show_progress_bar = self.verbose and not bool(self.fit_verbose)
-        if show_progress_bar:
-            total = getattr(self.cv, "n_splits", None)
-            iterator = tqdm(iterator, total=total, desc="Cross-validation")
+        progress_bar = (
+            tqdm(total=len(splits), desc="Cross-validation")
+            if show_progress_bar
+            else None
+        )
+
+        def run_split(train_idx: np.ndarray, valid_idx: np.ndarray) -> _FoldResult:
+            """Train one fold and advance the progress bar."""
+            result = self._run_fold(
+                active_pipeline, estimator, X, y, X_test, train_idx, valid_idx
+            )
+            if progress_bar is not None:
+                progress_bar.update(1)
+            return result
+
+        try:
+            if self.n_jobs == 1 or len(splits) <= 1:
+                fold_results = [
+                    run_split(train_idx, valid_idx) for train_idx, valid_idx in splits
+                ]
+            else:
+                with ThreadPoolExecutor(
+                    max_workers=min(self.n_jobs, len(splits))
+                ) as executor:
+                    futures = {
+                        executor.submit(run_split, train_idx, valid_idx): position
+                        for position, (train_idx, valid_idx) in enumerate(splits)
+                    }
+                    fold_results = [None] * len(splits)
+                    for future in as_completed(futures):
+                        fold_results[futures[future]] = future.result()
+        finally:
+            if progress_bar is not None:
+                progress_bar.close()
 
         test_pred_sum: np.ndarray | None = None
         n_folds_for_test = 0
+        for fold, result in enumerate(fold_results, start=1):
+            self.train_scores_.append(result.train_score)
+            self.valid_scores_.append(result.valid_score)
+            self.fitted_estimators_.append(result.fitted_estimator)
+            self.fitted_pipelines_.append(result.fitted_pipeline)
 
-        for fold, (train_idx, valid_idx) in enumerate(iterator, start=1):
-            X_train, X_valid = X.iloc[train_idx].copy(), X.iloc[valid_idx].copy()
-            y_train, y_valid = y.iloc[train_idx], y.iloc[valid_idx]
-
-            x_train_proc, x_valid_proc, x_test_proc, fitted_pipeline = (
-                self._apply_pipeline(
-                    active_pipeline,
-                    X_train,
-                    X_valid,
-                    X_test,
-                    y_train=y_train,
-                )
-            )
-
-            estimator_fold = self._clone_estimator(estimator)
-            y_train_pred, y_valid_pred, y_test_pred, fitted_estimator = (
-                self.fit_and_predict(
-                    estimator_fold,
-                    x_train_proc,
-                    y_train,
-                    x_valid_proc,
-                    y_valid,
-                    self.metric_type,
-                    X_test=x_test_proc,
-                    verbose=self.verbose,
-                )
-            )
-
-            train_score = self.metric_fn(y_train, y_train_pred)
-            valid_score = self.metric_fn(y_valid, y_valid_pred)
-            self.train_scores_.append(train_score)
-            self.valid_scores_.append(valid_score)
-            self.fitted_estimators_.append(fitted_estimator)
-            self.fitted_pipelines_.append(fitted_pipeline)
-
-            if y_test_pred is not None:
-                fold_test_pred = np.asarray(y_test_pred, dtype=float)
+            if result.test_pred is not None:
+                fold_test_pred = np.asarray(result.test_pred, dtype=float)
                 if test_pred_sum is None:
                     test_pred_sum = np.zeros_like(fold_test_pred, dtype=float)
                 test_pred_sum += fold_test_pred
@@ -301,7 +349,8 @@ class CrossValidationTrainer(BaseTrainer):
 
             if self.verbose:
                 tqdm.write(
-                    f"Fold {fold}: train={train_score:.5f} | valid={valid_score:.5f}"
+                    f"Fold {fold}: train={result.train_score:.5f} | "
+                    f"valid={result.valid_score:.5f}"
                 )
 
         avg_test_pred = (
@@ -310,6 +359,91 @@ class CrossValidationTrainer(BaseTrainer):
             else None
         )
         return self.train_scores_, self.valid_scores_, avg_test_pred
+
+    def _run_fold(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+        self,
+        pipeline: Pipeline | None,
+        estimator: BaseEstimator,
+        X: pd.DataFrame,
+        y: pd.Series,
+        X_test: pd.DataFrame | None,
+        train_idx: np.ndarray,
+        valid_idx: np.ndarray,
+    ) -> "_FoldResult":
+        """Preprocess, train and score a single fold without touching shared state.
+
+        Args:
+            pipeline (Pipeline | None): Unfitted pipeline template, or None.
+            estimator (BaseEstimator): Unfitted estimator, cloned for this fold.
+            X (pd.DataFrame): Full feature matrix.
+            y (pd.Series): Full target.
+            X_test (pd.DataFrame | None): Optional test features.
+            train_idx (np.ndarray): Positional indices of the training rows.
+            valid_idx (np.ndarray): Positional indices of the validation rows.
+
+        Returns:
+            _FoldResult: Scores, fitted objects and test predictions of this fold.
+        """
+        X_train, X_valid = X.iloc[train_idx].copy(), X.iloc[valid_idx].copy()
+        y_train, y_valid = y.iloc[train_idx], y.iloc[valid_idx]
+        fold_weights = self._compute_fold_weights(X_train, y_train)
+
+        x_train_proc, x_valid_proc, x_test_proc, fitted_pipeline = self._apply_pipeline(
+            pipeline,
+            X_train,
+            X_valid,
+            X_test,
+            y_train=y_train,
+        )
+
+        estimator_fold = self._clone_estimator(estimator)
+        y_train_pred, y_valid_pred, y_test_pred, fitted_estimator = (
+            self.fit_and_predict(
+                estimator_fold,
+                x_train_proc,
+                y_train,
+                x_valid_proc,
+                y_valid,
+                self.metric_type,
+                X_test=x_test_proc,
+                verbose=self.verbose,
+                sample_weight=fold_weights,
+            )
+        )
+        return _FoldResult(
+            train_score=self.metric_fn(y_train, y_train_pred),
+            valid_score=self.metric_fn(y_valid, y_valid_pred),
+            fitted_estimator=fitted_estimator,
+            fitted_pipeline=fitted_pipeline,
+            test_pred=y_test_pred,
+        )
+
+    def _compute_fold_weights(
+        self, X_train: pd.DataFrame, y_train: pd.Series
+    ) -> np.ndarray | None:
+        """Compute one fold's training weights with ``sample_weight_fn``.
+
+        Args:
+            X_train (pd.DataFrame): Raw training features of the fold.
+            y_train (pd.Series): Training target of the fold.
+
+        Returns:
+            np.ndarray | None: Float weights aligned with ``X_train``, or None when
+                no ``sample_weight_fn`` is configured.
+
+        Raises:
+            ValueError: If the returned weights are not one-dimensional with one
+                entry per training row.
+        """
+        if self.sample_weight_fn is None:
+            return None
+        weights = np.asarray(self.sample_weight_fn(X_train, y_train), dtype=float)
+        if weights.shape != (len(X_train),):
+            raise ValueError(
+                f"sample_weight_fn must return one weight per training row: expected "
+                f"shape ({len(X_train)},), got {weights.shape}."
+            )
+        return weights
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
         """Predict using averaged outputs across fitted fold estimators.

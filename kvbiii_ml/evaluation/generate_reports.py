@@ -23,7 +23,6 @@ from sklearn.metrics import (
 def _apply_fancy_styling(
     styled_df: Styler,
     caption: str,
-    gradient_cols: dict[tuple[str, ...], tuple[str, float | None, float | None]],
 ) -> Styler:
     """
     Apply consistent fancy styling to DataFrame.
@@ -31,20 +30,10 @@ def _apply_fancy_styling(
     Args:
         styled_df (Styler): Styled DataFrame to modify.
         caption (str): Caption for the table.
-        gradient_cols (dict[tuple[str, ...], tuple[str, float | None, float | None]]):
-            Column gradient configs with cmap, vmin, vmax.
 
     Returns:
         Styler: Enhanced styled DataFrame.
     """
-    for cols, (cmap, vmin, vmax) in gradient_cols.items():
-        styled_df = styled_df.background_gradient(
-            subset=list(cols),
-            cmap=cmap,
-            vmin=vmin,
-            vmax=vmax,
-        )
-
     return (
         styled_df.set_caption(caption)
         .set_properties(
@@ -166,14 +155,7 @@ def regression_results(
 
     styled_df = df.style.format(format_dict)
 
-    gradient_config = {
-        ("R²", "Explained Var"): ("RdYlGn", 0.0, 1.0),
-        ("MAE", "MedAE", "MSE", "RMSE"): ("RdYlGn_r", None, None),
-    }
-
-    return _apply_fancy_styling(
-        styled_df, "📊 Regression Performance Metrics", gradient_config
-    )
+    return _apply_fancy_styling(styled_df, "📊 Regression Performance Metrics")
 
 
 def _per_class_roc_auc(
@@ -342,12 +324,7 @@ def _build_overall_table(
     df = pd.DataFrame(metrics, index=["Train", "Test"])
     styled_df = df.style.format({col: "{:.4f}" for col in df.columns})
 
-    gradient_config = {
-        tuple(col for col in df.columns if col != "Log Loss"): ("YlGnBu", 0.0, 1.0),
-        ("Log Loss",): ("YlOrRd_r", None, None),
-    }
-
-    return _apply_fancy_styling(styled_df, caption, gradient_config)
+    return _apply_fancy_styling(styled_df, caption)
 
 
 def _build_per_class_table(
@@ -392,12 +369,8 @@ def _build_per_class_table(
     format_dict: dict[tuple[str, str], str] = {col: "{:.4f}" for col in metric_cols}
     format_dict.update({col: "{:.0f}" for col in support_cols})
 
-    per_class_styled = (
-        per_class_df.style.format(format_dict)
-        .background_gradient(subset=metric_cols, cmap="YlGnBu", vmin=0.0, vmax=1.0)
-        .background_gradient(subset=support_cols, cmap="Blues", vmin=0.0, vmax=None)
-    )
-    return _apply_fancy_styling(per_class_styled, caption, {})
+    per_class_styled = per_class_df.style.format(format_dict)
+    return _apply_fancy_styling(per_class_styled, caption)
 
 
 def classification_results(

@@ -1,5 +1,6 @@
 import gc
 from collections.abc import Iterable
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 
 import numpy as np
@@ -18,6 +19,7 @@ class EnsembleModel(BaseEstimator):
         problem_type: str,
         weights: np.ndarray | None = None,
         meta_learner: BaseEstimator | None = None,
+        n_jobs: int = 1,
     ) -> None:
         """
         Args:
@@ -28,9 +30,18 @@ class EnsembleModel(BaseEstimator):
                 equal weights are used.
             meta_learner (BaseEstimator | None): Meta-learner for stacking.
                 If None, ensemble uses blending (weighted averaging).
+            n_jobs (int): Base estimators fitted concurrently, in threads. The boosting
+                libraries release the GIL while training, so the threads run truly in
+                parallel; keep n_jobs times each estimator's own thread count within the
+                physical cores. Fitted estimators keep the order of `estimators`, so the
+                result is identical to a sequential fit. Leave it at 1 when the ensemble
+                is itself fitted inside parallel cross-validation folds. Defaults to 1.
         """
         if not isinstance(estimators, Iterable) or len(estimators) == 0:
             raise ValueError("estimators must be a non-empty list of estimators.")
+
+        if n_jobs < 1:
+            raise ValueError("n_jobs must be a positive integer.")
 
         if problem_type not in {"classification", "regression"}:
             raise ValueError(
@@ -40,6 +51,7 @@ class EnsembleModel(BaseEstimator):
         self.estimators = estimators
         self.problem_type = problem_type
         self.meta_learner = meta_learner
+        self.n_jobs = n_jobs
         self._estimators_list = list(estimators)
         self._weights_normalized = self._validate_and_normalize_weights(weights)
         self.weights = self._weights_normalized
@@ -148,16 +160,25 @@ class EnsembleModel(BaseEstimator):
 
         else:
             X_valid, y_valid = None, None
-        self.fitted_estimators_ = []
         self._x_train = X_train
-        for base_estimator in self._estimators_list:
+
+        def fit_one(base_estimator: BaseEstimator) -> BaseEstimator:
+            """Clone, configure and fit one base estimator."""
             estimator = self._safe_clone_estimator(base_estimator)
             estimator = self._set_categorical_params_for_estimator(estimator)
-            fitted = BaseTrainer.fit_estimator(
+            return BaseTrainer.fit_estimator(
                 estimator, X_train, y_train, X_valid, y_valid, sample_weight, verbose
             )
-            self.fitted_estimators_.append(fitted)
-        self._x_train = None
+
+        try:
+            if self.n_jobs == 1 or len(self._estimators_list) <= 1:
+                self.fitted_estimators_ = [fit_one(base) for base in self._estimators_list]
+            else:
+                max_workers = min(self.n_jobs, len(self._estimators_list))
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    self.fitted_estimators_ = list(executor.map(fit_one, self._estimators_list))
+        finally:
+            self._x_train = None
 
         if self.problem_type == "classification":
             self.classes_ = np.unique(y_train)

@@ -5,6 +5,7 @@ from unittest.mock import Mock
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import SGDClassifier
 from sklearn.model_selection import KFold
 from sklearn.pipeline import Pipeline
@@ -441,3 +442,147 @@ def test_crossvalidationtrainer_order_x_for_estimator_falls_back_to_normalized_n
 
 if __name__ == "__main__":
     print("Run this file with pytest to execute tests.")
+
+
+def test_crossvalidationtrainer_fit_in_parallel_matches_sequential_fit(
+    binary_classification_data, random_forest_estimator, kfold_cv
+):
+    """Tests fold-parallel fit reproduces a sequential fit exactly and in fold order.
+
+    Args:
+        binary_classification_data (tuple): Feature matrix and target vector.
+        random_forest_estimator (RandomForestClassifier): Seeded estimator.
+        kfold_cv (KFold): Cross-validation splitter fixture with 3 splits.
+
+    Asserts:
+        - Train and validation scores are identical, fold by fold.
+        - Averaged test predictions are identical.
+        - Every fitted pipeline and estimator predicts identically to its sequential twin.
+    """
+    X, y = binary_classification_data
+    X_test = X.iloc[:15]
+    pipeline = Pipeline(steps=[("scaler", StandardScaler())])
+    results = {}
+    for n_jobs in (1, 3):
+        trainer = CrossValidationTrainer(
+            problem_type="classification",
+            metric_name="Log Loss",
+            cv=kfold_cv,
+            preprocessing_pipeline=pipeline,
+            verbose=False,
+            n_jobs=n_jobs,
+        )
+        train_scores, valid_scores, avg_test_pred = trainer.fit(
+            random_forest_estimator, X, y, X_test=X_test
+        )
+        fold_probas = [
+            estimator.predict_proba(fitted_pipeline.transform(X_test))
+            for estimator, fitted_pipeline in zip(
+                trainer.fitted_estimators_, trainer.fitted_pipelines_
+            )
+        ]
+        results[n_jobs] = (list(train_scores), list(valid_scores), avg_test_pred, fold_probas)
+
+    sequential, parallel = results[1], results[3]
+    if sequential[0] != parallel[0] or sequential[1] != parallel[1]:
+        raise AssertionError()
+    if not np.array_equal(sequential[2], parallel[2]):
+        raise AssertionError()
+    for sequential_proba, parallel_proba in zip(sequential[3], parallel[3]):
+        if not np.array_equal(sequential_proba, parallel_proba):
+            raise AssertionError()
+
+
+def test_crossvalidationtrainer_init_rejects_non_positive_n_jobs():
+    """Tests the constructor rejects a fold concurrency below one.
+
+    Asserts:
+        - n_jobs=0 raises ValueError naming n_jobs.
+        - The default n_jobs is 1.
+    """
+    with pytest.raises(ValueError, match="n_jobs"):
+        CrossValidationTrainer(problem_type="classification", metric_name="Accuracy", n_jobs=0)
+    trainer = CrossValidationTrainer(problem_type="classification", metric_name="Accuracy")
+    if trainer.n_jobs != 1:
+        raise AssertionError()
+
+
+def test_crossvalidationtrainer_fit_computes_sample_weights_per_fold(
+    binary_classification_data, kfold_cv
+):
+    """Tests sample_weight_fn is evaluated on each fold's training rows and reaches fit.
+
+    Args:
+        binary_classification_data (tuple): Feature matrix and target vector.
+        kfold_cv (KFold): Cross-validation splitter fixture with 3 splits.
+
+    Asserts:
+        - sample_weight_fn is called once per fold with exactly that fold's training
+          rows, in their original order, and never sees a validation row.
+        - The returned weights reach the estimator: zero-weighting class 0 makes the
+          weighted class prior of every fold estimator put all mass on class 1.
+    """
+    X, y = binary_classification_data
+    seen_indices = []
+
+    def positive_class_only(X_train: pd.DataFrame, y_train: pd.Series) -> np.ndarray:
+        """Record the fold's training index and weight only the positive class."""
+        seen_indices.append(X_train.index)
+        return (y_train == 1).to_numpy(dtype=float)
+
+    trainer = CrossValidationTrainer(
+        problem_type="classification",
+        metric_name="Accuracy",
+        cv=kfold_cv,
+        verbose=False,
+        sample_weight_fn=positive_class_only,
+    )
+    trainer.fit(DummyClassifier(strategy="prior"), X, y)
+
+    expected_indices = [X.index[train_idx] for train_idx, _ in kfold_cv.split(X, y)]
+    if len(seen_indices) != len(expected_indices):
+        raise AssertionError()
+    for seen, expected in zip(seen_indices, expected_indices):
+        if not seen.equals(expected):
+            raise AssertionError()
+    for estimator in trainer.fitted_estimators_:
+        if not np.allclose(estimator.class_prior_, [0.0, 1.0]):
+            raise AssertionError()
+
+
+def test_crossvalidationtrainer_fit_rejects_misaligned_sample_weights(
+    binary_classification_data, kfold_cv
+):
+    """Tests fit raises when sample_weight_fn returns the wrong number of weights.
+
+    Args:
+        binary_classification_data (tuple): Feature matrix and target vector.
+        kfold_cv (KFold): Cross-validation splitter fixture with 3 splits.
+
+    Asserts:
+        - ValueError naming sample_weight_fn is raised for a too-short weight vector.
+    """
+    X, y = binary_classification_data
+    trainer = CrossValidationTrainer(
+        problem_type="classification",
+        metric_name="Accuracy",
+        cv=kfold_cv,
+        verbose=False,
+        sample_weight_fn=lambda X_train, _y_train: np.ones(len(X_train) - 1),
+    )
+    with pytest.raises(ValueError, match="sample_weight_fn"):
+        trainer.fit(DummyClassifier(), X, y)
+
+
+def test_crossvalidationtrainer_init_rejects_non_callable_sample_weight_fn():
+    """Tests the constructor rejects a sample_weight_fn that is not callable.
+
+    Asserts:
+        - Passing a precomputed weight array raises TypeError naming sample_weight_fn.
+    """
+    with pytest.raises(TypeError, match="sample_weight_fn"):
+        CrossValidationTrainer(
+            problem_type="classification",
+            metric_name="Accuracy",
+            sample_weight_fn=np.ones(10),
+        )

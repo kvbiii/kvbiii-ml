@@ -106,8 +106,12 @@ def _fit_calibrator(
 ) -> IsotonicRegression | LogisticRegression | list:
     """Fit a calibrator on out-of-fold probabilities.
 
-    Binary: fits a single calibrator on the positive-class column.
-    Multiclass: fits one calibrator per class (OVR).
+    Binary: fits a single calibrator on the positive-class column against a
+    0/1 indicator for ``classes[1]`` - labels are binarized rather than passed
+    through as-is, since IsotonicRegression/LogisticRegression require a
+    numeric target and class labels are not guaranteed to already be 0/1.
+    Multiclass: fits one calibrator per class (OVR), each against its own
+    per-class 0/1 indicator.
 
     Args:
         oof_probas (np.ndarray): OOF probabilities of shape (n_samples, n_classes).
@@ -140,7 +144,7 @@ def _fit_calibrator(
         return cal
 
     if len(classes) == 2:
-        return _fit_one(oof_probas[:, 1], y_oof)
+        return _fit_one(oof_probas[:, 1], (y_oof == classes[1]).astype(int))
     return [
         _fit_one(oof_probas[:, i], (y_oof == cls).astype(int))
         for i, cls in enumerate(classes)

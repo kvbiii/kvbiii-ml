@@ -153,5 +153,80 @@ def test_countfrequencyencoderwithoriginal_transform_unseen_ignore_encodes_as_na
         )
 
 
+@pytest.fixture
+def numeric_category_data() -> pd.DataFrame:
+    """Provides a DataFrame with a low-cardinality numeric column alongside a string one.
+
+    Category 1 occurs 3 times, 2 occurs 3 times, and 3 occurs 2 times, out of 8 rows.
+
+    Returns:
+        pd.DataFrame: DataFrame with an integer `num_cat` column and a `city`
+            string column.
+    """
+    return pd.DataFrame(
+        {
+            "num_cat": [1, 2, 1, 3, 2, 1, 3, 2],
+            "city": [
+                "Warsaw",
+                "Krakow",
+                "Warsaw",
+                "Gdansk",
+                "Krakow",
+                "Warsaw",
+                "Gdansk",
+                "Krakow",
+            ],
+        }
+    )
+
+
+def test_countfrequencyencoderwithoriginal_transform_accepts_explicit_numeric_variable(
+    numeric_category_data,
+):
+    """Tests that an explicitly-named numeric column encodes without a dtype error.
+
+    feature_engine's CountFrequencyEncoder normally rejects numeric input with
+    "Some of the variables are not categorical..." unless ignore_format=True;
+    this wrapper instead recasts explicitly-configured numeric variables to
+    object dtype internally so they encode directly.
+
+    Args:
+        numeric_category_data: DataFrame with a low-cardinality numeric column.
+
+    Asserts:
+        - transform() succeeds and encodes counts correctly.
+        - The original numeric column's dtype is left untouched in the output.
+    """
+    encoder = CountFrequencyEncoderWithOriginal(
+        encoding_method="count", variables=["num_cat"]
+    )
+    encoder.fit(numeric_category_data)
+    result = encoder.transform(numeric_category_data)
+    expected = [3, 3, 3, 2, 3, 3, 2, 3]
+    if not np.allclose(
+        result["num_cat_PREPROCESS_CNT_FREQ"].to_numpy(dtype=float), expected
+    ):
+        raise AssertionError("Count encoding did not match expected occurrence counts.")
+    if not pd.api.types.is_numeric_dtype(result["num_cat"]):
+        raise AssertionError("Original numeric column dtype was altered by transform().")
+
+
+def test_countfrequencyencoderwithoriginal_auto_detect_ignores_numeric_columns(
+    numeric_category_data,
+):
+    """Tests that variables=None auto-detection still excludes numeric columns.
+
+    Args:
+        numeric_category_data: DataFrame with a numeric and a string column.
+
+    Asserts:
+        - Only the string "city" column is auto-detected, not "num_cat".
+    """
+    encoder = CountFrequencyEncoderWithOriginal()
+    encoder.fit(numeric_category_data)
+    if encoder.variables_ != ["city"]:
+        raise AssertionError(f"Expected ['city'], got {encoder.variables_}.")
+
+
 if __name__ == "__main__":
     print("Run this file with pytest to execute tests.")

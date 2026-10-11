@@ -98,8 +98,9 @@ def test_cutofftunercv_tune_binary_produces_single_best_cutoff(
 
     Asserts:
         - tune() returns an optuna Study
-        - best_cutoffs has shape (1,)
-        - best_cutoffs value falls within the searched (0, 1) range
+        - best_cutoffs has shape (2,), one entry per class even for binary targets
+        - best_cutoffs is the complementary pair [1 - cutoff, cutoff]
+        - both entries fall within the searched (0, 1) range
     """
     X, y = binary_cutoff_data
     tuner = CutoffTunerCV(
@@ -113,9 +114,11 @@ def test_cutofftunercv_tune_binary_produces_single_best_cutoff(
 
     if not isinstance(study, optuna.study.Study):
         raise AssertionError()
-    if tuner.best_cutoffs.shape != (1,):
+    if tuner.best_cutoffs.shape != (2,):
         raise AssertionError()
-    if not 0.0 <= tuner.best_cutoffs[0] <= 1.0:
+    if not np.isclose(tuner.best_cutoffs.sum(), 1.0, atol=1e-9):
+        raise AssertionError()
+    if not np.all((tuner.best_cutoffs >= 0.0) & (tuner.best_cutoffs <= 1.0)):
         raise AssertionError()
 
 

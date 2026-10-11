@@ -1,11 +1,135 @@
-from typing import Literal
+from typing import Any, Literal
 
+import numpy as np
 import pandas as pd
 from sklearn.preprocessing import KBinsDiscretizer
 
 from kvbiii_ml.data_processing.preprocessing.expansion_base import (
     _WithOriginalSubsetBase,
 )
+
+
+class _NaNIgnoringKBinsDiscretizer:
+    """Per-column KBinsDiscretizer wrapper that leaves NaN values untouched.
+
+    Raw scikit-learn's KBinsDiscretizer rejects its entire 2D input if any
+    column contains a NaN, regardless of which column it is in - so a single
+    joint fit/transform across variables cannot skip missing values on a
+    per-column basis. This wrapper fits one KBinsDiscretizer per variable on
+    that variable's non-null rows only, and reassembles a 2D float array on
+    transform with NaN left in place at the original missing positions. A
+    variable that is entirely NaN at fit time has no bin edges to learn, so it
+    is fitted to ``None`` and its derived column is all NaN on transform.
+    Matches the plain ``fit(X, y)`` / ``transform(X)`` contract that
+    ``_WithOriginalSubsetBase`` expects from ``_build_inner()``.
+    """
+
+    def __init__(
+        self,
+        n_bins: int,
+        strategy: Literal["uniform", "quantile", "kmeans"],
+        quantile_method: str,
+        dtype: type | None,
+        subsample: int | None,
+        random_state: int | None,
+    ) -> None:
+        """
+        Initialize _NaNIgnoringKBinsDiscretizer.
+
+        Args:
+            n_bins (int): Number of bins to produce for every variable.
+            strategy (Literal["uniform", "quantile", "kmeans"]): Binning strategy
+                forwarded to each per-variable KBinsDiscretizer.
+            quantile_method (str): Quantile interpolation method forwarded to each
+                per-variable KBinsDiscretizer.
+            dtype (type | None): Output dtype forwarded to each per-variable
+                KBinsDiscretizer.
+            subsample (int | None): Maximum number of samples used to fit the
+                "quantile"/"kmeans" strategies.
+            random_state (int | None): Random seed for the "kmeans" strategy and
+                for subsampling.
+        """
+        self.n_bins = n_bins
+        self.strategy = strategy
+        self.quantile_method = quantile_method
+        self.dtype = dtype
+        self.subsample = subsample
+        self.random_state = random_state
+
+    def fit(self, X: pd.DataFrame, _y: Any = None) -> "_NaNIgnoringKBinsDiscretizer":
+        """Fit one KBinsDiscretizer per column, using only that column's non-null rows.
+
+        Args:
+            X (pd.DataFrame): Training features, one column per variable to discretise.
+            _y (Any, optional): Unused; accepted for API consistency. Defaults to None.
+
+        Columns with no non-null values are fitted to ``None`` instead of raising,
+        so their derived column is entirely NaN on transform.
+
+        Returns:
+            _NaNIgnoringKBinsDiscretizer: Fitted instance (self).
+
+        Raises:
+            ValueError: If KBinsDiscretizer fails on a column's non-null values.
+        """
+        self.columns_ = list(X.columns)
+        self.column_discretisers_: dict[str, KBinsDiscretizer | None] = {}
+        for column in self.columns_:
+            observed = X[column].dropna()
+            if observed.empty:
+                self.column_discretisers_[column] = None
+                continue
+            try:
+                self.column_discretisers_[column] = self._build_column_discretiser().fit(
+                    observed.to_numpy().reshape(-1, 1)
+                )
+            except ValueError as exc:
+                raise ValueError(
+                    f"Failed to fit KBinsDiscretizer on non-null values of column "
+                    f"'{column}': {exc}"
+                ) from exc
+        return self
+
+    def transform(self, X: pd.DataFrame) -> np.ndarray:
+        """Bin each column's non-null rows, leaving NaN rows as NaN.
+
+        Args:
+            X (pd.DataFrame): Features to transform, matching the columns seen in fit.
+
+        Returns:
+            np.ndarray: Array of shape (n_samples, n_columns) with binned values,
+                NaN preserved at originally-missing positions and across every
+                column that was entirely NaN at fit time.
+        """
+        encoded = np.full((len(X), len(self.columns_)), np.nan, dtype=np.float64)
+        for column_index, column in enumerate(self.columns_):
+            column_discretiser = self.column_discretisers_[column]
+            if column_discretiser is None:
+                continue
+            series = X[column]
+            not_null_mask = series.notna()
+            if not not_null_mask.any():
+                continue
+            observed = series[not_null_mask].to_numpy().reshape(-1, 1)
+            binned = column_discretiser.transform(observed).reshape(-1)
+            encoded[not_null_mask.to_numpy(), column_index] = binned
+        return encoded
+
+    def _build_column_discretiser(self) -> KBinsDiscretizer:
+        """Return a fresh, unfitted KBinsDiscretizer for a single variable.
+
+        Returns:
+            KBinsDiscretizer: Unfitted discretiser, fixed to ordinal encoding.
+        """
+        return KBinsDiscretizer(
+            n_bins=self.n_bins,
+            encode="ordinal",
+            strategy=self.strategy,
+            quantile_method=self.quantile_method,
+            dtype=self.dtype,
+            subsample=self.subsample,
+            random_state=self.random_state,
+        )
 
 
 class KBinsDiscretiserWithOriginal(_WithOriginalSubsetBase):
@@ -31,6 +155,7 @@ class KBinsDiscretiserWithOriginal(_WithOriginalSubsetBase):
         subsample: int | None = 200_000,
         random_state: int | None = None,
         variables: list[str] | None = None,
+        missing_values: Literal["raise", "ignore"] = "raise",
     ) -> None:
         """
         Initialize KBinsDiscretiserWithOriginal.
@@ -53,6 +178,12 @@ class KBinsDiscretiserWithOriginal(_WithOriginalSubsetBase):
                 strategy and for subsampling. Defaults to None.
             variables (list[str] | None, optional): Numeric columns to discretise.
                 Defaults to None (auto-detect all numeric columns).
+            missing_values (Literal["raise", "ignore"], optional): How to handle
+                NaN - ``"raise"`` lets KBinsDiscretizer raise its own ValueError
+                on NaN input (scikit-learn's native behavior), ``"ignore"`` bins
+                each variable's non-null rows and leaves NaN rows as NaN in the
+                derived column (an entirely-NaN variable still fits and yields
+                an all-NaN derived column). Defaults to "raise".
         """
         self.n_bins = n_bins
         self.strategy = strategy
@@ -61,6 +192,7 @@ class KBinsDiscretiserWithOriginal(_WithOriginalSubsetBase):
         self.subsample = subsample
         self.random_state = random_state
         self.variables = variables
+        self.missing_values = missing_values
 
     @property
     def _suffix(self) -> str:
@@ -71,13 +203,25 @@ class KBinsDiscretiserWithOriginal(_WithOriginalSubsetBase):
         """
         return f"PREPROCESS_KBINS_{self.n_bins}"
 
-    def _build_inner(self) -> KBinsDiscretizer:
-        """Return a fresh KBinsDiscretizer configured from instance attributes.
+    def _build_inner(self) -> KBinsDiscretizer | _NaNIgnoringKBinsDiscretizer:
+        """Return a fresh inner discretiser configured from instance attributes.
 
         Returns:
-            KBinsDiscretizer: Unfitted discretiser, fixed to ordinal encoding so
-                each variable maps to exactly one derived column.
+            KBinsDiscretizer | _NaNIgnoringKBinsDiscretizer: Unfitted discretiser,
+                fixed to ordinal encoding so each variable maps to exactly one
+                derived column. A plain KBinsDiscretizer when
+                ``missing_values="raise"``, or the NaN-preserving per-column
+                wrapper when ``missing_values="ignore"``.
         """
+        if self.missing_values == "ignore":
+            return _NaNIgnoringKBinsDiscretizer(
+                n_bins=self.n_bins,
+                strategy=self.strategy,
+                quantile_method=self.quantile_method,
+                dtype=self.dtype,
+                subsample=self.subsample,
+                random_state=self.random_state,
+            )
         return KBinsDiscretizer(
             n_bins=self.n_bins,
             encode="ordinal",
@@ -126,5 +270,13 @@ if __name__ == "__main__":
         )
         print("\n=== KBinsDiscretiserWithOriginal (n_bins=10, uniform) ===")
         print(enc_10.fit_transform(df).head())
+
+        df_with_nan = df.copy()
+        df_with_nan.loc[:9, "income"] = np.nan
+        enc_ignore_nan = KBinsDiscretiserWithOriginal(
+            n_bins=5, variables=["age", "income"], missing_values="ignore"
+        )
+        print("\n=== KBinsDiscretiserWithOriginal (n_bins=5, missing_values='ignore') ===")
+        print(enc_ignore_nan.fit_transform(df_with_nan).head(12))
 
     _run_demo()

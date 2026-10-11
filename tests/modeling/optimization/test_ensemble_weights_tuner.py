@@ -180,7 +180,7 @@ class TestEnsembleWeightTunerCV:
         Asserts:
             - Study is created with correct direction
             - TPE sampler is configured with proper seed
-            - MedianPruner is set (matched to per-fold reporting, unlike Hyperband)
+            - No pruning is configured (objective is cheap and non-iterative)
         """
         cross_validator = CrossValidationTrainer(
             metric_name="Roc AUC", problem_type="classification", cv=kfold_cv
@@ -200,7 +200,7 @@ class TestEnsembleWeightTunerCV:
             raise AssertionError()
         if not isinstance(study.sampler, optuna.samplers.TPESampler):
             raise AssertionError()
-        if not isinstance(study.pruner, optuna.pruners.MedianPruner):
+        if not isinstance(study.pruner, optuna.pruners.NopPruner):
             raise AssertionError()
 
     def test_ensembleweighttuner_blend_predictions_1d_regression(

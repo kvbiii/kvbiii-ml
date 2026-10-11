@@ -10,7 +10,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
-from kvbiii_ml.modeling.training.oof_model import OOFModel
+from kvbiii_ml.modeling.training.oof_model import OOFModel, _fit_calibrator
 
 from ._test_support import assert_valid_binary_proba_matrix
 
@@ -483,6 +483,40 @@ def test_oofmodel_integration_with_preprocessing_pipeline(
         raise AssertionError()
     if len(oof.fitted_estimators_) != kfold_cv.n_splits:
         raise AssertionError()
+
+
+@pytest.mark.parametrize("method", ["isotonic", "sigmoid"])
+def test_fit_calibrator_binary_accepts_non_numeric_labels(method):
+    """Tests _fit_calibrator fits successfully when binary labels aren't 0/1.
+
+    IsotonicRegression/LogisticRegression require a numeric fit target;
+    _fit_calibrator's binary branch must binarize y_oof against classes[1]
+    before fitting rather than passing arbitrary labels straight through.
+
+    Args:
+        method (str): Calibration method under test.
+
+    Asserts:
+        - Fitting raises no exception for string class labels.
+        - The resulting calibrator can score a probability column without error.
+    """
+    rng = np.random.default_rng(17)
+    n = 60
+    classes = np.array(["neg", "pos"])
+    y_oof = rng.choice(classes, size=n)
+    positive_rate = np.where(y_oof == "pos", 0.8, 0.2)
+    oof_probas = np.column_stack(
+        [1 - positive_rate, positive_rate]
+    ) + rng.normal(scale=0.05, size=(n, 2))
+    oof_probas = np.clip(oof_probas, 0.01, 0.99)
+
+    calibrator = _fit_calibrator(oof_probas, y_oof, method, classes)
+
+    p = oof_probas[:, 1]
+    if method == "sigmoid":
+        calibrator.predict_proba(p.reshape(-1, 1))
+    else:
+        calibrator.predict(p)
 
 
 if __name__ == "__main__":

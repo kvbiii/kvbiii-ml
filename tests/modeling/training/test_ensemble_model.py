@@ -329,3 +329,47 @@ def test_ensemblemodel_set_params_updates_parameters():
 
 if __name__ == "__main__":
     print("Run this file with pytest to execute tests.")
+
+
+def test_ensemblemodel_fit_in_parallel_matches_sequential_fit(
+    binary_classification_data, ensemble_estimators
+):
+    """Tests a thread-parallel ensemble fit keeps estimator order and predictions.
+
+    Args:
+        binary_classification_data: Feature matrix and target fixture
+        ensemble_estimators: List of estimators fixture
+
+    Asserts:
+        - Fitted estimators keep the order of the configured estimators.
+        - predict_proba is identical to the sequential fit.
+        - n_jobs survives get_params, so clones keep the concurrency.
+    """
+    X, y = binary_classification_data
+    sequential = EnsembleModel(estimators=ensemble_estimators, problem_type="classification")
+    parallel = EnsembleModel(
+        estimators=ensemble_estimators, problem_type="classification", n_jobs=2
+    )
+    sequential.fit(X, y)
+    parallel.fit(X, y)
+
+    fitted_types = [type(estimator) for estimator in parallel.fitted_estimators_]
+    if fitted_types != [type(estimator) for estimator in ensemble_estimators]:
+        raise AssertionError()
+    if not np.array_equal(sequential.predict_proba(X), parallel.predict_proba(X)):
+        raise AssertionError()
+    if parallel.get_params()["n_jobs"] != 2:
+        raise AssertionError()
+
+
+def test_ensemblemodel_init_rejects_non_positive_n_jobs(ensemble_estimators):
+    """Tests the constructor rejects a fit concurrency below one.
+
+    Args:
+        ensemble_estimators: List of estimators fixture
+
+    Asserts:
+        - n_jobs=0 raises ValueError naming n_jobs.
+    """
+    with pytest.raises(ValueError, match="n_jobs"):
+        EnsembleModel(estimators=ensemble_estimators, problem_type="classification", n_jobs=0)

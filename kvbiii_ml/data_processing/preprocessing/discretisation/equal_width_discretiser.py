@@ -9,11 +9,11 @@ from kvbiii_ml.data_processing.preprocessing.expansion_base import _WithOriginal
 class EqualWidthDiscretiserWithOriginal(_WithOriginalBase):
     """Wraps EqualWidthDiscretiser to keep originals and append binned copies.
 
-    Derived columns are named ``{original}_PREPROCESS_EQ_WIDTH``. Each variable is split into
+    Derived columns are named ``{original}_PREPROCESS_EQ_WIDTH_{bins}`` - the bin
+    count is baked into the suffix, since it is the defining parameter of this
+    transformer, rather than using one fixed suffix. Each variable is split into
     ``bins`` intervals of equal width across the observed value range.
     """
-
-    _suffix = "PREPROCESS_EQ_WIDTH"
 
     def __init__(
         self,
@@ -42,6 +42,15 @@ class EqualWidthDiscretiserWithOriginal(_WithOriginalBase):
         self.return_object = return_object
         self.return_boundaries = return_boundaries
         self.precision = precision
+
+    @property
+    def _suffix(self) -> str:
+        """Derived-column suffix, dynamically keyed on ``bins``.
+
+        Returns:
+            str: e.g. "PREPROCESS_EQ_WIDTH_5" for ``bins=5``.
+        """
+        return f"PREPROCESS_EQ_WIDTH_{self.bins}"
 
     def _build_inner(self) -> EqualWidthDiscretiser:
         """Return a fresh EqualWidthDiscretiser.
