@@ -308,7 +308,9 @@ class EnsembleModel(BaseEstimator):
                 None if weights is None else weights[train_idx],
                 verbose,
             )
-            fold_features = self._meta_features(fold_estimators, X_train.iloc[valid_idx])
+            fold_features = self._meta_features(
+                fold_estimators, X_train.iloc[valid_idx]
+            )
             if meta_features is None:
                 meta_features = np.zeros((len(X_train), fold_features.shape[1]))
             if fold_features.shape[1] != meta_features.shape[1]:
@@ -606,7 +608,11 @@ class EnsembleModel(BaseEstimator):
         x_ordered = self._order_x_for_estimator(X, estimator)
         if offset is not None:
             return predict_with_offset(estimator, x_ordered, offset, proba=proba)
-        return estimator.predict_proba(x_ordered) if proba else estimator.predict(x_ordered)
+        return (
+            estimator.predict_proba(x_ordered)
+            if proba
+            else estimator.predict(x_ordered)
+        )
 
     def _order_x_for_estimator(
         self, X: pd.DataFrame, estimator: BaseEstimator

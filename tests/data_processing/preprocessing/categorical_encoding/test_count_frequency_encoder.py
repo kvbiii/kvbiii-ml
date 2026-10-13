@@ -208,7 +208,9 @@ def test_countfrequencyencoderwithoriginal_transform_accepts_explicit_numeric_va
     ):
         raise AssertionError("Count encoding did not match expected occurrence counts.")
     if not pd.api.types.is_numeric_dtype(result["num_cat"]):
-        raise AssertionError("Original numeric column dtype was altered by transform().")
+        raise AssertionError(
+            "Original numeric column dtype was altered by transform()."
+        )
 
 
 def test_countfrequencyencoderwithoriginal_auto_detect_ignores_numeric_columns(

@@ -1,11 +1,12 @@
 """Tests for kvbiii_ml.modeling.training.ensemble_model module."""
 
-import pickle
+import io
 from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
 import pytest
+import joblib
 import lightgbm as lgb
 from lightgbm import LGBMRegressor
 from sklearn.base import clone, is_classifier, is_regressor
@@ -353,7 +354,9 @@ def test_ensemblemodel_fit_in_parallel_matches_sequential_fit(
         - n_jobs survives get_params, so clones keep the concurrency.
     """
     X, y = binary_classification_data
-    sequential = EnsembleModel(estimators=ensemble_estimators, problem_type="classification")
+    sequential = EnsembleModel(
+        estimators=ensemble_estimators, problem_type="classification"
+    )
     parallel = EnsembleModel(
         estimators=ensemble_estimators, problem_type="classification", n_jobs=2
     )
@@ -379,14 +382,16 @@ def test_ensemblemodel_init_rejects_non_positive_n_jobs(ensemble_estimators):
         - n_jobs=0 raises ValueError naming n_jobs.
     """
     with pytest.raises(ValueError, match="n_jobs"):
-        EnsembleModel(estimators=ensemble_estimators, problem_type="classification", n_jobs=0)
+        EnsembleModel(
+            estimators=ensemble_estimators, problem_type="classification", n_jobs=0
+        )
 
 
 @pytest.mark.parametrize("problem_type", ["classification", "regression"])
 def test_ensemblemodel_fitted_instance_survives_pickle_round_trip(
     binary_classification_data, problem_type
 ):
-    """Tests a fitted ensemble pickles and keeps its sklearn estimator type.
+    """Tests a fitted ensemble survives a joblib (pickle) round trip and keeps its type.
 
     Args:
         binary_classification_data: Feature matrix and target fixture
@@ -399,14 +404,21 @@ def test_ensemblemodel_fitted_instance_survives_pickle_round_trip(
         - clone keeps the parameters and score() works.
     """
     X, y = binary_classification_data
-    base = LogisticRegression() if problem_type == "classification" else LinearRegression()
+    base = (
+        LogisticRegression() if problem_type == "classification" else LinearRegression()
+    )
     ensemble = EnsembleModel(estimators=[base], problem_type=problem_type).fit(X, y)
 
-    restored = pickle.loads(pickle.dumps(ensemble))
+    buffer = io.BytesIO()
+    joblib.dump(ensemble, buffer)
+    buffer.seek(0)
+    restored = joblib.load(buffer)
 
     if not np.array_equal(ensemble.predict(X), restored.predict(X)):
         raise AssertionError()
-    if not isinstance(ensemble, EnsembleModel) or not isinstance(restored, EnsembleModel):
+    if not isinstance(ensemble, EnsembleModel) or not isinstance(
+        restored, EnsembleModel
+    ):
         raise AssertionError()
     if clone(ensemble).get_params()["problem_type"] != problem_type:
         raise AssertionError()
@@ -418,7 +430,9 @@ def test_ensemblemodel_fitted_instance_survives_pickle_round_trip(
         raise AssertionError()
 
 
-def test_ensemblemodel_fit_without_eval_set_disables_boosting_early_stopping(regression_data):
+def test_ensemblemodel_fit_without_eval_set_disables_boosting_early_stopping(
+    regression_data,
+):
     """Tests fitting without eval_set works when base boosters configure early stopping.
 
     Args:
@@ -502,7 +516,9 @@ def test_ensemblemodel_stacking_meta_learner_trusts_memorising_model_less_out_of
 def _exposure_frame(n_samples: int = 600) -> tuple[pd.DataFrame, pd.Series]:
     """Poisson counts whose mean is exposure * exp(0.6 * x0)."""
     rng = np.random.default_rng(5)
-    X = pd.DataFrame({"x0": rng.normal(size=n_samples), "x1": rng.normal(size=n_samples)})
+    X = pd.DataFrame(
+        {"x0": rng.normal(size=n_samples), "x1": rng.normal(size=n_samples)}
+    )
     X["log_exposure"] = np.log(rng.uniform(0.2, 3.0, size=n_samples))
     y = pd.Series(rng.poisson(np.exp(0.6 * X["x0"] + X["log_exposure"])))
     return X, y

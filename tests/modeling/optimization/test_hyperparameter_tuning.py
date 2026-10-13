@@ -520,7 +520,10 @@ def test_randomsearchcv_explore_fidelity_accounts_for_rows_and_fold_count(
     tuner = RandomSearchCV(cross_validator=hyperparam_cv_trainer, n_trials=1, seed=17)
     confirm_plan = tuner._build_plan(X, y, hyperparam_cv_trainer.cv, "confirm")
     explore_plan = tuner._build_plan(
-        X.iloc[:90], y.iloc[:90], KFold(n_splits=5, shuffle=True, random_state=1), "explore"
+        X.iloc[:90],
+        y.iloc[:90],
+        KFold(n_splits=5, shuffle=True, random_state=1),
+        "explore",
     )
 
     fidelity = tuner._explore_fidelity(explore_plan, confirm_plan)
@@ -606,7 +609,9 @@ def test_randomsearchcv_guard_accepts_a_consistent_gain_across_uneven_folds(
     searched = _frozen_trial(0.559, [0.50, 0.555, 0.622], [100, 120, 140])
     plan = Mock(train_rows=100.0, refit_rows=150)
 
-    tuner._select_best(plan, LGBMClassifier(), _study_of([searched], direction="minimize"))
+    tuner._select_best(
+        plan, LGBMClassifier(), _study_of([searched], direction="minimize")
+    )
 
     if tuner.selection_source_ != "tuned":
         raise AssertionError()
@@ -661,10 +666,19 @@ def test_randomsearchcv_single_stage_reports_saturated_grid_bounds(
     """
     X, y = hyperparam_classification_data
     tuner = RandomSearchCV(
-        cross_validator=hyperparam_cv_trainer, n_trials=12, seed=17, verbose=False, top_k=3
+        cross_validator=hyperparam_cv_trainer,
+        n_trials=12,
+        seed=17,
+        verbose=False,
+        top_k=3,
     )
 
-    tuner.tune(logistic_regression_estimator, X, y, {"C": ("float", [1e-6, 1e-3], {"log": True})})
+    tuner.tune(
+        logistic_regression_estimator,
+        X,
+        y,
+        {"C": ("float", [1e-6, 1e-3], {"log": True})},
+    )
 
     if tuner.saturated_params_.get("C") != "high":
         raise AssertionError(tuner.saturated_params_)
@@ -1344,7 +1358,10 @@ def test_randomsearchcv_prints_parallel_trials_in_trial_number_order(
     X, y = hyperparam_classification_data
     n_trials = 12
     tuner = RandomSearchCV(
-        cross_validator=hyperparam_cv_trainer, n_trials=n_trials, seed=17, n_parallel_trials=4
+        cross_validator=hyperparam_cv_trainer,
+        n_trials=n_trials,
+        seed=17,
+        n_parallel_trials=4,
     )
     params_grid = {
         "n_estimators": ("constant", [20]),
@@ -1409,7 +1426,9 @@ def test_randomsearchcv_holdout_refit_scale_ignores_the_cv_fold_count(
         - The refit scale equals training rows over rows left after the carve-out.
     """
     X, y = hyperparam_classification_data
-    X_train, X_valid, y_train, y_valid = train_test_split(X, y, test_size=0.25, random_state=17)
+    X_train, X_valid, y_train, y_valid = train_test_split(
+        X, y, test_size=0.25, random_state=17
+    )
     tuner = RandomSearchCV(cross_validator=hyperparam_cv_trainer, n_trials=1, seed=17)
 
     plan = tuner._build_holdout_plan(X_train, y_train, X_valid, y_valid)

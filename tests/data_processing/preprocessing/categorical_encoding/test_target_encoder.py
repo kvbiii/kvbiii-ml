@@ -77,9 +77,9 @@ def test_targetencoderwithoriginal_fit_transform_uses_cross_fitting(
     X, y = target_encoder_data
     variables = ["city"]
 
-    wrapper_fit_transform = TargetEncoderWithOriginal(variables=variables).fit_transform(
-        X, y
-    )["city_PREPROCESS_TARGET_ENC"]
+    wrapper_fit_transform = TargetEncoderWithOriginal(
+        variables=variables
+    ).fit_transform(X, y)["city_PREPROCESS_TARGET_ENC"]
     plain_fit_then_transform = (
         TargetEncoderWithOriginal(variables=variables)
         .fit(X, y)

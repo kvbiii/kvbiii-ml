@@ -230,7 +230,9 @@ class BaseTrainer:
         return estimator
 
     @staticmethod
-    def _lgbm_cuda_categorical_override(estimator: BaseEstimator, sig: Signature) -> dict:
+    def _lgbm_cuda_categorical_override(
+        estimator: BaseEstimator, sig: Signature
+    ) -> dict:
         """Disable LightGBM's categorical auto-detection when training on CUDA.
 
         LightGBM's CUDA tree learner has a reproducible illegal-memory-access crash
@@ -330,7 +332,9 @@ class BaseTrainer:
             TypeError: If the estimator is not a LightGBM, XGBoost or CatBoost model.
         """
         class_name = type(estimator).__name__
-        eval_offsets = (offset_train, offset_valid) if eval_on_train else (offset_valid,)
+        eval_offsets = (
+            (offset_train, offset_valid) if eval_on_train else (offset_valid,)
+        )
         has_eval = "eval_set" in fit_params or "eval_X" in fit_params
         if class_name.startswith(LGBM_PREFIX):
             fit_params["init_score"] = offset_train

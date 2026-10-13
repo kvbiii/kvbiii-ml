@@ -80,7 +80,9 @@ class _NaNIgnoringKBinsDiscretizer:
                 self.column_discretisers_[column] = None
                 continue
             try:
-                self.column_discretisers_[column] = self._build_column_discretiser().fit(
+                self.column_discretisers_[
+                    column
+                ] = self._build_column_discretiser().fit(
                     observed.to_numpy().reshape(-1, 1)
                 )
             except ValueError as exc:
@@ -276,7 +278,9 @@ if __name__ == "__main__":
         enc_ignore_nan = KBinsDiscretiserWithOriginal(
             n_bins=5, variables=["age", "income"], missing_values="ignore"
         )
-        print("\n=== KBinsDiscretiserWithOriginal (n_bins=5, missing_values='ignore') ===")
+        print(
+            "\n=== KBinsDiscretiserWithOriginal (n_bins=5, missing_values='ignore') ==="
+        )
         print(enc_ignore_nan.fit_transform(df_with_nan).head(12))
 
     _run_demo()

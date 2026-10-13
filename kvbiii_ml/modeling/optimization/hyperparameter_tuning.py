@@ -129,7 +129,9 @@ class _OrderedTrialLogger:
     reads exactly as a sequential run would.
     """
 
-    def __init__(self, label: str, total: int, metric_name: str, maximize: bool) -> None:
+    def __init__(
+        self, label: str, total: int, metric_name: str, maximize: bool
+    ) -> None:
         """Initialize the logger.
 
         Args:
@@ -147,7 +149,9 @@ class _OrderedTrialLogger:
         self._next_number = 0
         self._best: optuna.trial.FrozenTrial | None = None
 
-    def __call__(self, _study: optuna.study.Study, trial: optuna.trial.FrozenTrial) -> None:
+    def __call__(
+        self, _study: optuna.study.Study, trial: optuna.trial.FrozenTrial
+    ) -> None:
         """Buffer a finished trial and print every trial that is now next in line.
 
         Args:
@@ -170,7 +174,9 @@ class _OrderedTrialLogger:
             print(f"{icon} {prefix} {trial.state.name.lower()} ({duration:.2f}s)")
             return
         improved = self._best is None or (
-            trial.value > self._best.value if self.maximize else trial.value < self._best.value
+            trial.value > self._best.value
+            if self.maximize
+            else trial.value < self._best.value
         )
         if improved:
             self._best = trial
@@ -192,7 +198,9 @@ class _FoldMedianPruner(optuna.pruners.BasePruner):
     because its evaluation has already been paid for.
     """
 
-    def __init__(self, n_folds: int, n_startup_trials: int, n_warmup_steps: int = 1) -> None:
+    def __init__(
+        self, n_folds: int, n_startup_trials: int, n_warmup_steps: int = 1
+    ) -> None:
         """Initialize the pruner.
 
         Args:
@@ -217,10 +225,16 @@ class _FoldMedianPruner(optuna.pruners.BasePruner):
         step = trial.last_step
         if step is None or step < self.n_warmup_steps or step >= self.n_folds - 1:
             return False
-        completed = study.get_trials(deepcopy=False, states=(optuna.trial.TrialState.COMPLETE,))
+        completed = study.get_trials(
+            deepcopy=False, states=(optuna.trial.TrialState.COMPLETE,)
+        )
         if len(completed) < self.n_startup_trials:
             return False
-        others = [t.intermediate_values[step] for t in completed if step in t.intermediate_values]
+        others = [
+            t.intermediate_values[step]
+            for t in completed
+            if step in t.intermediate_values
+        ]
         if not others:
             return False
         median = float(np.median(others))
@@ -459,8 +473,12 @@ class RandomSearchCV:
             float: Penalised cross-validated score for this trial.
         """
         grid = space if space is not None else self.params_grid
-        params = {name: self.get_param(trial, name, spec) for name, spec in grid.items()}
-        fold_scores, best_iterations = self._evaluate_config(plan, estimator, params, trial)
+        params = {
+            name: self.get_param(trial, name, spec) for name, spec in grid.items()
+        }
+        fold_scores, best_iterations = self._evaluate_config(
+            plan, estimator, params, trial
+        )
         trial.set_user_attr("fold_scores", fold_scores)
         trial.set_user_attr("best_iterations", best_iterations)
         trial.set_user_attr("params", params)
@@ -500,21 +518,27 @@ class RandomSearchCV:
         try:
             self._log_start(use_holdout)
             if use_holdout:
-                plan = self._build_holdout_plan(X, y, self.check_x(X_valid), self.check_y(y_valid))
+                plan = self._build_holdout_plan(
+                    X, y, self.check_x(X_valid), self.check_y(y_valid)
+                )
                 shortlist = []
             else:
                 plan = self._build_plan(X, y, self.cross_validator.cv, "confirm")
                 shortlist = self._run_explore_stage(estimator, X, y, plan)
             study = self._run_confirm_stage(plan, estimator, shortlist)
             if not shortlist:
-                self.saturated_params_ = self._saturation_report(self._top_params(study))
+                self.saturated_params_ = self._saturation_report(
+                    self._top_params(study)
+                )
             self._select_best(plan, estimator, study)
             self._log_finish(study)
         finally:
             optuna.logging.set_verbosity(previous_verbosity)
         return study
 
-    def _baseline_params(self, estimator: BaseEstimator, snap: bool = True) -> dict[str, Any]:
+    def _baseline_params(
+        self, estimator: BaseEstimator, snap: bool = True
+    ) -> dict[str, Any]:
         """Build the estimator's own parameters for every grid entry it exposes.
 
         Parameters the estimator does not expose through get_params are omitted so the
@@ -649,7 +673,9 @@ class RandomSearchCV:
         plan.cached = [self._build_fold(plan, 0, train_idx, valid_idx)]
         return plan
 
-    def _build_plan(self, X: pd.DataFrame, y: pd.Series, cv: Any, label: str) -> _EvaluationPlan:
+    def _build_plan(
+        self, X: pd.DataFrame, y: pd.Series, cv: Any, label: str
+    ) -> _EvaluationPlan:
         """Build an evaluation plan, caching its folds when they fit the memory budget.
 
         The first fold is always built so its footprint can be measured; the rest are
@@ -729,7 +755,8 @@ class RandomSearchCV:
         return [
             trial
             for trial in study.trials
-            if trial.state == optuna.trial.TrialState.COMPLETE and trial.value is not None
+            if trial.state == optuna.trial.TrialState.COMPLETE
+            and trial.value is not None
         ]
 
     @staticmethod
@@ -795,8 +822,12 @@ class RandomSearchCV:
                 verbose=False,
                 eval_on_train=False,
             )
-            x_valid = CrossValidationTrainer._order_x_for_estimator(fold.x_valid, fitted)
-            fold_scores.append(float(self.metric_fn(fold.y_valid, predict(fitted, x_valid))))
+            x_valid = CrossValidationTrainer._order_x_for_estimator(
+                fold.x_valid, fitted
+            )
+            fold_scores.append(
+                float(self.metric_fn(fold.y_valid, predict(fitted, x_valid)))
+            )
             n_iterations = _get_n_iterations(fitted)
             if n_iterations is not None:
                 best_iterations.append(int(n_iterations))
@@ -830,7 +861,9 @@ class RandomSearchCV:
         return min(bound * WIDEN_FACTOR, hard_high)
 
     @staticmethod
-    def _explore_fidelity(explore_plan: _EvaluationPlan, confirm_plan: _EvaluationPlan) -> float:
+    def _explore_fidelity(
+        explore_plan: _EvaluationPlan, confirm_plan: _EvaluationPlan
+    ) -> float:
         """Explore training-fold rows as a fraction of confirm training-fold rows.
 
         Both the subsample size and the differing fold counts change how many rows a
@@ -857,7 +890,11 @@ class RandomSearchCV:
         """Measure the in-memory footprint of one materialised fold's feature matrices."""
         frames = (fold.x_fit, fold.x_es, fold.x_valid)
         return float(
-            sum(frame.memory_usage(deep=False).sum() for frame in frames if frame is not None)
+            sum(
+                frame.memory_usage(deep=False).sum()
+                for frame in frames
+                if frame is not None
+            )
         )
 
     @staticmethod
@@ -886,7 +923,9 @@ class RandomSearchCV:
         Returns:
             bool: True when early stopping never fired on the typical fold.
         """
-        ceiling = params.get(param_name, estimator.get_params(deep=False).get(param_name))
+        ceiling = params.get(
+            param_name, estimator.get_params(deep=False).get(param_name)
+        )
         try:
             ceiling = float(ceiling)
         except (TypeError, ValueError):
@@ -936,7 +975,9 @@ class RandomSearchCV:
                 f"{name} ({side} bound {float(self.params_grid[name][1][side == 'high']):g})"
                 for name, side in self.saturated_params_.items()
             )
-            print(f"⚠️  The best configs pressed against grid bounds: {pressed}. Widen and re-run.")
+            print(
+                f"⚠️  The best configs pressed against grid bounds: {pressed}. Widen and re-run."
+            )
         if self.confirm_ties_ > 1:
             print(
                 f"⚖️  {self.confirm_ties_} trials tied within one standard error; the one with "
@@ -954,16 +995,21 @@ class RandomSearchCV:
         changed = [
             (name, self.params_grid[name][1], spec[1])
             for name, spec in narrowed.items()
-            if spec[0] != "constant" and list(spec[1]) != list(self.params_grid[name][1])
+            if spec[0] != "constant"
+            and list(spec[1]) != list(self.params_grid[name][1])
         ]
         if changed:
             print(
                 f"🎯 Confirm stage searches a box narrowed around the top {self.top_k} explore configs:"
             )
             for name, before, after in changed:
-                print(f"    {name}: {self._format_bounds(before)} -> {self._format_bounds(after)}")
+                print(
+                    f"    {name}: {self._format_bounds(before)} -> {self._format_bounds(after)}"
+                )
         if self.saturated_params_:
-            print("⚠️  Grid bounds the elite configs pressed against (expanded by one step):")
+            print(
+                "⚠️  Grid bounds the elite configs pressed against (expanded by one step):"
+            )
             for name, side in self.saturated_params_.items():
                 bound = self.params_grid[name][1][0 if side == "low" else 1]
                 print(f"    {name}: {side.upper()} bound {float(bound):g}")
@@ -974,7 +1020,11 @@ class RandomSearchCV:
             return
         mode = "hold-out validation" if use_holdout else "cross-validation"
         tunable = self._tunable_names()
-        parallel = f", {self.n_parallel_trials} in parallel" if self.n_parallel_trials > 1 else ""
+        parallel = (
+            f", {self.n_parallel_trials} in parallel"
+            if self.n_parallel_trials > 1
+            else ""
+        )
         print(
             f"🔍 Starting random search with {self.n_trials} trials{parallel} via {mode}, "
             f"target metric: {self.metric_name} ({self.metric_direction}).\n"
@@ -998,7 +1048,9 @@ class RandomSearchCV:
         try:
             return type(self.cross_validator.cv)(**settings)
         except TypeError:
-            fallback = StratifiedKFold if self.problem_type == "classification" else KFold
+            fallback = (
+                StratifiedKFold if self.problem_type == "classification" else KFold
+            )
             return fallback(**settings)
 
     def _make_pruner(self, n_folds: int) -> optuna.pruners.BasePruner:
@@ -1057,7 +1109,9 @@ class RandomSearchCV:
             return original
         return param_type, [int_low, int_high], options
 
-    def _narrow_numeric(self, name: str, spec: GridEntry, observed: list[Any]) -> GridEntry:
+    def _narrow_numeric(
+        self, name: str, spec: GridEntry, observed: list[Any]
+    ) -> GridEntry:
         """Shrink one numeric grid entry around the values the elite actually chose.
 
         Args:
@@ -1083,8 +1137,16 @@ class RandomSearchCV:
             )
             low, high = elite_low - pad, elite_high + pad
         side = self.saturated_params_.get(name)
-        floor = self._expand_bound(name, grid_low, at_low=True) if side == "low" else grid_low
-        ceiling = self._expand_bound(name, grid_high, at_low=False) if side == "high" else grid_high
+        floor = (
+            self._expand_bound(name, grid_low, at_low=True)
+            if side == "low"
+            else grid_low
+        )
+        ceiling = (
+            self._expand_bound(name, grid_high, at_low=False)
+            if side == "high"
+            else grid_high
+        )
         low, high = max(low, floor), min(high, ceiling)
         if param_type == "int":
             return self._narrow_int(low, high, floor, ceiling, original)
@@ -1115,7 +1177,9 @@ class RandomSearchCV:
             elif param_type == "categorical":
                 kept = [value for value in values if value in set(observed)]
                 narrowed[name] = (
-                    (param_type, kept, options) if len(kept) >= MIN_CATEGORIES_TO_NARROW else spec
+                    (param_type, kept, options)
+                    if len(kept) >= MIN_CATEGORIES_TO_NARROW
+                    else spec
                 )
             else:
                 narrowed[name] = self._narrow_numeric(name, spec, observed)
@@ -1169,7 +1233,11 @@ class RandomSearchCV:
             return float("-inf") if maximize else float("inf")
         scores = np.asarray(fold_scores, dtype=float)
         penalty = self.FOLD_STD_PENALTY * float(scores.std())
-        return float(scores.mean()) - penalty if maximize else float(scores.mean()) + penalty
+        return (
+            float(scores.mean()) - penalty
+            if maximize
+            else float(scores.mean()) + penalty
+        )
 
     def _reconcile_categorical_params(self, params: dict[str, Any]) -> dict[str, Any]:
         """Realign declared categorical columns with what the pipeline actually produced.
@@ -1211,11 +1279,15 @@ class RandomSearchCV:
         """Record the columns and non-numeric columns of a preprocessed training fold."""
         self._transformed_columns = list(frame.columns)
         self._transformed_categoricals = [
-            column for column in frame.columns if not pd.api.types.is_numeric_dtype(frame[column])
+            column
+            for column in frame.columns
+            if not pd.api.types.is_numeric_dtype(frame[column])
         ]
 
     @staticmethod
-    def _required_margin(fold_scores: list[float], reference_fold_scores: list[float]) -> float:
+    def _required_margin(
+        fold_scores: list[float], reference_fold_scores: list[float]
+    ) -> float:
         """Compute one standard error of the paired per-fold differences of two configurations.
 
         Both configurations are scored on the same folds, so how hard each fold is affects
@@ -1234,7 +1306,9 @@ class RandomSearchCV:
         n_folds = len(fold_scores)
         if n_folds != len(reference_fold_scores) or n_folds < MIN_FOLDS_FOR_MARGIN:
             return 0.0
-        differences = np.asarray(fold_scores, dtype=float) - np.asarray(reference_fold_scores)
+        differences = np.asarray(fold_scores, dtype=float) - np.asarray(
+            reference_fold_scores
+        )
         return float(np.std(differences, ddof=1) / np.sqrt(n_folds))
 
     def _reset_results(self) -> None:
@@ -1279,7 +1353,9 @@ class RandomSearchCV:
         if not best_iterations:
             return {}
         is_catboost = type(estimator).__name__.startswith(CATBOOST_PREFIX)
-        param_name = CATBOOST_ITERATIONS_PARAM if is_catboost else DEFAULT_ITERATIONS_PARAM
+        param_name = (
+            CATBOOST_ITERATIONS_PARAM if is_catboost else DEFAULT_ITERATIONS_PARAM
+        )
         median_iterations = float(np.median(best_iterations))
         self.n_estimators_censored_ = self._is_censored(
             median_iterations, estimator, params, param_name
@@ -1321,7 +1397,9 @@ class RandomSearchCV:
             baseline = self._baseline_trial(estimator)
             candidates = [baseline] if baseline is not None else []
         for candidate in candidates:
-            study.enqueue_trial(self._snap_candidate(candidate, space), skip_if_exists=True)
+            study.enqueue_trial(
+                self._snap_candidate(candidate, space), skip_if_exists=True
+            )
         self._optimize(
             study,
             lambda trial: self.objective(trial, plan, estimator, space),
@@ -1351,7 +1429,9 @@ class RandomSearchCV:
         """
         if not self._should_explore(len(X)):
             return []
-        plan = self._build_plan(*self._subsample(X, y), self._make_explore_splitter(), "explore")
+        plan = self._build_plan(
+            *self._subsample(X, y), self._make_explore_splitter(), "explore"
+        )
         plan.fidelity = self._explore_fidelity(plan, confirm_plan)
         if plan.fidelity < 1.0:
             self._say(
@@ -1398,7 +1478,9 @@ class RandomSearchCV:
             if not observed or high <= low:
                 continue
             log = bool(options.get("log", False))
-            position = float(np.median([self._bound_position(v, low, high, log) for v in observed]))
+            position = float(
+                np.median([self._bound_position(v, low, high, log) for v in observed])
+            )
             hard_low, hard_high = PARAM_HARD_LIMITS.get(name, UNBOUNDED)
             if position <= SATURATION_POSITION and low > hard_low:
                 report[name] = "low"
@@ -1510,19 +1592,26 @@ class RandomSearchCV:
             trial
             for trial in trials
             if not self._beats(
-                best.value, trial.value, self._required_margin(best_folds, self._fold_scores(trial))
+                best.value,
+                trial.value,
+                self._required_margin(best_folds, self._fold_scores(trial)),
             )
         ]
         self.confirm_ties_ = len(ties)
-        return min(ties, key=lambda trial: (self._median_iterations(trial), trial.number))
+        return min(
+            ties, key=lambda trial: (self._median_iterations(trial), trial.number)
+        )
 
     def _should_explore(self, n_rows: int) -> bool:
         """Decide whether a dataset is large enough to justify a cheap explore stage."""
         return (
-            self.explore_fraction < 1.0 and n_rows * self.explore_fraction > self.explore_min_rows
+            self.explore_fraction < 1.0
+            and n_rows * self.explore_fraction > self.explore_min_rows
         )
 
-    def _snap_candidate(self, candidate: dict[str, Any], space: ParamsGrid) -> dict[str, Any]:
+    def _snap_candidate(
+        self, candidate: dict[str, Any], space: ParamsGrid
+    ) -> dict[str, Any]:
         """Fit a configuration into the space it is enqueued against.
 
         Optuna silently ignores an enqueued value its distribution excludes, so a warm
@@ -1595,7 +1684,9 @@ class RandomSearchCV:
         """
         if self._n_early_stopping_rows(len(train_idx)) == 0:
             return train_idx, None
-        return self._split_rows(train_idx, self.es_holdout_size, self.seed + fold_idx, y)
+        return self._split_rows(
+            train_idx, self.es_holdout_size, self.seed + fold_idx, y
+        )
 
     def _split_rows(
         self, indices: np.ndarray, test_size: float | int, seed: int, y: pd.Series
@@ -1617,10 +1708,14 @@ class RandomSearchCV:
                 indices, test_size=test_size, random_state=seed, stratify=stratify
             )
         except ValueError:
-            first, second = train_test_split(indices, test_size=test_size, random_state=seed)
+            first, second = train_test_split(
+                indices, test_size=test_size, random_state=seed
+            )
         return first, second
 
-    def _subsample(self, X: pd.DataFrame, y: pd.Series) -> tuple[pd.DataFrame, pd.Series]:
+    def _subsample(
+        self, X: pd.DataFrame, y: pd.Series
+    ) -> tuple[pd.DataFrame, pd.Series]:
         """Draw the fixed explore-stage subsample, stratified for classification.
 
         Every explore trial sees the same rows, so comparisons between trials are paired
@@ -1634,12 +1729,16 @@ class RandomSearchCV:
         Returns:
             tuple[pd.DataFrame, pd.Series]: Subsampled features and target.
         """
-        n_sample = min(len(X), max(self.explore_min_rows, int(len(X) * self.explore_fraction)))
+        n_sample = min(
+            len(X), max(self.explore_min_rows, int(len(X) * self.explore_fraction))
+        )
         if n_sample >= len(X):
             return X, y
         _, sample_idx = self._split_rows(np.arange(len(X)), n_sample, self.seed, y)
         sample_idx = np.sort(sample_idx)
-        return X.iloc[sample_idx].reset_index(drop=True), y.iloc[sample_idx].reset_index(drop=True)
+        return X.iloc[sample_idx].reset_index(drop=True), y.iloc[
+            sample_idx
+        ].reset_index(drop=True)
 
     def _top_params(self, study: optuna.study.Study) -> list[dict[str, Any]]:
         """Return the sampled params of the top_k completed trials of a study, best first."""
@@ -1652,7 +1751,9 @@ class RandomSearchCV:
 
     def _tunable_names(self) -> list[str]:
         """List the grid entries Optuna actually samples."""
-        return [name for name, spec in self.params_grid.items() if spec[0] != "constant"]
+        return [
+            name for name, spec in self.params_grid.items() if spec[0] != "constant"
+        ]
 
     @staticmethod
     def _unpack_spec(

@@ -100,9 +100,7 @@ class CutoffTunerCV:
             study = self._create_study()
             study.enqueue_trial(self._cutoffs_to_params(default_cutoffs))
             study.optimize(
-                lambda trial: self._objective(
-                    trial, y_true, y_proba, fold_boundaries
-                ),
+                lambda trial: self._objective(trial, y_true, y_proba, fold_boundaries),
                 n_trials=self.n_trials,
                 callbacks=[self._log_trial] if self.verbose else None,
             )
@@ -293,7 +291,10 @@ class CutoffTunerCV:
             if self.fitted_estimators_
             else range(len(cutoffs))
         )
-        return {str(label): round(float(cutoff), 4) for label, cutoff in zip(labels, cutoffs)}
+        return {
+            str(label): round(float(cutoff), 4)
+            for label, cutoff in zip(labels, cutoffs)
+        }
 
     def _log_finish(self) -> None:
         """Prints the final cutoff-selection summary when verbose mode is enabled."""
@@ -304,7 +305,9 @@ class CutoffTunerCV:
             f"(selected: '{self.selection_source_}')"
         )
         if self.selection_source_ == "optimized":
-            print(f"✨ Search beat the default cutoff (scored {self.baseline_score_:.5f}).")
+            print(
+                f"✨ Search beat the default cutoff (scored {self.baseline_score_:.5f})."
+            )
         else:
             print(f"🛑 {self._explain_baseline_fallback()}")
         print(f"🏆 Best cutoffs: {self._format_cutoffs(self.best_cutoffs)}")
@@ -383,7 +386,10 @@ class CutoffTunerCV:
             low, high = self.MULTICLASS_CUTOFF_BOUNDS
             n_classes = y_proba.shape[1]
             cutoffs = np.array(
-                [trial.suggest_float(f"cutoff_{i}", low, high) for i in range(n_classes)]
+                [
+                    trial.suggest_float(f"cutoff_{i}", low, high)
+                    for i in range(n_classes)
+                ]
             )
         score = self._score_cutoffs(cutoffs, y_true, y_proba, fold_boundaries)
         if score is None:
@@ -392,7 +398,9 @@ class CutoffTunerCV:
             )
         return score
 
-    def _params_to_cutoffs(self, params: dict[str, float], n_classes: int) -> np.ndarray:
+    def _params_to_cutoffs(
+        self, params: dict[str, float], n_classes: int
+    ) -> np.ndarray:
         """Converts Optuna's suggest-parameter naming scheme back into a cutoff vector.
 
         Args:
