@@ -5,6 +5,7 @@ from unittest.mock import Mock
 import numpy as np
 import optuna
 import pandas as pd
+from lightgbm import LGBMRegressor
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.model_selection import KFold
@@ -808,3 +809,32 @@ def test_tuner_best_score_describes_selected_weights_even_when_a_baseline_wins()
         expected = tuner._baseline_candidates(2)[tuner.selection_source_]
         if not np.allclose(tuner.best_weights, expected):
             raise AssertionError()
+
+
+def test_tuner_supports_offset_column_of_the_trainer():
+    """Tests the tuner drops the offset column and applies it like the trainer.
+
+    Asserts:
+        - tune() succeeds with a trainer configured with offset_column
+        - Tuning two copies of one model gives the same score as the trainer's own
+          mean validation score minus the fold-std penalty
+    """
+    rng = np.random.default_rng(5)
+    X = pd.DataFrame({"x0": rng.normal(size=300)})
+    X["log_exposure"] = np.log(rng.uniform(0.2, 3.0, size=300))
+    y = pd.Series(rng.poisson(np.exp(0.6 * X["x0"] + X["log_exposure"])))
+    trainer = CrossValidationTrainer(
+        problem_type="regression",
+        metric_name="Poisson Deviance",
+        cv=KFold(n_splits=3, shuffle=True, random_state=0),
+        verbose=False,
+        offset_column="log_exposure",
+    )
+    model = LGBMRegressor(objective="poisson", n_estimators=20, verbose=-1)
+    _, valid_scores, _ = trainer.fit(model, X, y)
+
+    tuner = EnsembleWeightTunerCV([model, model], trainer, n_trials=2, verbose=False)
+    tuner.tune(X, y)
+    expected = np.mean(valid_scores) + tuner.fold_std_penalty * np.std(valid_scores)
+    if not np.isclose(tuner.best_score_, expected, rtol=1e-6):
+        raise AssertionError((tuner.best_score_, expected))

@@ -7,15 +7,19 @@ from unittest.mock import Mock
 import numpy as np
 import pandas as pd
 import pytest
+from catboost import CatBoostRegressor
+from lightgbm import LGBMRegressor
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import LogisticRegression, SGDClassifier
 from sklearn.model_selection import KFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
+from xgboost import XGBRegressor
 
 from kvbiii_ml.modeling.training import cross_validation
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
+from kvbiii_ml.modeling.training.ensemble_model import EnsembleModel
 
 from ._test_support import assert_valid_binary_proba_matrix
 
@@ -740,3 +744,59 @@ def test_cross_validation_import_does_not_modify_sys_path():
     importlib.reload(cross_validation)
     if sys.path != before:
         raise AssertionError("cross_validation modified sys.path")
+
+
+@pytest.mark.parametrize(
+    "estimator",
+    [
+        LGBMRegressor(
+            objective="poisson", n_estimators=40, early_stopping_round=5, verbose=-1
+        ),
+        XGBRegressor(
+            objective="count:poisson", n_estimators=40, early_stopping_rounds=5
+        ),
+        CatBoostRegressor(
+            loss_function="Poisson", iterations=40, early_stopping_rounds=5, verbose=0
+        ),
+        EnsembleModel(
+            [LGBMRegressor(objective="poisson", n_estimators=20, verbose=-1)],
+            problem_type="regression",
+            offset_column="log_exposure",
+        ),
+    ],
+)
+def test_crossvalidationtrainer_offset_column_scales_predictions_with_exposure(
+    estimator,
+):
+    """Tests per-fold offsets: training uses them and predictions scale with exposure.
+
+    With a log link, doubling exposure (log_exposure + log 2) must exactly double
+    every prediction, which only holds when the offset is added to the raw score
+    rather than used as a feature.
+
+    Asserts:
+        - Fold training with eval-set offsets succeeds for LightGBM, XGBoost, CatBoost
+          and an offset-aware EnsembleModel
+        - predict(X with doubled exposure) == 2 * predict(X)
+        - Averaged X_test predictions equal predict(X_test)
+    """
+    rng = np.random.default_rng(5)
+    X = pd.DataFrame({"x0": rng.normal(size=400), "x1": rng.normal(size=400)})
+    X["log_exposure"] = np.log(rng.uniform(0.2, 3.0, size=400))
+    y = pd.Series(rng.poisson(np.exp(0.6 * X["x0"] + X["log_exposure"])))
+    trainer = CrossValidationTrainer(
+        problem_type="regression",
+        metric_name="Poisson Deviance",
+        cv=KFold(n_splits=3, shuffle=True, random_state=0),
+        verbose=False,
+        offset_column="log_exposure",
+    )
+    _, valid_scores, test_pred = trainer.fit(estimator, X, y, X_test=X.iloc[:50])
+
+    doubled = X.assign(log_exposure=X["log_exposure"] + np.log(2.0))
+    if not np.allclose(trainer.predict(doubled), 2.0 * trainer.predict(X), rtol=1e-5):
+        raise AssertionError("predictions do not scale with exposure")
+    if not np.allclose(test_pred, trainer.predict(X.iloc[:50]), rtol=1e-6):
+        raise AssertionError()
+    if not np.all(np.isfinite(valid_scores)):
+        raise AssertionError(valid_scores)

@@ -5,8 +5,9 @@ from inspect import Signature, signature
 
 import numpy as np
 import pandas as pd
+from catboost import Pool
 from lightgbm import log_evaluation
-from sklearn.base import BaseEstimator
+from sklearn.base import BaseEstimator, is_classifier
 
 logging.getLogger("lightgbm").setLevel(logging.ERROR)
 
@@ -22,6 +23,102 @@ EARLY_STOPPING_PARAMS: dict[str, tuple[str, ...]] = {
     XGB_PREFIX: ("early_stopping_rounds",),
     CATBOOST_PREFIX: ("early_stopping_rounds", "od_type", "od_wait"),
 }
+
+EXP_LINK_OBJECTIVES = ("poisson", "tweedie", "gamma")
+
+
+def split_offset(
+    X: pd.DataFrame, offset_column: str | None
+) -> tuple[pd.DataFrame, np.ndarray | None]:
+    """Separate the offset column from the features.
+
+    Args:
+        X (pd.DataFrame): Features, holding ``offset_column`` when it is set.
+        offset_column (str | None): Name of the offset column (on the link scale,
+            e.g. ``log(exposure)`` for a Poisson model), or None.
+
+    Returns:
+        tuple[pd.DataFrame, np.ndarray | None]: X without the offset column, and the
+            offset as a float array (None when ``offset_column`` is None).
+
+    Raises:
+        KeyError: If ``offset_column`` is set but missing from X.
+    """
+    if offset_column is None:
+        return X, None
+    if offset_column not in X.columns:
+        raise KeyError(f"offset_column '{offset_column}' is missing from X.")
+    return X.drop(columns=[offset_column]), X[offset_column].to_numpy(dtype=float)
+
+
+def predict_with_offset(
+    estimator: BaseEstimator,
+    X: pd.DataFrame,
+    offset: np.ndarray,
+    proba: bool = False,
+) -> np.ndarray:
+    """Predict with a booster trained on an offset: raw score + offset, then the inverse link.
+
+    An estimator with its own ``offset_column`` (e.g. ``EnsembleModel``) gets the
+    offset re-attached as that column and handles it itself. Otherwise the raw
+    (link-scale) score comes from LightGBM ``raw_score=True``, XGBoost
+    ``output_margin=True`` with ``base_margin=offset``, or CatBoost
+    ``prediction_type="RawFormulaVal"``. Classifiers apply the sigmoid; regressors
+    apply ``exp`` for Poisson, Tweedie and Gamma objectives and identity otherwise.
+
+    Args:
+        estimator (BaseEstimator): Fitted LightGBM, XGBoost or CatBoost estimator.
+        X (pd.DataFrame): Features without the offset column.
+        offset (np.ndarray): Offset per row, on the link scale.
+        proba (bool): Return the ``(n, 2)`` probability matrix instead of labels for
+            classifiers. Defaults to False.
+
+    Returns:
+        np.ndarray: Predictions, labels, or probabilities.
+
+    Raises:
+        TypeError: If the estimator is not a LightGBM, XGBoost or CatBoost model.
+        NotImplementedError: For multiclass classifiers.
+    """
+    own_column = getattr(estimator, "offset_column", None)
+    if own_column is not None:
+        x_with_offset = X.assign(**{own_column: offset})
+        if proba:
+            return estimator.predict_proba(x_with_offset)
+        return estimator.predict(x_with_offset)
+    class_name = type(estimator).__name__
+    if class_name.startswith(LGBM_PREFIX):
+        raw = estimator.predict(X, raw_score=True) + offset
+    elif class_name.startswith(XGB_PREFIX):
+        raw = estimator.predict(X, output_margin=True, base_margin=offset)
+    elif class_name.startswith(CATBOOST_PREFIX):
+        raw = estimator.predict(X, prediction_type="RawFormulaVal") + offset
+    else:
+        raise TypeError(
+            f"offset_column supports LightGBM, XGBoost and CatBoost, got {class_name}."
+        )
+    raw = np.asarray(raw, dtype=float)
+    if raw.ndim > 1:
+        raise NotImplementedError("offset_column is not supported for multiclass.")
+    if is_classifier(estimator):
+        positive = 1.0 / (1.0 + np.exp(-raw))
+        if proba:
+            return np.column_stack([1.0 - positive, positive])
+        return np.asarray(estimator.classes_)[(positive >= 0.5).astype(int)]
+    if any(token in _objective_name(estimator) for token in EXP_LINK_OBJECTIVES):
+        return np.exp(raw)
+    return raw
+
+
+def _objective_name(estimator: BaseEstimator) -> str:
+    """Lower-cased objective / loss name of a fitted booster."""
+    params = estimator.get_params()
+    return str(
+        getattr(estimator, "objective_", None)
+        or params.get("objective")
+        or params.get("loss_function")
+        or ""
+    ).lower()
 
 
 def to_metric_proba(proba: np.ndarray) -> np.ndarray:
@@ -218,6 +315,52 @@ class BaseTrainer:
         return {}
 
     @staticmethod
+    def _add_offset_fit_params(
+        estimator: BaseEstimator,
+        fit_params: dict,
+        offset_train: np.ndarray,
+        offset_valid: np.ndarray | None,
+        eval_on_train: bool,
+    ) -> None:
+        """Add each boosting library's offset arguments to fit_params, in place.
+
+        Eval-set offsets follow the eval entries already in fit_params (training
+        split first when ``eval_on_train``; CatBoost GPU keeps only the validation
+        split).
+
+        Raises:
+            TypeError: If the estimator is not a LightGBM, XGBoost or CatBoost model.
+        """
+        class_name = type(estimator).__name__
+        eval_offsets = (
+            (offset_train, offset_valid) if eval_on_train else (offset_valid,)
+        )
+        has_eval = "eval_set" in fit_params or "eval_X" in fit_params
+        if class_name.startswith(LGBM_PREFIX):
+            fit_params["init_score"] = offset_train
+            if has_eval:
+                fit_params["eval_init_score"] = list(eval_offsets)
+        elif class_name.startswith(XGB_PREFIX):
+            fit_params["base_margin"] = offset_train
+            if has_eval:
+                fit_params["base_margin_eval_set"] = list(eval_offsets)
+        elif class_name.startswith(CATBOOST_PREFIX):
+            fit_params["baseline"] = offset_train
+            if has_eval:
+                eval_set = fit_params["eval_set"]
+                eval_offsets = eval_offsets[len(eval_offsets) - len(eval_set) :]
+                cat_features = estimator.get_params().get("cat_features")
+                fit_params["eval_set"] = [
+                    Pool(x, y, cat_features=cat_features, baseline=offset)
+                    for (x, y), offset in zip(eval_set, eval_offsets)
+                ]
+        else:
+            raise TypeError(
+                f"offset_column supports LightGBM, XGBoost and CatBoost (or an "
+                f"estimator with its own offset_column), got {class_name}."
+            )
+
+    @staticmethod
     def _disable_early_stopping(estimator: BaseEstimator) -> BaseEstimator:
         """Return a copy of a boosting estimator with early stopping turned off.
 
@@ -289,6 +432,8 @@ class BaseTrainer:
         sample_weight: pd.Series | None = None,
         verbose: bool | int | None = None,
         eval_on_train: bool = True,
+        offset_train: np.ndarray | None = None,
+        offset_valid: np.ndarray | None = None,
     ) -> BaseEstimator:
         """Fit the estimator, injecting eval_set and suppressing output for boosting families.
 
@@ -330,10 +475,24 @@ class BaseTrainer:
                 overhead for callers that only early-stop and never read the training
                 curve. Defaults to True, preserving the historical behaviour for every
                 existing caller.
+            offset_train (np.ndarray | None): Link-scale offset per training row. Passed
+                as LightGBM ``init_score``, XGBoost ``base_margin`` or CatBoost
+                ``baseline``. Defaults to None.
+            offset_valid (np.ndarray | None): Offset per validation row, passed as
+                ``eval_init_score`` / ``base_margin_eval_set`` / a CatBoost eval
+                ``Pool`` baseline. Defaults to None. An estimator with its own
+                ``offset_column`` (e.g. ``EnsembleModel``) receives both offsets as
+                that column of X instead.
 
         Returns:
             BaseEstimator: Fitted estimator instance.
         """
+        own_column = getattr(estimator, "offset_column", None)
+        if offset_train is not None and own_column is not None:
+            X_train = X_train.assign(**{own_column: offset_train})
+            if X_valid is not None and offset_valid is not None:
+                X_valid = X_valid.assign(**{own_column: offset_valid})
+            offset_train = offset_valid = None
         if X_valid is None or y_valid is None:
             estimator = BaseTrainer._disable_early_stopping(estimator)
         estimator = BaseTrainer._set_categorical_params(estimator, X_train)
@@ -400,6 +559,10 @@ class BaseTrainer:
         if "categorical_feature" not in fit_params:
             fit_params.update(
                 BaseTrainer._lgbm_cuda_categorical_override(estimator, sig)
+            )
+        if offset_train is not None:
+            BaseTrainer._add_offset_fit_params(
+                estimator, fit_params, offset_train, offset_valid, eval_on_train
             )
         estimator.fit(X_train, y_train, **fit_params)
         estimator = BaseTrainer._align_xgb_device_to_cpu(estimator)

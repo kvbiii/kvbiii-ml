@@ -10,6 +10,7 @@ from sklearn.model_selection import KFold
 
 from kvbiii_ml.modeling.training.base_trainer import (
     order_x_for_estimator,
+    split_offset,
     to_metric_proba,
 )
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
@@ -258,21 +259,29 @@ class EnsembleWeightTunerCV:
             cross_validator.fitted_pipelines_,
         ):
             index = X.index[val_idx]
+            x_raw, offset = split_offset(X.iloc[val_idx], cross_validator.offset_column)
             X_valid = order_x_for_estimator(
-                CrossValidationTrainer._transform_with_pipeline(
-                    fold_pipeline, X.iloc[val_idx]
-                ),
+                CrossValidationTrainer._transform_with_pipeline(fold_pipeline, x_raw),
                 fitted_est,
             )
             if self.problem_type == "classification":
-                proba = to_metric_proba(fitted_est.predict_proba(X_valid))
+                proba = to_metric_proba(
+                    CrossValidationTrainer._estimator_output(
+                        fitted_est, X_valid, offset, proba=True
+                    )
+                )
                 pred = (
                     pd.Series(proba, index=index)
                     if proba.ndim == 1
                     else pd.DataFrame(proba, index=index)
                 )
             else:
-                pred = pd.Series(fitted_est.predict(X_valid), index=index)
+                pred = pd.Series(
+                    CrossValidationTrainer._estimator_output(
+                        fitted_est, X_valid, offset, proba=False
+                    ),
+                    index=index,
+                )
             est_preds.append(pred)
         return pd.concat(est_preds)
 
