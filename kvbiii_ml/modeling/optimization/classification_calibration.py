@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import io
-import sys
 from collections.abc import Iterable
 from copy import deepcopy
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -17,7 +15,6 @@ from sklearn.calibration import calibration_curve
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 
-sys.path.append(str(Path(__file__).resolve().parents[3]))
 from kvbiii_ml.evaluation.generate_reports import _apply_fancy_styling
 from kvbiii_ml.evaluation.metrics import (
     METRICS,

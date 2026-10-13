@@ -1,12 +1,9 @@
 import gc
-import sys
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator
 
-sys.path.append(str(Path(__file__).resolve().parents[3]))
 from kvbiii_ml.evaluation.shap_values import compute_shap_values
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 

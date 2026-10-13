@@ -1,14 +1,11 @@
 import gc
 from copy import deepcopy
-from pathlib import Path
-import sys
 
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator
 from sklearn.pipeline import Pipeline
 
-sys.path.append(str(Path(__file__).resolve().parents[3]))
 from kvbiii_ml.data_processing.preprocessing.pipeline_dependency import (
     PipelineDependencyGraph,
 )

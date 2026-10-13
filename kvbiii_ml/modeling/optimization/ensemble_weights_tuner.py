@@ -1,3 +1,4 @@
+import copy
 import warnings
 from typing import ClassVar
 
@@ -7,6 +8,10 @@ import pandas as pd
 from sklearn.base import BaseEstimator
 from sklearn.model_selection import KFold
 
+from kvbiii_ml.modeling.training.base_trainer import (
+    order_x_for_estimator,
+    to_metric_proba,
+)
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
 warnings.filterwarnings(
@@ -57,9 +62,9 @@ class EnsembleWeightTunerCV:
             seed (int): Random seed for the TPE sampler. Defaults to 17.
             allow_negative_weights (bool): Whether to allow negative blending weights. Defaults to False.
             verbose (bool): Whether to print the tuner's own start, per-trial, and
-                finish logs. Independent of ``cross_validator.verbose``, which this
-                tuner temporarily forces off during each estimator's fit regardless.
-                Defaults to True.
+                finish logs. Independent of ``cross_validator.verbose``: the tuner
+                fits on a private silent copy of the trainer, so the trainer passed
+                in is never modified. Defaults to True.
         """
         self.estimators = list(estimators)
         self.cross_validator = cross_validator
@@ -88,10 +93,23 @@ class EnsembleWeightTunerCV:
             X (pd.DataFrame): Feature matrix.
             y (pd.Series): Target vector.
 
+        The cross-validation runs on a shallow copy of ``cross_validator`` with
+        its own result lists and ``verbose=False``, so after ``tune`` the trainer
+        you passed in still holds whatever it held before (its
+        ``fitted_estimators_`` are not overwritten) and its ``verbose`` flag is
+        never touched, which also makes concurrent use of one trainer safe.
+
         Returns:
-            optuna.study.Study: Completed study. Best weights are stored in
-                ``self.best_weights``; ``self.best_score_`` and
-                ``self.selection_source_`` record what was selected and why.
+            optuna.study.Study: Completed study. The selected weights are stored in
+                ``self.best_weights``, their score in ``self.best_score_`` and the
+                winner's origin in ``self.selection_source_`` (``"optimized"`` or a
+                baseline name such as ``"uniform"`` / ``"single_estimator_<i>"``).
+                The study and the selection can disagree: when a baseline wins,
+                ``study.best_value``/``study.best_params`` describe the best searched
+                trial, not the weights returned, and ``self.best_score_`` (the
+                fold-std penalised score of the selected weights) is the number to
+                report. Read ``self.best_weights``/``self.best_score_``, never
+                ``study.best_*``, for the result.
         """
         X, y = self.check_x(X), self.check_y(y)
         previous_verbosity = optuna.logging.get_verbosity()
@@ -215,36 +233,46 @@ class EnsembleWeightTunerCV:
         return pd.Series(blended, index=first.index)
 
     def _collect_fold_predictions(
-        self, X: pd.DataFrame, splits: list[tuple[np.ndarray, np.ndarray]]
+        self,
+        X: pd.DataFrame,
+        splits: list[tuple[np.ndarray, np.ndarray]],
+        cross_validator: CrossValidationTrainer,
     ) -> pd.Series | pd.DataFrame:
         """Applies each fold's fitted pipeline and estimator to that fold's validation split.
 
         Args:
             X (pd.DataFrame): Full feature matrix.
             splits (list[tuple[np.ndarray, np.ndarray]]): CV train/validation index pairs.
+            cross_validator (CrossValidationTrainer): Trainer copy just fitted on
+                this estimator.
 
         Returns:
-            pd.Series | pd.DataFrame: This estimator's pooled OOF predictions, in fold order.
+            pd.Series | pd.DataFrame: This estimator's pooled OOF predictions, in fold
+                order: positive-class probabilities (binary), a probability frame
+                (multiclass) or predictions (regression).
         """
         est_preds = []
         for (_, val_idx), fitted_est, fold_pipeline in zip(
             splits,
-            self.cross_validator.fitted_estimators_,
-            self.cross_validator.fitted_pipelines_,
+            cross_validator.fitted_estimators_,
+            cross_validator.fitted_pipelines_,
         ):
-            X_valid = CrossValidationTrainer._transform_with_pipeline(
-                fold_pipeline, X.iloc[val_idx]
+            index = X.index[val_idx]
+            X_valid = order_x_for_estimator(
+                CrossValidationTrainer._transform_with_pipeline(
+                    fold_pipeline, X.iloc[val_idx]
+                ),
+                fitted_est,
             )
             if self.problem_type == "classification":
-                proba = fitted_est.predict_proba(X_valid)
-                if proba.shape[1] == 2:
-                    pred = pd.Series(proba[:, 1], index=X.iloc[val_idx].index)
-                else:
-                    pred = pd.DataFrame(proba, index=X.iloc[val_idx].index)
-            else:
-                pred = pd.Series(
-                    fitted_est.predict(X_valid), index=X.iloc[val_idx].index
+                proba = to_metric_proba(fitted_est.predict_proba(X_valid))
+                pred = (
+                    pd.Series(proba, index=index)
+                    if proba.ndim == 1
+                    else pd.DataFrame(proba, index=index)
                 )
+            else:
+                pred = pd.Series(fitted_est.predict(X_valid), index=index)
             est_preds.append(pred)
         return pd.concat(est_preds)
 
@@ -460,10 +488,10 @@ class EnsembleWeightTunerCV:
 
         Applies each fold's fitted pipeline to the validation split before calling
         the estimator, ensuring consistency with training-time transformations.
-        Each estimator's own cross-validation fit is temporarily silenced,
+        Each estimator is fitted on a silent shallow copy of the trainer,
         regardless of the tuner's own ``verbose`` setting, so N estimators do
-        not each reproduce the trainer's full per-iteration boosting logs; the
-        trainer's original verbosity is restored afterwards. Whether a one-line
+        not each reproduce the trainer's full per-iteration boosting logs and
+        the caller's trainer is left untouched. Whether a one-line
         OOF summary is printed per estimator instead is controlled by the
         tuner's own ``verbose`` flag.
 
@@ -483,16 +511,11 @@ class EnsembleWeightTunerCV:
         ).tolist()
         y_valid_true = pd.concat([y.iloc[val_idx] for _, val_idx in splits])
         preds_per_estimator = []
-        original_verbose = self.cross_validator.verbose
+        cross_validator = self._private_trainer()
 
         for estimator in self.estimators:
-            self.cross_validator.verbose = False
-            try:
-                self.cross_validator.fit(estimator, X, y)
-            finally:
-                self.cross_validator.verbose = original_verbose
-
-            pooled_preds = self._collect_fold_predictions(X, splits)
+            cross_validator.fit(estimator, X, y)
+            pooled_preds = self._collect_fold_predictions(X, splits, cross_validator)
             preds_per_estimator.append(pooled_preds)
             if self.verbose:
                 self._summarize_oof(
@@ -500,6 +523,17 @@ class EnsembleWeightTunerCV:
                 )
 
         return y_valid_true, preds_per_estimator, fold_boundaries
+
+    def _private_trainer(self) -> CrossValidationTrainer:
+        """Return a silent shallow copy of the trainer with its own result lists."""
+        trainer = copy.copy(self.cross_validator)
+        trainer.verbose = False
+        trainer.fit_verbose = False
+        trainer.train_scores_ = []
+        trainer.valid_scores_ = []
+        trainer.fitted_estimators_ = []
+        trainer.fitted_pipelines_ = []
+        return trainer
 
     def _score_weights(
         self,
@@ -539,7 +573,9 @@ class EnsembleWeightTunerCV:
             fold_y_true = y_true.iloc[start:end]
             fold_pred = blended.iloc[start:end]
             try:
-                fold_scores.append(float(self.metric_fn(fold_y_true, fold_pred)))
+                fold_scores.append(
+                    float(self.metric_fn(fold_y_true, fold_pred.to_numpy()))
+                )
             except ValueError:
                 continue
 
@@ -680,7 +716,7 @@ class EnsembleWeightTunerCV:
                 fold_scores.append(
                     float(
                         self.metric_fn(
-                            y_true.iloc[start:end], fold_pred.iloc[start:end]
+                            y_true.iloc[start:end], fold_pred.iloc[start:end].to_numpy()
                         )
                     )
                 )

@@ -1,16 +1,20 @@
 """Tests for kvbiii_ml.modeling.training.cross_validation module."""
 
+import importlib
+import sys
 from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.dummy import DummyClassifier
-from sklearn.linear_model import SGDClassifier
+from sklearn.linear_model import LogisticRegression, SGDClassifier
 from sklearn.model_selection import KFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
+from kvbiii_ml.modeling.training import cross_validation
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
 from ._test_support import assert_valid_binary_proba_matrix
@@ -586,3 +590,133 @@ def test_crossvalidationtrainer_init_rejects_non_callable_sample_weight_fn():
             metric_name="Accuracy",
             sample_weight_fn=np.ones(10),
         )
+
+
+class _EvalSetRecordingRegressor(RegressorMixin, BaseEstimator):
+    """Mean regressor that records the index of the eval_set it was fitted with."""
+
+    def fit(
+        self, X: pd.DataFrame, y: pd.Series, eval_set: list | None = None
+    ) -> "_EvalSetRecordingRegressor":
+        """Store the training mean, training index and eval_set index."""
+        self.mean_ = float(np.mean(y))
+        self.fit_index_ = list(X.index)
+        self.eval_index_ = list(eval_set[-1][0].index) if eval_set else []
+        return self
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        """Predict the training mean."""
+        return np.full(len(X), self.mean_)
+
+
+def test_crossvalidationtrainer_binary_preds_metric_averages_test_probabilities(
+    binary_classification_data,
+):
+    """Tests X_test predictions are averaged probabilities, not averaged hard labels.
+
+    Asserts:
+        - With a "preds" metric (Balanced Accuracy) test_pred is (n, 2) and rows sum to 1
+        - Values are genuine probabilities, not label fractions like 0.33 / 0.67
+    """
+    X, y = binary_classification_data
+    trainer = CrossValidationTrainer(
+        problem_type="classification",
+        metric_name="Balanced Accuracy",
+        cv=KFold(n_splits=3, shuffle=True, random_state=0),
+        verbose=False,
+    )
+    _, _, test_pred = trainer.fit(LogisticRegression(), X, y, X_test=X.iloc[:20])
+
+    assert_valid_binary_proba_matrix(test_pred, 20)
+    fold_label_fractions = {0.0, 1 / 3, 2 / 3, 1.0}
+    if all(round(v, 6) in {round(f, 6) for f in fold_label_fractions} for v in test_pred[:, 1]):
+        raise AssertionError("test_pred looks like averaged labels")
+
+
+def test_crossvalidationtrainer_custom_metric_receives_y_true_with_original_index(
+    binary_classification_data,
+):
+    """Tests a custom metric gets y_true as a pd.Series keeping X's original index.
+
+    Asserts:
+        - Every call receives a Series whose index is a subset of X.index, so kwargs
+          data can be aligned with .loc[y_true.index]
+    """
+    X, y = binary_classification_data
+    X, y = X.set_axis(X.index + 1000), y.set_axis(y.index + 1000)
+    weights = pd.Series(np.arange(len(y), dtype=float), index=y.index)
+    seen: list[pd.Index] = []
+
+    def weighted_error(y_true: pd.Series, y_pred: np.ndarray, sample_weights: pd.Series) -> float:
+        """Weighted share of wrong labels, aligning weights by y_true's index."""
+        seen.append(y_true.index)
+        w = sample_weights.loc[y_true.index].to_numpy()
+        return float(np.sum(w * (y_true.to_numpy() != y_pred)) / w.sum())
+
+    trainer = CrossValidationTrainer(
+        problem_type="classification",
+        custom_metric={
+            "name": "weighted_error",
+            "function": weighted_error,
+            "metric_type": "preds",
+            "direction": "minimize",
+            "kwargs": {"sample_weights": weights},
+        },
+        cv=KFold(n_splits=3, shuffle=True, random_state=0),
+        verbose=False,
+    )
+    trainer.fit(LogisticRegression(), X, y)
+
+    if not seen or not all(index.isin(X.index).all() for index in seen):
+        raise AssertionError(seen)
+
+
+def test_crossvalidationtrainer_early_stopping_holdout_keeps_validation_fold_out_of_eval_set(
+    regression_data,
+):
+    """Tests early_stopping_holdout takes the eval set from the end of the training fold.
+
+    Asserts:
+        - The eval set never contains validation-fold rows
+        - It is the last 25% of the fold's training rows and is not trained on
+        - Default None keeps the validation fold as the eval set
+    """
+    X, y = regression_data
+    cv = KFold(n_splits=3, shuffle=False)
+    splits = list(cv.split(X, y))
+
+    trainer = CrossValidationTrainer(
+        problem_type="regression",
+        metric_name="RMSE",
+        cv=cv,
+        verbose=False,
+        early_stopping_holdout=0.25,
+    )
+    trainer.fit(_EvalSetRecordingRegressor(), X, y)
+    for (train_idx, valid_idx), est in zip(splits, trainer.fitted_estimators_):
+        train_index = list(X.index[train_idx])
+        n_holdout = round(len(train_index) * 0.25)
+        if est.eval_index_ != train_index[-n_holdout:]:
+            raise AssertionError("eval set is not the tail of the training fold")
+        if set(est.eval_index_) & set(X.index[valid_idx]) or set(est.eval_index_) & set(est.fit_index_):
+            raise AssertionError("eval set overlaps validation or fit rows")
+
+    default = CrossValidationTrainer(problem_type="regression", metric_name="RMSE", cv=cv, verbose=False)
+    default.fit(_EvalSetRecordingRegressor(), X, y)
+    if default.fitted_estimators_[0].eval_index_ != list(X.index[splits[0][1]]):
+        raise AssertionError()
+
+    with pytest.raises(ValueError, match="early_stopping_holdout"):
+        CrossValidationTrainer(problem_type="regression", metric_name="RMSE", early_stopping_holdout=1.0)
+
+
+def test_cross_validation_import_does_not_modify_sys_path():
+    """Tests (re)importing the module leaves sys.path untouched.
+
+    Asserts:
+        - sys.path is identical before and after reloading the module
+    """
+    before = list(sys.path)
+    importlib.reload(cross_validation)
+    if sys.path != before:
+        raise AssertionError("cross_validation modified sys.path")

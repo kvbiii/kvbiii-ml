@@ -5,6 +5,10 @@ from unittest.mock import Mock
 import numpy as np
 import optuna
 import pandas as pd
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.model_selection import KFold
+from sklearn.pipeline import Pipeline
 
 from kvbiii_ml.modeling.optimization.ensemble_weights_tuner import EnsembleWeightTunerCV
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
@@ -637,3 +641,170 @@ class TestEnsembleWeightTunerCV:
 
 if __name__ == "__main__":
     print("Run this file with pytest to execute tests.")
+
+
+class _ReverseColumnsAfterSecondTransform(BaseEstimator, TransformerMixin):
+    """Pass-through transformer that reverses column order from its third transform on.
+
+    The trainer transforms each fold twice (train, validation); the tuner's own
+    re-transform of the validation split is the third call, so the estimator
+    only scores correctly when the tuner reorders columns for it.
+    """
+
+    def fit(
+        self, X: pd.DataFrame, y: pd.Series | None = None
+    ) -> "_ReverseColumnsAfterSecondTransform":
+        """Reset the transform counter."""
+        self.n_transforms_ = 0
+        return self
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Return X, with reversed columns from the third call on."""
+        self.n_transforms_ += 1
+        return X[X.columns[::-1]] if self.n_transforms_ >= 3 else X
+
+
+def _classification_frame(n_samples: int = 120) -> tuple[pd.DataFrame, pd.Series]:
+    """Small separable binary classification frame."""
+    rng = np.random.default_rng(3)
+    X = pd.DataFrame(rng.normal(size=(n_samples, 3)), columns=["a", "b", "c"])
+    y = pd.Series((X["a"] + rng.normal(scale=0.5, size=n_samples) > 0).astype(int))
+    return X, y
+
+
+def test_tuner_and_trainer_pass_a_custom_probs_metric_the_same_shapes():
+    """Tests a custom "probs" metric sees identical y_pred shapes under trainer and tuner.
+
+    Asserts:
+        - Every shape the metric received is 1-D (binary positive-class column)
+        - The set of shapes recorded under the trainer equals the set under the tuner
+    """
+    X, y = _classification_frame()
+    shapes: list[tuple[int, ...]] = []
+
+    def recording_log_loss(y_true: pd.Series, y_pred: np.ndarray) -> float:
+        """Record the prediction shape, then score a clipped log loss."""
+        shapes.append(np.asarray(y_pred).shape)
+        p = np.clip(np.asarray(y_pred, dtype=float), 1e-9, 1 - 1e-9)
+        return float(-np.mean(y_true * np.log(p) + (1 - y_true) * np.log(1 - p)))
+
+    def make_trainer() -> CrossValidationTrainer:
+        """Build a trainer using the recording metric."""
+        return CrossValidationTrainer(
+            problem_type="classification",
+            custom_metric={
+                "name": "recording_log_loss",
+                "function": recording_log_loss,
+                "metric_type": "probs",
+                "direction": "minimize",
+            },
+            cv=KFold(n_splits=3, shuffle=True, random_state=0),
+            verbose=False,
+        )
+
+    make_trainer().fit(LogisticRegression(), X, y)
+    trainer_shapes = {len(shape) for shape in shapes}
+    shapes.clear()
+    EnsembleWeightTunerCV(
+        [LogisticRegression(), LogisticRegression(C=0.1)],
+        make_trainer(),
+        n_trials=3,
+        verbose=False,
+    ).tune(X, y)
+    tuner_shapes = {len(shape) for shape in shapes}
+
+    if trainer_shapes != {1} or tuner_shapes != {1}:
+        raise AssertionError((trainer_shapes, tuner_shapes))
+
+
+def test_tuner_reorders_columns_per_estimator_like_the_trainer():
+    """Tests the tuner reorders transformed validation columns to each estimator's order.
+
+    Asserts:
+        - tune() succeeds although the pipeline hands back reversed columns, which
+          sklearn estimators reject without reordering
+    """
+    X, _ = _classification_frame()
+    y_reg = X["a"] * 2.0 + X["b"]
+    trainer = CrossValidationTrainer(
+        problem_type="regression",
+        metric_name="RMSE",
+        cv=KFold(n_splits=3, shuffle=True, random_state=0),
+        preprocessing_pipeline=Pipeline(
+            [("reverse", _ReverseColumnsAfterSecondTransform())]
+        ),
+        verbose=False,
+    )
+    tuner = EnsembleWeightTunerCV(
+        [LinearRegression(), LinearRegression()], trainer, n_trials=2, verbose=False
+    )
+    tuner.tune(X, y_reg)
+    if tuner.best_score_ is None or tuner.best_score_ > 1e-6:
+        raise AssertionError(tuner.best_score_)
+
+
+def test_tuner_leaves_the_trainer_it_receives_untouched():
+    """Tests tune() has no side effects on the passed CrossValidationTrainer.
+
+    Asserts:
+        - fitted_estimators_ and valid_scores_ are those of the caller's own earlier fit
+        - verbose is never changed
+    """
+    X, y = _classification_frame()
+    trainer = CrossValidationTrainer(
+        problem_type="classification",
+        metric_name="Roc AUC",
+        cv=KFold(n_splits=3, shuffle=True, random_state=0),
+        verbose=1,
+    )
+    trainer.fit(LogisticRegression(), X, y)
+    estimators_before = list(trainer.fitted_estimators_)
+    scores_before = list(trainer.valid_scores_)
+
+    EnsembleWeightTunerCV(
+        [LogisticRegression(C=0.1), LogisticRegression(C=10.0)],
+        trainer,
+        n_trials=2,
+        verbose=False,
+    ).tune(X, y)
+
+    if (
+        trainer.fitted_estimators_ != estimators_before
+        or trainer.valid_scores_ != scores_before
+    ):
+        raise AssertionError("tuner overwrote the trainer's fitted state")
+    if trainer.verbose != 1:
+        raise AssertionError()
+
+
+def test_tuner_best_score_describes_selected_weights_even_when_a_baseline_wins():
+    """Tests best_score_ always scores best_weights, which the study may not describe.
+
+    Asserts:
+        - best_score_ equals the penalised score of best_weights
+        - When a baseline is selected, best_weights is that baseline vector
+    """
+    X, y = _classification_frame()
+    trainer = CrossValidationTrainer(
+        problem_type="classification",
+        metric_name="Log Loss",
+        cv=KFold(n_splits=3, shuffle=True, random_state=0),
+        verbose=False,
+    )
+    tuner = EnsembleWeightTunerCV(
+        [LogisticRegression(), LogisticRegression(C=0.01)],
+        trainer,
+        n_trials=2,
+        verbose=False,
+    )
+    tuner.tune(X, y)
+    y_true, preds, bounds = tuner._perform_cv(X, y)
+    if not np.isclose(
+        tuner._score_weights(tuner.best_weights, y_true, preds, bounds),
+        tuner.best_score_,
+    ):
+        raise AssertionError()
+    if tuner.selection_source_ != "optimized":
+        expected = tuner._baseline_candidates(2)[tuner.selection_source_]
+        if not np.allclose(tuner.best_weights, expected):
+            raise AssertionError()

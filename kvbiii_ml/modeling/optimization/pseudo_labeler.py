@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -9,7 +7,6 @@ import pandas as pd
 from scipy.stats import gaussian_kde
 from sklearn.base import BaseEstimator
 
-sys.path.append(str(Path(__file__).resolve().parents[3]))
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 from kvbiii_ml.modeling.training.oof_model import _collect_oof_probas
 

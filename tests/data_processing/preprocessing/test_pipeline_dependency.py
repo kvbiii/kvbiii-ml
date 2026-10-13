@@ -8,6 +8,9 @@ from sklearn.pipeline import Pipeline
 from kvbiii_ml.data_processing.feature_engineering.categorical_aligner import (
     CategoricalAligner,
 )
+from kvbiii_ml.data_processing.feature_engineering.numerical_downcaster import (
+    NumericalDowncaster,
+)
 from kvbiii_ml.data_processing.preprocessing.categorical_encoding.count_frequency_encoder import (
     CountFrequencyEncoderWithOriginal,
 )
@@ -173,7 +176,7 @@ def test_build_fallback_treats_inplace_transformer_as_identity():
         [
             (
                 "aligner",
-                CategoricalAligner(categorical_features=["cat"], warn_on_unknown=False),
+                CategoricalAligner(variables=["cat"], warn_on_unknown=False),
             )
         ]
     )
@@ -626,3 +629,42 @@ def test_build_restricted_pipeline_chains_without_duplicate_step_names():
 
 if __name__ == "__main__":
     print("Run this file with pytest to execute tests.")
+
+
+def test_restrict_narrows_inplace_variables_steps_instead_of_dropping_them():
+    """Tests in-place steps with a `variables` list are narrowed, not dropped, by restrict().
+
+    CategoricalAligner and NumericalDowncaster transform columns in place and expose
+    `variables`, so restriction must keep the variables still needed downstream.
+
+    Asserts:
+        - Both steps survive with variables narrowed to the selected columns
+        - The restricted pipeline still casts the kept categorical to category dtype
+    """
+    X = pd.DataFrame(
+        {
+            "cat_a": ["x", "y", "x", "y"],
+            "cat_b": ["p", "q", "p", "q"],
+            "num_a": [1, 2, 3, 4],
+            "num_b": [5, 6, 7, 8],
+        }
+    )
+    pipeline = Pipeline(
+        [
+            (
+                "aligner",
+                CategoricalAligner(variables=["cat_a", "cat_b"], warn_on_unknown=False),
+            ),
+            ("downcaster", NumericalDowncaster(variables=["num_a", "num_b"])),
+        ]
+    )
+    restricted = build_restricted_pipeline(pipeline, X, ["cat_a", "num_a"])
+    steps = dict(restricted.steps)
+
+    if steps["aligner"].get_params()["variables"] != ["cat_a"]:
+        raise AssertionError(steps["aligner"].get_params()["variables"])
+    if steps["downcaster"].get_params()["variables"] != ["num_a"]:
+        raise AssertionError(steps["downcaster"].get_params()["variables"])
+    out = restricted.fit_transform(X)
+    if out["cat_a"].dtype != "category" or out["num_a"].dtype != np.int8:
+        raise AssertionError(out.dtypes)

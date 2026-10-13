@@ -187,8 +187,12 @@ class PipelineDependencyGraph:
         source columns whose OWN derived output from that specific step is
         still needed - not every raw column needed anywhere in the pipeline,
         since a column can be a required pass-through or another step's input
-        without that step's own transformation of it ever being used. Steps
-        are dropped entirely if their filtered list becomes empty.
+        without that step's own transformation of it ever being used. A step
+        without ``get_derived_column_dependencies()`` (e.g. CategoricalAligner,
+        NumericalDowncaster or a bare feature_engine encoder) transforms its
+        ``variables`` in place, so it also keeps every variable that is still
+        needed downstream of it. Steps are dropped entirely if their filtered
+        list becomes empty.
 
         Steps with ``variables=None`` (auto-detect) that also declare
         ``get_derived_column_dependencies()`` - this package's own
@@ -228,7 +232,7 @@ class PipelineDependencyGraph:
         if self.pipeline is None:
             return raw_needed_list, None
 
-        step_survivors = self._resolve_step_survivors(processed_features)
+        step_survivors, step_needed = self._resolve_step_survivors(processed_features)
 
         new_steps: list[tuple[str, BaseEstimator]] = [
             (
@@ -245,6 +249,8 @@ class PipelineDependencyGraph:
             variables = cloned_step.get_params().get("variables")
             if isinstance(variables, list):
                 survivors = step_survivors.get(name, set())
+                if not hasattr(cloned_step, "get_derived_column_dependencies"):
+                    survivors = survivors | step_needed.get(name, set())
                 filtered = [variable for variable in variables if variable in survivors]
                 if not filtered:
                     continue
@@ -271,7 +277,7 @@ class PipelineDependencyGraph:
 
     def _resolve_step_survivors(
         self, processed_features: list[str]
-    ) -> dict[str, set[str]]:
+    ) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
         """Walks step_derivations backward to find each step's still-needed source columns.
 
         Args:
@@ -279,12 +285,16 @@ class PipelineDependencyGraph:
                 the restricted pipeline to still produce.
 
         Returns:
-            dict[str, set[str]]: Step name mapped to the source columns whose
-                own derived output from that step is still required.
+            tuple[dict[str, set[str]], dict[str, set[str]]]: Step name mapped to
+                the source columns whose own derived output from that step is still
+                required, and step name mapped to every column needed at that
+                step's output.
         """
         needed: set[str] = set(processed_features)
         step_survivors: dict[str, set[str]] = {}
+        step_needed: dict[str, set[str]] = {}
         for step_name, new_sources in reversed(self.step_derivations):
+            step_needed[step_name] = set(needed)
             next_needed: set[str] = set()
             survivors: set[str] = set()
             for column in needed:
@@ -296,7 +306,7 @@ class PipelineDependencyGraph:
                 next_needed.update(sources)
             step_survivors[step_name] = survivors
             needed = next_needed
-        return step_survivors
+        return step_survivors, step_needed
 
 
 def build_restricted_pipeline(

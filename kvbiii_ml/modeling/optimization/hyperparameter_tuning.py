@@ -12,7 +12,7 @@ from sklearn.base import BaseEstimator, clone
 from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 
-from kvbiii_ml.modeling.training.base_trainer import BaseTrainer
+from kvbiii_ml.modeling.training.base_trainer import BaseTrainer, to_metric_proba
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 from kvbiii_ml.modeling.training.oof_model import _get_n_iterations
 
@@ -776,7 +776,11 @@ class RandomSearchCV:
         fold_params = self._reconcile_categorical_params(
             self._scale_row_params(params, plan.fidelity)
         )
-        predict = BaseTrainer.predict_proba if self.metric_type == "probs" else BaseTrainer.predict
+        predict = (
+            (lambda fitted, x: to_metric_proba(BaseTrainer.predict_proba(fitted, x)))
+            if self.metric_type == "probs"
+            else BaseTrainer.predict
+        )
         fold_scores: list[float] = []
         best_iterations: list[int] = []
         for step, fold in enumerate(self._iter_folds(plan)):

@@ -1,11 +1,12 @@
 import logging
+import warnings
 from copy import deepcopy
 from inspect import Signature, signature
 
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator
 from lightgbm import log_evaluation
+from sklearn.base import BaseEstimator
 
 logging.getLogger("lightgbm").setLevel(logging.ERROR)
 
@@ -16,6 +17,83 @@ HISTGB_PREFIX = "HistGradientBoosting"
 VERBOSE_LOG_PERIOD = 50
 XGB_GPU_DEVICE_PREFIX = "cuda"
 LGBM_GPU_DEVICE_PREFIX = "cuda"
+EARLY_STOPPING_PARAMS: dict[str, tuple[str, ...]] = {
+    LGBM_PREFIX: ("early_stopping_round", "early_stopping_rounds"),
+    XGB_PREFIX: ("early_stopping_rounds",),
+    CATBOOST_PREFIX: ("early_stopping_rounds", "od_type", "od_wait"),
+}
+
+
+def to_metric_proba(proba: np.ndarray) -> np.ndarray:
+    """Convert a predict_proba matrix into the shape every "probs" metric receives.
+
+    This is the single convention at the metric boundary, shared by
+    ``CrossValidationTrainer`` and ``EnsembleWeightTunerCV``: binary problems
+    pass the 1-D positive-class column, multiclass problems pass the full
+    ``(n_samples, n_classes)`` matrix.
+
+    Args:
+        proba (np.ndarray): Output of ``predict_proba``.
+
+    Returns:
+        np.ndarray: ``proba[:, 1]`` for a two-column matrix, otherwise ``proba``
+            unchanged.
+    """
+    proba = np.asarray(proba)
+    if proba.ndim == 2 and proba.shape[1] == 2:
+        return proba[:, 1]
+    return proba
+
+
+def order_x_for_estimator(
+    X: pd.DataFrame, estimator: BaseEstimator, strict: bool = False
+) -> pd.DataFrame:
+    """Reorder columns to match a fitted estimator's expected feature order.
+
+    Looks at ``feature_names_in_`` (sklearn, LightGBM, XGBoost) and then
+    ``feature_names_`` (CatBoost). Names are first matched exactly, then after
+    normalising whitespace to underscores (LightGBM rewrites spaces). When the
+    estimator exposes no feature names X is returned unchanged; when its names
+    cannot be matched X is returned unchanged too, unless ``strict``.
+
+    Args:
+        X (pd.DataFrame): Input features.
+        estimator (BaseEstimator): Trained estimator.
+        strict (bool): Raise instead of returning X when the estimator's feature
+            names are not all present in X. Use it where a silent fallback could
+            let a model with the same feature count score the wrong columns.
+            Defaults to False.
+
+    Returns:
+        pd.DataFrame: Reordered features, or the original X.
+
+    Raises:
+        ValueError: If ``strict`` and some expected feature names are missing.
+    """
+
+    def _normalize(name: object) -> str:
+        """Normalize a feature name for tolerant cross-library matching."""
+        return str(name).strip().replace(" ", "_")
+
+    columns_set = set(X.columns)
+    for attr_name in ("feature_names_in_", "feature_names_"):
+        expected = getattr(estimator, attr_name, None)
+        if expected is None:
+            continue
+        expected_names = [str(n) for n in expected]
+        if set(expected_names).issubset(columns_set):
+            return X.loc[:, expected_names]
+        normalized_map = {_normalize(col): col for col in X.columns}
+        normalized_expected = [_normalize(n) for n in expected_names]
+        if all(n in normalized_map for n in normalized_expected):
+            return X.loc[:, [normalized_map[n] for n in normalized_expected]]
+        if strict:
+            missing = [n for n in expected_names if n not in columns_set]
+            raise ValueError(
+                f"{type(estimator).__name__} expects features missing from X: "
+                f"{missing[:10]}{'...' if len(missing) > 10 else ''}"
+            )
+    return X
 
 
 class BaseTrainer:
@@ -138,6 +216,46 @@ class BaseTrainer:
         return {}
 
     @staticmethod
+    def _disable_early_stopping(estimator: BaseEstimator) -> BaseEstimator:
+        """Return a copy of a boosting estimator with early stopping turned off.
+
+        Early stopping needs a validation set, so it is dropped when none is
+        passed. The estimator is rebuilt from its own params without the
+        early-stopping keys (LightGBM ``early_stopping_round``/``early_stopping_rounds``,
+        XGBoost ``early_stopping_rounds``, CatBoost ``early_stopping_rounds``/
+        ``od_type``/``od_wait``) rather than setting them to None, because
+        CatBoost rejects ``od_type=None``. The caller's estimator is never
+        mutated. One warning lists what was removed.
+
+        Args:
+            estimator (BaseEstimator): Unfitted estimator.
+
+        Returns:
+            BaseEstimator: The original estimator when it is not a boosting model
+                or has no early stopping configured, otherwise a rebuilt copy.
+        """
+        class_name = type(estimator).__name__
+        keys = next(
+            (
+                params
+                for prefix, params in EARLY_STOPPING_PARAMS.items()
+                if class_name.startswith(prefix)
+            ),
+            (),
+        )
+        params = estimator.get_params(deep=False)
+        active = [key for key in keys if params.get(key) not in (None, 0)]
+        if not active:
+            return estimator
+        warnings.warn(
+            f"{class_name} has early stopping configured ({', '.join(active)}) but no "
+            "validation set was passed; training without early stopping.",
+            UserWarning,
+            stacklevel=3,
+        )
+        return type(estimator)(**{k: v for k, v in params.items() if k not in keys})
+
+    @staticmethod
     def _resolve_verbose_period(verbose: bool | int | None) -> bool | int:
         """Cap a truthy verbose request to a fixed once-per-`VERBOSE_LOG_PERIOD` cadence.
 
@@ -191,7 +309,10 @@ class BaseTrainer:
         unless the caller already set `categorical_feature` in `fit_params`,
         working around a reproducible LightGBM CUDA illegal-memory-access crash
         on high-cardinality auto-detected categorical columns (CPU training is
-        unaffected and keeps auto-detection).
+        unaffected and keeps auto-detection). When no validation set is passed,
+        early stopping configured on a LightGBM, XGBoost or CatBoost estimator is
+        turned off on a copy (see `_disable_early_stopping`) instead of letting
+        the library raise.
 
         Args:
             estimator (BaseEstimator): Estimator to fit.
@@ -211,6 +332,8 @@ class BaseTrainer:
         Returns:
             BaseEstimator: Fitted estimator instance.
         """
+        if X_valid is None or y_valid is None:
+            estimator = BaseTrainer._disable_early_stopping(estimator)
         estimator = BaseTrainer._set_categorical_params(estimator, X_train)
 
         sig = signature(estimator.fit)
@@ -269,26 +392,9 @@ class BaseTrainer:
             fit_params["X_val"] = X_valid
             fit_params["y_val"] = y_valid
 
-        if "X_test" in sig.parameters:
-            fit_params["X_test"] = X_valid
-
         if "sample_weight" in sig.parameters:
             fit_params["sample_weight"] = sample_weight
 
-        if (
-            estimator.__class__.__name__.startswith(XGB_PREFIX)
-            and "eval_set" not in fit_params
-        ):
-            try:
-                if estimator.get_params().get("early_stopping_rounds") is not None:
-                    estimator.set_params(early_stopping_rounds=None)
-            except (AttributeError, ValueError, KeyError) as e:
-                logging.warning(
-                    "Could not check early_stopping_rounds for XGB estimator; proceeding without modification. Exception: %s",
-                    e,
-                )
-
-        estimator = BaseTrainer._set_categorical_params(estimator, X_train)
         if "categorical_feature" not in fit_params:
             fit_params.update(
                 BaseTrainer._lgbm_cuda_categorical_override(estimator, sig)
@@ -382,8 +488,8 @@ class BaseTrainer:
         """Safely call predict_proba if X is provided; returns full probability matrix.
 
         Returns the full (n_samples, n_classes) matrix for both binary and multiclass
-        problems. Callers that need only the positive-class column for binary
-        classification must slice [:, 1] themselves.
+        problems. Pass it through `to_metric_proba` before handing it to a "probs"
+        metric.
 
         Args:
             estimator (BaseEstimator): Fitted estimator.

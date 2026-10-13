@@ -9,7 +9,9 @@ from sklearn.metrics import (
     log_loss,
     mean_absolute_error,
     mean_absolute_percentage_error,
+    mean_poisson_deviance,
     mean_squared_error,
+    mean_tweedie_deviance,
     precision_score,
     r2_score,
     recall_score,
@@ -19,6 +21,7 @@ from sklearn.metrics import (
 )
 
 MetricFunction = Callable[..., float]
+TWEEDIE_POWER = 1.5
 
 
 def _root_mean_squared_percentage_error(
@@ -122,39 +125,36 @@ METRICS_NAMES: dict[str, MetricFunction] = {
     "RMSPE": _root_mean_squared_percentage_error,
     "RMSLE": root_mean_squared_log_error,
     "R2": r2_score,
+    "Poisson Deviance": mean_poisson_deviance,
+    "Tweedie Deviance": lambda y_true, y_pred: mean_tweedie_deviance(
+        y_true, y_pred, power=TWEEDIE_POWER
+    ),
 }
 
+PROBS_METRICS = frozenset(
+    {"Roc AUC", "Roc AUC (Multi-class)", "Log Loss", "Brier Score"}
+)
+MINIMIZE_METRICS = frozenset(
+    {
+        "MAE",
+        "MAPE",
+        "MSE",
+        "RMSE",
+        "RMSPE",
+        "RMSLE",
+        "Log Loss",
+        "Brier Score",
+        "Poisson Deviance",
+        "Tweedie Deviance",
+    }
+)
+
 METRICS: dict[str, tuple[MetricFunction, str, str]] = {
-    key: [
+    key: (
         eval_func,
-        (
-            "probs"
-            if key
-            in [
-                "Roc AUC",
-                "Roc AUC (Multi-class)",
-                "Mean Average Precision",
-                "Log Loss",
-                "Brier Score",
-            ]
-            else "preds"
-        ),
-        (
-            "minimize"
-            if key
-            in [
-                "MAE",
-                "MAPE",
-                "MSE",
-                "RMSE",
-                "RMSPE",
-                "RMSLE",
-                "Log Loss",
-                "Brier Score",
-            ]
-            else "maximize"
-        ),
-    ]
+        "probs" if key in PROBS_METRICS else "preds",
+        "minimize" if key in MINIMIZE_METRICS else "maximize",
+    )
     for key, eval_func in METRICS_NAMES.items()
 }
 
@@ -233,7 +233,7 @@ if __name__ == "__main__":
     regression_metrics = []
 
     for metric in list_available_metrics():
-        if metric in ["MAE", "MAPE", "MSE", "RMSE", "RMSPE", "RMSLE", "R2"]:
+        if metric in MINIMIZE_METRICS - PROBS_METRICS or metric == "R2":
             regression_metrics.append(metric)
         else:
             classification_metrics.append(metric)

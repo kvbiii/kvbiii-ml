@@ -53,9 +53,7 @@ def test_case_normalizer_preserves_non_string_values() -> None:
 
 
 def test_case_normalizer_auto_detects_string_like_columns() -> None:
-    """Auto-detection selects object, string, and category columns, but only object/string
-    dtypes are actually normalized since category dtype matches neither is_string_dtype nor
-    is_object_dtype."""
+    """Auto-detection selects object, string, and category columns and normalizes all three."""
     df = pd.DataFrame(
         {
             "cat": pd.Series(["UP", "Down"], dtype="category"),
@@ -72,7 +70,7 @@ def test_case_normalizer_auto_detects_string_like_columns() -> None:
         raise AssertionError()
     if out["cat"].dtype.name != "category":
         raise AssertionError()
-    if out["cat"].tolist() != ["UP", "Down"]:
+    if out["cat"].tolist() != ["up", "down"]:
         raise AssertionError()
     if out["obj"].tolist() != ["left", "right"]:
         raise AssertionError()
@@ -97,3 +95,26 @@ def test_case_normalizer_get_feature_names_out_returns_inputs() -> None:
 
 if __name__ == "__main__":
     print("Run this file with pytest to execute tests.")
+
+
+def test_case_normalizer_normalizes_and_merges_categorical_categories() -> None:
+    """Category columns are normalized; categories colliding after normalization merge."""
+    df = pd.DataFrame(
+        {
+            "plain": pd.Categorical(["Ab", "cD", "Ab", "cD"]),
+            "dupes": pd.Categorical(["Ab", "AB", "cd", None]),
+        }
+    )
+    out = CaseNormalizer(normalization="upper").fit(df).transform(df)
+
+    if (
+        out["plain"].tolist() != ["AB", "CD", "AB", "CD"]
+        or out["plain"].dtype.name != "category"
+    ):
+        raise AssertionError(out["plain"].tolist())
+    if list(out["dupes"].cat.categories) != ["AB", "CD"]:
+        raise AssertionError(list(out["dupes"].cat.categories))
+    if out["dupes"].tolist()[:3] != ["AB", "AB", "CD"] or not pd.isna(
+        out["dupes"].iloc[3]
+    ):
+        raise AssertionError(out["dupes"].tolist())

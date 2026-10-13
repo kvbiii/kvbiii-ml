@@ -1,5 +1,6 @@
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.utils.validation import check_is_fitted
 
 
 class CaseNormalizer(BaseEstimator, TransformerMixin):
@@ -25,9 +26,6 @@ class CaseNormalizer(BaseEstimator, TransformerMixin):
         """
         self.features_names = features_names
         self.normalization = normalization
-        self.features_names_: list[str] = []
-        self.input_features_: pd.Index = pd.Index([])
-        self._is_fitted = False
         self._validate_init_params()
 
     def _validate_init_params(self) -> None:
@@ -73,7 +71,6 @@ class CaseNormalizer(BaseEstimator, TransformerMixin):
             self.features_names_ = [
                 name for name in self.features_names if name in df.columns
             ]
-        self._is_fitted = True
         return self
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -87,17 +84,18 @@ class CaseNormalizer(BaseEstimator, TransformerMixin):
             pd.DataFrame: Transformed data with normalized case.
 
         Raises:
-            ValueError: If the transformer has not been fitted.
+            NotFittedError: If the transformer has not been fitted (a ValueError).
         """
-        if not self._is_fitted:
-            raise ValueError("CaseNormalizer must be fitted before transform.")
+        check_is_fitted(self, "features_names_")
 
         df = df.copy()
         for feature in self.features_names_:
             if feature not in df.columns:
                 continue
             series = df[feature]
-            if pd.api.types.is_string_dtype(series.dtype):
+            if isinstance(series.dtype, pd.CategoricalDtype):
+                df[feature] = self._normalize_categorical_series(series)
+            elif pd.api.types.is_string_dtype(series.dtype):
                 df[feature] = self._normalize_string_series(series.astype("string"))
             elif pd.api.types.is_object_dtype(series.dtype):
                 df[feature] = self._normalize_object_series(series)
@@ -116,7 +114,36 @@ class CaseNormalizer(BaseEstimator, TransformerMixin):
         Returns:
             pd.Index: Original feature names.
         """
+        check_is_fitted(self, "input_features_")
         return self.input_features_
+
+    def _normalize_categorical_series(self, series: pd.Series) -> pd.Series:
+        """
+        Normalize the categories of a categorical series.
+
+        Categories that collide after normalization (e.g. "Ab" and "AB" under
+        "upper") are merged into one; first-seen category order and the
+        ``ordered`` flag are kept.
+
+        Args:
+            series (pd.Series): Categorical series to normalize.
+
+        Returns:
+            pd.Series: Categorical series with normalized categories.
+        """
+        mapping = {cat: self._normalize_value(cat) for cat in series.cat.categories}
+        new_categories = pd.Index(list(mapping.values())).unique()
+        if len(new_categories) == len(mapping):
+            return series.cat.rename_categories(mapping)
+        return pd.Series(
+            pd.Categorical(
+                series.astype(object).map(mapping),
+                categories=new_categories,
+                ordered=series.cat.ordered,
+            ),
+            index=series.index,
+            name=series.name,
+        )
 
     def _normalize_string_series(self, series: pd.Series) -> pd.Series:
         """

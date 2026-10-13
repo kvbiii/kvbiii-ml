@@ -3,6 +3,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.exceptions import NotFittedError
 
 from kvbiii_ml.data_processing.feature_engineering.numerical_downcaster import (
     NumericalDowncaster,
@@ -65,7 +66,7 @@ def test_numericaldowncaster_fit_respects_columns_subset():
         - Columns absent from the subset are excluded from dtype_map_
     """
     df = pd.DataFrame({"a": [1, 2, 3], "b": [100000, 200000, 300000]})
-    downcaster = NumericalDowncaster(columns=["a"])
+    downcaster = NumericalDowncaster(variables=["a"])
 
     downcaster.fit(df)
 
@@ -73,22 +74,32 @@ def test_numericaldowncaster_fit_respects_columns_subset():
         raise AssertionError()
 
 
-def test_numericaldowncaster_fit_downcasts_float_columns_to_float32_regardless_of_range():
-    """Tests fit always assigns float32 to float columns, independent of value magnitude.
+def test_numericaldowncaster_fit_downcasts_floats_only_when_lossless():
+    """Tests the default lossless mode keeps float64 unless float32 represents every value.
 
     Asserts:
-        - A small-range float column downcasts to float32
-        - A large-range float column also downcasts to float32
+        - A column of exactly representable floats downcasts to float32
+        - A column with 0.1-style values or values beyond float32 range stays float64
+        - float_precision="float32" downcasts every float column
     """
-    df = pd.DataFrame({"small": [0.1, 0.2, 0.3], "large": [1e300, -1e300, 2.5e250]})
-    downcaster = NumericalDowncaster()
-
-    downcaster.fit(df)
-
-    if downcaster.dtype_map_["small"] != np.float32:
+    df = pd.DataFrame(
+        {
+            "exact": [0.5, 1.25, np.nan],
+            "small": [0.1, 0.2, 0.3],
+            "large": [1e300, -1e300, 2.5e250],
+        }
+    )
+    lossless = NumericalDowncaster().fit(df)
+    if lossless.dtype_map_["exact"] != np.float32:
         raise AssertionError()
-    if downcaster.dtype_map_["large"] != np.float32:
+    if lossless.dtype_map_["small"] != np.float64:
         raise AssertionError()
+    if lossless.dtype_map_["large"] != np.float64:
+        raise AssertionError()
+
+    forced = NumericalDowncaster(float_precision="float32").fit(df)
+    if not all(dtype == np.float32 for dtype in forced.dtype_map_.values()):
+        raise AssertionError(forced.dtype_map_)
 
 
 def test_numericaldowncaster_transform_applies_learned_dtypes():
@@ -142,40 +153,58 @@ def test_numericaldowncaster_transform_ignores_float_downcast_when_disabled():
         raise AssertionError()
 
 
-def test_numericaldowncaster_transform_warns_instead_of_raising_on_incompatible_cast():
-    """Tests transform catches ValueError/TypeError from an incompatible astype call.
+def test_numericaldowncaster_keeps_large_integers_with_nan_exact():
+    """Tests integer columns with NaN never go through float32 above 2**24.
 
     Asserts:
-        - A UserWarning is emitted describing the failed downcast
-        - The column is left unconverted on the incompatible DataFrame
-        - No exception propagates out of transform
+        - A nullable Int64 column with values > 2**24 and a missing value keeps exact values
+        - An int column fitted clean and transformed with NaN keeps exact values
+        - Small integers with NaN still become float32
     """
-    train_df = pd.DataFrame({"a": [1, 2, 3]})
-    downcaster = NumericalDowncaster()
-    downcaster.fit(train_df)
+    big = [2**24 + 1, 2**31 + 7, None]
+    df = pd.DataFrame({"id": pd.array(big, dtype="Int64")})
+    out = NumericalDowncaster().fit_transform(df)
+    if out["id"].iloc[:2].astype("int64").tolist() != big[:2] or not pd.isna(
+        out["id"].iloc[2]
+    ):
+        raise AssertionError(out["id"].tolist())
 
-    incompatible_df = pd.DataFrame({"a": [1.0, np.nan, 3.0]})
+    downcaster = NumericalDowncaster().fit(pd.DataFrame({"ts": [2**24 + 1, 2**30 + 3]}))
+    out = downcaster.transform(pd.DataFrame({"ts": [2**24 + 1, np.nan]}))
+    if out["ts"].iloc[0] != 2**24 + 1:
+        raise AssertionError(out["ts"].tolist())
 
-    with pytest.warns(UserWarning, match="Failed to downcast column"):
-        transformed = downcaster.transform(incompatible_df)
-
-    if transformed["a"].dtype != incompatible_df["a"].dtype:
+    small = NumericalDowncaster().fit(pd.DataFrame({"a": [1, 2, 3]}))
+    if small.transform(pd.DataFrame({"a": [1.0, np.nan]}))["a"].dtype != np.float32:
         raise AssertionError()
-    if not transformed["a"].equals(incompatible_df["a"]):
-        raise AssertionError()
 
 
-def test_numericaldowncaster_transform_raises_attributeerror_before_fit():
-    """Tests transform raises AttributeError when called before fit.
+def test_numericaldowncaster_transform_raises_not_fitted_before_fit():
+    """Tests transform raises NotFittedError (not a NoneType error) before fit.
 
     Asserts:
-        - AttributeError is raised because dtype_map_ is still None
+        - NotFittedError is raised and dtype_map_ does not exist yet
     """
     df = pd.DataFrame({"a": [1, 2, 3]})
     downcaster = NumericalDowncaster()
+    if hasattr(downcaster, "dtype_map_"):
+        raise AssertionError()
 
-    with pytest.raises(AttributeError):
+    with pytest.raises(NotFittedError):
         downcaster.transform(df)
+
+
+def test_numericaldowncaster_columns_alias_is_deprecated_but_works():
+    """Tests the old columns= name still selects columns and emits a FutureWarning.
+
+    Asserts:
+        - Only the listed column is downcast
+    """
+    df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+    with pytest.warns(FutureWarning, match="variables"):
+        downcaster = NumericalDowncaster(columns=["a"]).fit(df)
+    if set(downcaster.dtype_map_) != {"a"}:
+        raise AssertionError(downcaster.dtype_map_)
 
 
 if __name__ == "__main__":

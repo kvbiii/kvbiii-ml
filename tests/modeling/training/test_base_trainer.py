@@ -10,7 +10,11 @@ from catboost import CatBoostClassifier
 from sklearn.ensemble import HistGradientBoostingClassifier
 from xgboost import XGBClassifier
 
-from kvbiii_ml.modeling.training.base_trainer import VERBOSE_LOG_PERIOD, BaseTrainer
+from kvbiii_ml.modeling.training.base_trainer import (
+    VERBOSE_LOG_PERIOD,
+    BaseTrainer,
+    to_metric_proba,
+)
 
 
 def test_basetrainer_fit_estimator_basic_fitting(
@@ -542,3 +546,71 @@ def test_basetrainer_fit_estimator_leaves_cpu_xgb_device_untouched(
 
 if __name__ == "__main__":
     print("Run this file with pytest to execute tests.")
+
+
+@pytest.mark.parametrize(
+    "estimator",
+    [
+        lightgbm.LGBMClassifier(n_estimators=5, early_stopping_round=3, verbose=-1),
+        lightgbm.LGBMClassifier(n_estimators=5, early_stopping_rounds=3, verbose=-1),
+        XGBClassifier(n_estimators=5, early_stopping_rounds=3),
+        CatBoostClassifier(iterations=5, early_stopping_rounds=3, od_type="Iter", verbose=0),
+    ],
+)
+def test_basetrainer_fit_estimator_disables_early_stopping_without_eval_set(
+    binary_classification_data, estimator
+):
+    """Tests every boosting family trains without early stopping when no eval set is given.
+
+    Asserts:
+        - fit succeeds and warns once that early stopping was turned off
+        - The caller's estimator keeps its early-stopping params
+    """
+    X, y = binary_classification_data
+    params_before = estimator.get_params()
+
+    with pytest.warns(UserWarning, match="early stopping") as record:
+        BaseTrainer.fit_estimator(estimator, X, y)
+
+    if sum("early stopping" in str(w.message) for w in record) != 1:
+        raise AssertionError([str(w.message) for w in record])
+    if estimator.get_params() != params_before:
+        raise AssertionError("caller's estimator was mutated")
+
+
+def test_basetrainer_fit_estimator_does_not_pass_validation_set_as_x_test(sample_dataframe):
+    """Tests an estimator whose fit accepts X_test is not handed the validation set as X_test.
+
+    Asserts:
+        - fit is called without an X_test keyword
+    """
+    received: dict = {}
+
+    class _XTestEstimator:
+        """Estimator whose fit signature has an X_test parameter."""
+
+        def fit(self, X, y, X_test=None):
+            """Record the X_test argument."""
+            received["X_test"] = X_test
+            return self
+
+    X = sample_dataframe
+    y = pd.Series(np.zeros(len(X)))
+    BaseTrainer.fit_estimator(_XTestEstimator(), X, y, X.iloc[:5], y.iloc[:5])
+    if received["X_test"] is not None:
+        raise AssertionError("validation set was passed as X_test")
+
+
+def test_to_metric_proba_returns_positive_column_for_binary_and_matrix_for_multiclass():
+    """Tests the shared metric-boundary probability convention.
+
+    Asserts:
+        - (n, 2) becomes the 1-D positive-class column
+        - (n, 3) is returned unchanged
+    """
+    binary = np.array([[0.2, 0.8], [0.6, 0.4]])
+    multi = np.array([[0.2, 0.3, 0.5]])
+    if not np.array_equal(to_metric_proba(binary), np.array([0.8, 0.4])):
+        raise AssertionError()
+    if to_metric_proba(multi).shape != (1, 3):
+        raise AssertionError()

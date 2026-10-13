@@ -1,7 +1,5 @@
 import gc
 from copy import deepcopy
-from pathlib import Path
-import sys
 from typing import Any
 
 import numpy as np
@@ -9,7 +7,6 @@ import pandas as pd
 from sklearn.base import BaseEstimator
 from sklearn.pipeline import Pipeline
 
-sys.path.append(str(Path(__file__).resolve().parents[3]))
 from kvbiii_ml.data_processing.preprocessing.pipeline_dependency import (
     PipelineDependencyGraph,
 )
@@ -597,8 +594,6 @@ class ModelImportanceFiltering:
 
 
 if __name__ == "__main__":
-    import sys
-    from pathlib import Path
 
     import numpy as np
     import pandas as pd
@@ -611,7 +606,6 @@ if __name__ == "__main__":
     from sklearn.model_selection import KFold, StratifiedKFold
     from sklearn.pipeline import Pipeline
 
-    sys.path.append(str(Path(__file__).resolve().parents[3]))
     from kvbiii_ml.data_processing.preprocessing.outlier_handling.winsorizer_trimmer import (
         WinsorizerWithOriginal,
     )
