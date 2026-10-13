@@ -280,7 +280,9 @@ class EnsembleModel(BaseEstimator):
                 None if weights is None else weights[train_idx],
                 verbose,
             )
-            fold_features = self._meta_features(fold_estimators, X_train.iloc[valid_idx])
+            fold_features = self._meta_features(
+                fold_estimators, X_train.iloc[valid_idx]
+            )
             if meta_features is None:
                 meta_features = np.zeros((len(X_train), fold_features.shape[1]))
             if fold_features.shape[1] != meta_features.shape[1]:

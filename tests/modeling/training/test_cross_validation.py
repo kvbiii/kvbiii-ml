@@ -485,7 +485,12 @@ def test_crossvalidationtrainer_fit_in_parallel_matches_sequential_fit(
                 trainer.fitted_estimators_, trainer.fitted_pipelines_
             )
         ]
-        results[n_jobs] = (list(train_scores), list(valid_scores), avg_test_pred, fold_probas)
+        results[n_jobs] = (
+            list(train_scores),
+            list(valid_scores),
+            avg_test_pred,
+            fold_probas,
+        )
 
     sequential, parallel = results[1], results[3]
     if sequential[0] != parallel[0] or sequential[1] != parallel[1]:
@@ -505,8 +510,12 @@ def test_crossvalidationtrainer_init_rejects_non_positive_n_jobs():
         - The default n_jobs is 1.
     """
     with pytest.raises(ValueError, match="n_jobs"):
-        CrossValidationTrainer(problem_type="classification", metric_name="Accuracy", n_jobs=0)
-    trainer = CrossValidationTrainer(problem_type="classification", metric_name="Accuracy")
+        CrossValidationTrainer(
+            problem_type="classification", metric_name="Accuracy", n_jobs=0
+        )
+    trainer = CrossValidationTrainer(
+        problem_type="classification", metric_name="Accuracy"
+    )
     if trainer.n_jobs != 1:
         raise AssertionError()
 
@@ -629,7 +638,10 @@ def test_crossvalidationtrainer_binary_preds_metric_averages_test_probabilities(
 
     assert_valid_binary_proba_matrix(test_pred, 20)
     fold_label_fractions = {0.0, 1 / 3, 2 / 3, 1.0}
-    if all(round(v, 6) in {round(f, 6) for f in fold_label_fractions} for v in test_pred[:, 1]):
+    if all(
+        round(v, 6) in {round(f, 6) for f in fold_label_fractions}
+        for v in test_pred[:, 1]
+    ):
         raise AssertionError("test_pred looks like averaged labels")
 
 
@@ -647,7 +659,9 @@ def test_crossvalidationtrainer_custom_metric_receives_y_true_with_original_inde
     weights = pd.Series(np.arange(len(y), dtype=float), index=y.index)
     seen: list[pd.Index] = []
 
-    def weighted_error(y_true: pd.Series, y_pred: np.ndarray, sample_weights: pd.Series) -> float:
+    def weighted_error(
+        y_true: pd.Series, y_pred: np.ndarray, sample_weights: pd.Series
+    ) -> float:
         """Weighted share of wrong labels, aligning weights by y_true's index."""
         seen.append(y_true.index)
         w = sample_weights.loc[y_true.index].to_numpy()
@@ -698,16 +712,22 @@ def test_crossvalidationtrainer_early_stopping_holdout_keeps_validation_fold_out
         n_holdout = round(len(train_index) * 0.25)
         if est.eval_index_ != train_index[-n_holdout:]:
             raise AssertionError("eval set is not the tail of the training fold")
-        if set(est.eval_index_) & set(X.index[valid_idx]) or set(est.eval_index_) & set(est.fit_index_):
+        if set(est.eval_index_) & set(X.index[valid_idx]) or set(est.eval_index_) & set(
+            est.fit_index_
+        ):
             raise AssertionError("eval set overlaps validation or fit rows")
 
-    default = CrossValidationTrainer(problem_type="regression", metric_name="RMSE", cv=cv, verbose=False)
+    default = CrossValidationTrainer(
+        problem_type="regression", metric_name="RMSE", cv=cv, verbose=False
+    )
     default.fit(_EvalSetRecordingRegressor(), X, y)
     if default.fitted_estimators_[0].eval_index_ != list(X.index[splits[0][1]]):
         raise AssertionError()
 
     with pytest.raises(ValueError, match="early_stopping_holdout"):
-        CrossValidationTrainer(problem_type="regression", metric_name="RMSE", early_stopping_holdout=1.0)
+        CrossValidationTrainer(
+            problem_type="regression", metric_name="RMSE", early_stopping_holdout=1.0
+        )
 
 
 def test_cross_validation_import_does_not_modify_sys_path():

@@ -505,9 +505,9 @@ def test_fit_calibrator_binary_accepts_non_numeric_labels(method):
     classes = np.array(["neg", "pos"])
     y_oof = rng.choice(classes, size=n)
     positive_rate = np.where(y_oof == "pos", 0.8, 0.2)
-    oof_probas = np.column_stack(
-        [1 - positive_rate, positive_rate]
-    ) + rng.normal(scale=0.05, size=(n, 2))
+    oof_probas = np.column_stack([1 - positive_rate, positive_rate]) + rng.normal(
+        scale=0.05, size=(n, 2)
+    )
     oof_probas = np.clip(oof_probas, 0.01, 0.99)
 
     calibrator = _fit_calibrator(oof_probas, y_oof, method, classes)

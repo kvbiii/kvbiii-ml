@@ -133,7 +133,9 @@ class BaseTrainer:
         return estimator
 
     @staticmethod
-    def _lgbm_cuda_categorical_override(estimator: BaseEstimator, sig: Signature) -> dict:
+    def _lgbm_cuda_categorical_override(
+        estimator: BaseEstimator, sig: Signature
+    ) -> dict:
         """Disable LightGBM's categorical auto-detection when training on CUDA.
 
         LightGBM's CUDA tree learner has a reproducible illegal-memory-access crash

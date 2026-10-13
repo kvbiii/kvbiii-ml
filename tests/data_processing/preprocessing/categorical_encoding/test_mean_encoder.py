@@ -118,7 +118,9 @@ def test_meanencoderwithoriginal_transform_accepts_explicit_numeric_variable(
     if not np.allclose(result["num_cat_PREPROCESS_MEAN_ENC"].to_numpy(), expected):
         raise AssertionError("Mean encoding did not match expected per-category means.")
     if not pd.api.types.is_numeric_dtype(result["num_cat"]):
-        raise AssertionError("Original numeric column dtype was altered by transform().")
+        raise AssertionError(
+            "Original numeric column dtype was altered by transform()."
+        )
 
 
 if __name__ == "__main__":
