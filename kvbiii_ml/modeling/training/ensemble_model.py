@@ -10,7 +10,12 @@ from sklearn.metrics import accuracy_score, r2_score
 from sklearn.model_selection import BaseCrossValidator, KFold
 from sklearn.utils import ClassifierTags, RegressorTags, Tags
 
-from kvbiii_ml.modeling.training.base_trainer import BaseTrainer, order_x_for_estimator
+from kvbiii_ml.modeling.training.base_trainer import (
+    BaseTrainer,
+    order_x_for_estimator,
+    predict_with_offset,
+    split_offset,
+)
 
 ESTIMATOR_ERROR_POLICIES = ("raise", "skip")
 SKIPPABLE_ERRORS = (ValueError, AttributeError, TypeError)
@@ -30,6 +35,7 @@ class EnsembleModel(BaseEstimator):
         n_jobs: int = 1,
         cv: BaseCrossValidator | None = None,
         on_estimator_error: str = "raise",
+        offset_column: str | None = None,
     ) -> None:
         """
         Args:
@@ -58,6 +64,13 @@ class EnsembleModel(BaseEstimator):
                 lets the exception propagate. ``"skip"`` drops that estimator, warns,
                 and renormalises the remaining weights - the result is then a different
                 model from the one that was fitted. Defaults to "raise".
+            offset_column (str | None): Column of every X passed to fit/predict (and of
+                the eval_set X) holding a link-scale offset such as ``log(exposure)``.
+                Base estimators never see it as a feature: it is passed to training as
+                LightGBM ``init_score``, XGBoost ``base_margin`` or CatBoost
+                ``baseline`` and added to the raw score before the inverse link at
+                predict time (see ``base_trainer.predict_with_offset``). LightGBM,
+                XGBoost and CatBoost only. Defaults to None.
 
         Raises:
             ValueError: If estimators is empty, n_jobs is not positive, problem_type or
@@ -85,6 +98,7 @@ class EnsembleModel(BaseEstimator):
         self.n_jobs = n_jobs
         self.cv = cv
         self.on_estimator_error = on_estimator_error
+        self.offset_column = offset_column
         self._estimators_list = list(estimators)
         self._weights_normalized = self._validate_and_normalize_weights(weights)
         self.weights = self._weights_normalized
@@ -231,11 +245,25 @@ class EnsembleModel(BaseEstimator):
 
         def fit_one(base_estimator: BaseEstimator) -> BaseEstimator:
             """Clone, configure and fit one base estimator."""
+            x_fit, offset_fit = split_offset(X_train, self.offset_column)
+            x_eval, offset_eval = (
+                split_offset(X_valid, self.offset_column)
+                if X_valid is not None
+                else (None, None)
+            )
             estimator = self._set_categorical_params_for_estimator(
-                self._safe_clone_estimator(base_estimator), X_train
+                self._safe_clone_estimator(base_estimator), x_fit
             )
             return BaseTrainer.fit_estimator(
-                estimator, X_train, y_train, X_valid, y_valid, sample_weight, verbose
+                estimator,
+                x_fit,
+                y_train,
+                x_eval,
+                y_valid,
+                sample_weight,
+                verbose,
+                offset_train=offset_fit,
+                offset_valid=offset_eval,
             )
 
         if self.n_jobs == 1 or len(self._estimators_list) <= 1:
@@ -302,11 +330,10 @@ class EnsembleModel(BaseEstimator):
         """Stack class probabilities (classification) or predictions (regression) of estimators."""
         meta_features = []
         for estimator in estimators:
-            x_ordered = self._order_x_for_estimator(X, estimator)
             if self.problem_type == "classification":
-                feat = estimator.predict_proba(x_ordered)
+                feat = self._estimator_output(estimator, X, proba=True)
             else:
-                feat = np.asarray(estimator.predict(x_ordered)).reshape(-1, 1)
+                feat = np.asarray(self._estimator_output(estimator, X)).reshape(-1, 1)
             meta_features.append(feat)
         return np.hstack(meta_features)
 
@@ -383,7 +410,7 @@ class EnsembleModel(BaseEstimator):
             return self.classes_[labels] if self.classes_ is not None else labels
 
         predictions, weights = self._collect_predictions(
-            X, lambda est, x: est.predict(x)
+            X, lambda est, x: self._estimator_output(est, x)
         )
         return np.average(predictions, axis=0, weights=weights)
 
@@ -415,7 +442,10 @@ class EnsembleModel(BaseEstimator):
             )
 
         predictions, weights = self._collect_predictions(
-            X, lambda est, x: self._prepare_probabilities(est.predict_proba(x))
+            X,
+            lambda est, x: self._prepare_probabilities(
+                self._estimator_output(est, x, proba=True)
+            ),
         )
         return self._prepare_probabilities(
             np.average(predictions, axis=0, weights=weights)
@@ -431,7 +461,8 @@ class EnsembleModel(BaseEstimator):
         Args:
             X (pd.DataFrame): Features to score.
             predict_fn (Callable[[BaseEstimator, pd.DataFrame], np.ndarray]): Called
-                as ``predict_fn(estimator, X_ordered)``.
+                as ``predict_fn(estimator, X)``; it orders columns and handles the
+                offset itself (via ``_estimator_output``).
 
         Returns:
             tuple[np.ndarray, np.ndarray]: Stacked predictions of the estimators that
@@ -444,9 +475,7 @@ class EnsembleModel(BaseEstimator):
         used = []
         for idx, estimator in enumerate(self.fitted_estimators_):
             try:
-                predictions.append(
-                    predict_fn(estimator, self._order_x_for_estimator(X, estimator))
-                )
+                predictions.append(predict_fn(estimator, X))
             except SKIPPABLE_ERRORS as exc:
                 if self.on_estimator_error == "raise":
                     raise
@@ -507,14 +536,12 @@ class EnsembleModel(BaseEstimator):
 
         predictions = []
         for estimator in self.fitted_estimators_:
-            x_ordered = self._order_x_for_estimator(X, estimator)
             if self.problem_type == "classification":
-                estimator_predictions = estimator.predict_proba(x_ordered)
                 estimator_predictions = self._prepare_probabilities(
-                    estimator_predictions
+                    self._estimator_output(estimator, X, proba=True)
                 )
             else:
-                estimator_predictions = estimator.predict(x_ordered)
+                estimator_predictions = self._estimator_output(estimator, X)
             predictions.append(estimator_predictions)
         predictions = np.array(predictions)
         if self.problem_type == "regression":
@@ -570,6 +597,16 @@ class EnsembleModel(BaseEstimator):
         """
         metric = accuracy_score if self.problem_type == "classification" else r2_score
         return float(metric(y, self.predict(X), sample_weight=sample_weight))
+
+    def _estimator_output(
+        self, estimator: BaseEstimator, X: pd.DataFrame, proba: bool = False
+    ) -> np.ndarray:
+        """Predict (or predict_proba) one base estimator on X, applying the offset column."""
+        X, offset = split_offset(X, self.offset_column)
+        x_ordered = self._order_x_for_estimator(X, estimator)
+        if offset is not None:
+            return predict_with_offset(estimator, x_ordered, offset, proba=proba)
+        return estimator.predict_proba(x_ordered) if proba else estimator.predict(x_ordered)
 
     def _order_x_for_estimator(
         self, X: pd.DataFrame, estimator: BaseEstimator

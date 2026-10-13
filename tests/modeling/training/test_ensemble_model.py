@@ -6,6 +6,7 @@ from unittest.mock import Mock
 import numpy as np
 import pandas as pd
 import pytest
+import lightgbm as lgb
 from lightgbm import LGBMRegressor
 from sklearn.base import clone, is_classifier, is_regressor
 from sklearn.linear_model import LinearRegression, LogisticRegression
@@ -496,3 +497,41 @@ def test_ensemblemodel_stacking_meta_learner_trusts_memorising_model_less_out_of
     oof_tree_weight = ensemble.fitted_meta_learner_.coef_[0]
     if not oof_tree_weight < in_sample.coef_[0] - 0.3:
         raise AssertionError((oof_tree_weight, in_sample.coef_[0]))
+
+
+def _exposure_frame(n_samples: int = 600) -> tuple[pd.DataFrame, pd.Series]:
+    """Poisson counts whose mean is exposure * exp(0.6 * x0)."""
+    rng = np.random.default_rng(5)
+    X = pd.DataFrame({"x0": rng.normal(size=n_samples), "x1": rng.normal(size=n_samples)})
+    X["log_exposure"] = np.log(rng.uniform(0.2, 3.0, size=n_samples))
+    y = pd.Series(rng.poisson(np.exp(0.6 * X["x0"] + X["log_exposure"])))
+    return X, y
+
+
+def test_ensemblemodel_offset_column_matches_hand_rolled_lgb_train_with_init_score():
+    """Tests a Poisson LGBM with offset_column equals lgb.train with init_score.
+
+    Asserts:
+        - Ensemble predictions equal exp(raw score + offset) of a booster trained by
+          lgb.train on the same rows with init_score=log_exposure
+        - log_exposure is not a model feature
+    """
+    X, y = _exposure_frame()
+    features = X.drop(columns=["log_exposure"])
+    ensemble = EnsembleModel(
+        [LGBMRegressor(objective="poisson", n_estimators=30, verbose=-1)],
+        problem_type="regression",
+        offset_column="log_exposure",
+    ).fit(X, y)
+
+    booster = lgb.train(
+        {"objective": "poisson", "verbose": -1},
+        lgb.Dataset(features, y, init_score=X["log_exposure"]),
+        num_boost_round=30,
+    )
+    expected = np.exp(booster.predict(features, raw_score=True) + X["log_exposure"])
+
+    if not np.allclose(ensemble.predict(X), expected, rtol=1e-6):
+        raise AssertionError(np.abs(ensemble.predict(X) - expected).max())
+    if "log_exposure" in ensemble.fitted_estimators_[0].feature_name_:
+        raise AssertionError("offset used as a feature")
