@@ -60,11 +60,30 @@ def test_equalwidthdiscretiserwithoriginal_transform_produces_expected_distinct_
     discretiser = EqualWidthDiscretiserWithOriginal(variables=["age"], bins=CUSTOM_BINS)
     discretiser.fit(equal_width_data)
     result = discretiser.transform(equal_width_data)
-    distinct_bins = sorted(result["age_PREPROCESS_EQ_WIDTH"].unique())
+    distinct_bins = sorted(result[f"age_PREPROCESS_EQ_WIDTH_{CUSTOM_BINS}"].unique())
     if distinct_bins != list(range(CUSTOM_BINS)):
         raise AssertionError(
             f"Expected bin codes {list(range(CUSTOM_BINS))}, got {distinct_bins}."
         )
+
+
+@pytest.mark.parametrize("bins", [3, 4, 10])
+def test_equalwidthdiscretiserwithoriginal_suffix_encodes_bins(equal_width_data, bins):
+    """Tests that the derived column suffix is keyed on bins, not a fixed string.
+
+    Args:
+        equal_width_data: Uniformly distributed numeric fixture.
+        bins: Bin count under test.
+
+    Asserts:
+        - The derived column is named "age_PREPROCESS_EQ_WIDTH_{bins}".
+    """
+    discretiser = EqualWidthDiscretiserWithOriginal(variables=["age"], bins=bins)
+    discretiser.fit(equal_width_data)
+    result = discretiser.transform(equal_width_data)
+    expected_column = f"age_PREPROCESS_EQ_WIDTH_{bins}"
+    if expected_column not in result.columns:
+        raise AssertionError(f"Missing expected column {expected_column}.")
 
 
 if __name__ == "__main__":

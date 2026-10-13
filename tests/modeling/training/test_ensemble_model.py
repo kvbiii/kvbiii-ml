@@ -1,10 +1,17 @@
 """Tests for kvbiii_ml.modeling.training.ensemble_model module."""
 
+import io
 from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
 import pytest
+import joblib
+from lightgbm import LGBMRegressor
+from sklearn.base import clone, is_classifier, is_regressor
+from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.tree import DecisionTreeRegressor
+from xgboost import XGBRegressor
 
 from kvbiii_ml.modeling.training.ensemble_model import EnsembleModel
 
@@ -329,3 +336,177 @@ def test_ensemblemodel_set_params_updates_parameters():
 
 if __name__ == "__main__":
     print("Run this file with pytest to execute tests.")
+
+
+def test_ensemblemodel_fit_in_parallel_matches_sequential_fit(
+    binary_classification_data, ensemble_estimators
+):
+    """Tests a thread-parallel ensemble fit keeps estimator order and predictions.
+
+    Args:
+        binary_classification_data: Feature matrix and target fixture
+        ensemble_estimators: List of estimators fixture
+
+    Asserts:
+        - Fitted estimators keep the order of the configured estimators.
+        - predict_proba is identical to the sequential fit.
+        - n_jobs survives get_params, so clones keep the concurrency.
+    """
+    X, y = binary_classification_data
+    sequential = EnsembleModel(
+        estimators=ensemble_estimators, problem_type="classification"
+    )
+    parallel = EnsembleModel(
+        estimators=ensemble_estimators, problem_type="classification", n_jobs=2
+    )
+    sequential.fit(X, y)
+    parallel.fit(X, y)
+
+    fitted_types = [type(estimator) for estimator in parallel.fitted_estimators_]
+    if fitted_types != [type(estimator) for estimator in ensemble_estimators]:
+        raise AssertionError()
+    if not np.array_equal(sequential.predict_proba(X), parallel.predict_proba(X)):
+        raise AssertionError()
+    if parallel.get_params()["n_jobs"] != 2:
+        raise AssertionError()
+
+
+def test_ensemblemodel_init_rejects_non_positive_n_jobs(ensemble_estimators):
+    """Tests the constructor rejects a fit concurrency below one.
+
+    Args:
+        ensemble_estimators: List of estimators fixture
+
+    Asserts:
+        - n_jobs=0 raises ValueError naming n_jobs.
+    """
+    with pytest.raises(ValueError, match="n_jobs"):
+        EnsembleModel(
+            estimators=ensemble_estimators, problem_type="classification", n_jobs=0
+        )
+
+
+@pytest.mark.parametrize("problem_type", ["classification", "regression"])
+def test_ensemblemodel_fitted_instance_survives_pickle_round_trip(
+    binary_classification_data, problem_type
+):
+    """Tests a fitted ensemble survives a joblib (pickle) round trip and keeps its type.
+
+    Args:
+        binary_classification_data: Feature matrix and target fixture
+        problem_type: Ensemble problem type
+
+    Asserts:
+        - The unpickled ensemble predicts identically to the original.
+        - isinstance(..., EnsembleModel) holds before and after pickling.
+        - is_classifier / is_regressor follow problem_type.
+        - clone keeps the parameters and score() works.
+    """
+    X, y = binary_classification_data
+    base = (
+        LogisticRegression() if problem_type == "classification" else LinearRegression()
+    )
+    ensemble = EnsembleModel(estimators=[base], problem_type=problem_type).fit(X, y)
+
+    buffer = io.BytesIO()
+    joblib.dump(ensemble, buffer)
+    buffer.seek(0)
+    restored = joblib.load(buffer)
+
+    if not np.array_equal(ensemble.predict(X), restored.predict(X)):
+        raise AssertionError()
+    if not isinstance(ensemble, EnsembleModel) or not isinstance(
+        restored, EnsembleModel
+    ):
+        raise AssertionError()
+    if clone(ensemble).get_params()["problem_type"] != problem_type:
+        raise AssertionError()
+    if not np.isfinite(restored.score(X, y)):
+        raise AssertionError()
+    if is_classifier(restored) != (problem_type == "classification"):
+        raise AssertionError()
+    if is_regressor(restored) != (problem_type == "regression"):
+        raise AssertionError()
+
+
+def test_ensemblemodel_fit_without_eval_set_disables_boosting_early_stopping(
+    regression_data,
+):
+    """Tests fitting without eval_set works when base boosters configure early stopping.
+
+    Args:
+        regression_data: Feature matrix and target fixture
+
+    Asserts:
+        - fit succeeds instead of raising LightGBM's "at least one dataset" error
+        - One UserWarning per booster says early stopping was turned off
+        - The caller's estimators keep their early-stopping params
+    """
+    X, y = regression_data
+    lgbm = LGBMRegressor(n_estimators=10, early_stopping_round=5, verbose=-1)
+    xgb = XGBRegressor(n_estimators=10, early_stopping_rounds=5)
+
+    with pytest.warns(UserWarning, match="early stopping") as record:
+        EnsembleModel([lgbm, xgb], problem_type="regression").fit(X, y)
+
+    if sum("early stopping" in str(w.message) for w in record) != 2:
+        raise AssertionError([str(w.message) for w in record])
+    if lgbm.get_params()["early_stopping_round"] != 5:
+        raise AssertionError()
+    if xgb.get_params()["early_stopping_rounds"] != 5:
+        raise AssertionError()
+
+
+def test_ensemblemodel_predict_raises_when_a_base_model_cannot_score_x(regression_data):
+    """Tests a failing base model propagates instead of being silently skipped.
+
+    Args:
+        regression_data: Feature matrix and target fixture
+
+    Asserts:
+        - predict raises ValueError when one base model was fitted on other columns
+        - on_estimator_error="skip" warns and predicts with the remaining model only
+    """
+    X, y = regression_data
+    other_columns = X.rename(columns=lambda c: f"{c}_other")
+    good = LinearRegression().fit(X, y)
+    foreign = LinearRegression().fit(other_columns, y)
+
+    ensemble = EnsembleModel([LinearRegression()], problem_type="regression").fit(X, y)
+    ensemble.fitted_estimators_ = [good, foreign]
+    ensemble._weights_normalized = np.array([0.5, 0.5])
+
+    with pytest.raises(ValueError):
+        ensemble.predict(X)
+
+    ensemble.on_estimator_error = "skip"
+    with pytest.warns(UserWarning, match="Skipping base estimator 1"):
+        skipped = ensemble.predict(X)
+    if not np.allclose(skipped, good.predict(X)):
+        raise AssertionError()
+
+
+def test_ensemblemodel_stacking_meta_learner_trusts_memorising_model_less_out_of_fold():
+    """Tests stacking meta-features are out-of-fold, so a memorising base model is not overtrusted.
+
+    A fully grown decision tree reproduces the training target exactly, so a
+    meta-learner fitted on in-sample predictions puts all weight on it. With
+    out-of-fold meta-features the tree's noise shows and its weight drops.
+
+    Asserts:
+        - The meta-learner's coefficient on the tree is lower than the in-sample fit's
+    """
+    rng = np.random.default_rng(17)
+    X = pd.DataFrame({"x0": rng.normal(size=400), "x1": rng.normal(size=400)})
+    y = pd.Series(2.0 * X["x0"] - X["x1"] + rng.normal(scale=1.0, size=400))
+
+    ensemble = EnsembleModel(
+        [DecisionTreeRegressor(random_state=0), LinearRegression()],
+        problem_type="regression",
+        meta_learner=LinearRegression(),
+    ).fit(X, y)
+
+    in_sample = LinearRegression().fit(ensemble._generate_meta_features(X), y)
+    oof_tree_weight = ensemble.fitted_meta_learner_.coef_[0]
+    if not oof_tree_weight < in_sample.coef_[0] - 0.3:
+        raise AssertionError((oof_tree_weight, in_sample.coef_[0]))

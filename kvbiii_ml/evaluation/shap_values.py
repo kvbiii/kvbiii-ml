@@ -77,8 +77,11 @@ def _order_x_for_estimator(X: pd.DataFrame, estimator: BaseEstimator) -> pd.Data
         pd.DataFrame: Reordered features if the estimator exposes feature
         names; otherwise returns X unchanged.
     """
-    feature_names = getattr(estimator, "feature_names_in_", None) or getattr(
-        estimator, "feature_names_", None
+    feature_names_in = getattr(estimator, "feature_names_in_", None)
+    feature_names = (
+        feature_names_in
+        if feature_names_in is not None
+        else getattr(estimator, "feature_names_", None)
     )
     return X[feature_names] if feature_names is not None else X
 

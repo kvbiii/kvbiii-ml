@@ -18,6 +18,10 @@ from kvbiii_ml.data_processing.preprocessing.categorical_encoding.string_similar
     StringSimilarityEncoder,
     StringSimilarityEncoderWithOriginal,
 )
+from kvbiii_ml.data_processing.preprocessing.categorical_encoding.target_encoder import (
+    TargetEncoder,
+    TargetEncoderWithOriginal,
+)
 from kvbiii_ml.data_processing.preprocessing.categorical_encoding.woe_encoder import (
     WoEEncoder,
     WoEEncoderWithOriginal,
@@ -34,6 +38,8 @@ __all__ = [
     "RareLabelEncoderWithOriginal",
     "StringSimilarityEncoder",
     "StringSimilarityEncoderWithOriginal",
+    "TargetEncoder",
+    "TargetEncoderWithOriginal",
     "WoEEncoder",
     "WoEEncoderWithOriginal",
 ]

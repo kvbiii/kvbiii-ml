@@ -1,8 +1,6 @@
 from collections.abc import Generator
 from contextlib import contextmanager
 from copy import deepcopy
-from pathlib import Path
-import sys
 import warnings
 
 import joblib.parallel
@@ -12,10 +10,10 @@ from sklearn.base import BaseEstimator
 from sklearn.inspection import permutation_importance
 from tqdm import tqdm
 
-sys.path.append(str(Path(__file__).resolve().parents[3]))
-from kvbiii_ml.data_processing.feature_selection.pipeline_dependency import (
+from kvbiii_ml.data_processing.preprocessing.pipeline_dependency import (
     PipelineDependencyGraph,
 )
+from kvbiii_ml.modeling.training.base_trainer import to_metric_proba
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
 
@@ -156,8 +154,6 @@ class PermutationRecursiveFeatureElimination:
             ValueError: When protected features are not found in the post-pipeline
                 column set.
         """
-        X = X.reset_index(drop=True)
-        y = pd.Series(y).reset_index(drop=True)
         all_raw_features: list[str] = sorted(X.columns.tolist())
 
         summary_df: dict[str, list | pd.DataFrame] = {
@@ -372,7 +368,7 @@ class PermutationRecursiveFeatureElimination:
         def _scorer(estimator: BaseEstimator, X: pd.DataFrame, y: np.ndarray) -> float:
             """Sklearn-compatible scorer wrapping the user metric."""
             pred = (
-                estimator.predict_proba(X)
+                to_metric_proba(estimator.predict_proba(X))
                 if is_classification
                 else estimator.predict(X)
             )
@@ -667,8 +663,6 @@ class PermutationRecursiveFeatureElimination:
 
 
 if __name__ == "__main__":
-    import sys
-    from pathlib import Path
 
     import numpy as np
     import pandas as pd
@@ -681,7 +675,6 @@ if __name__ == "__main__":
     from sklearn.model_selection import KFold, StratifiedKFold
     from sklearn.pipeline import Pipeline
 
-    sys.path.append(str(Path(__file__).resolve().parents[3]))
     from kvbiii_ml.data_processing.preprocessing.outlier_handling.winsorizer_trimmer import (
         WinsorizerWithOriginal,
     )

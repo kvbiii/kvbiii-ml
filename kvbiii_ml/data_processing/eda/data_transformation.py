@@ -34,7 +34,7 @@ class DataTransformer:
         if numerical_cols:
             if verbose:
                 num_start_mem = df.memory_usage(deep=True).sum() / 1024**2
-            downcaster = NumericalDowncaster(columns=numerical_cols)
+            downcaster = NumericalDowncaster(variables=numerical_cols)
             df = downcaster.fit_transform(df)
             if verbose:
                 num_end_mem = df.memory_usage(deep=True).sum() / 1024**2
@@ -48,7 +48,7 @@ class DataTransformer:
             if verbose:
                 cat_start_mem = df.memory_usage(deep=True).sum() / 1024**2
             aligner = CategoricalAligner(
-                categorical_features=categorical_features, warn_on_unknown=False
+                variables=categorical_features, warn_on_unknown=False
             )
             df = aligner.fit_transform(df)
             if verbose:

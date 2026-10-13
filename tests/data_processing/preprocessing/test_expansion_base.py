@@ -2,11 +2,17 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from kvbiii_ml.data_processing.preprocessing.categorical_encoding.target_encoder import (
+    TargetEncoderWithOriginal,
+)
 from kvbiii_ml.data_processing.preprocessing.categorical_encoding.woe_encoder import (
     WoEEncoderWithOriginal,
 )
 from kvbiii_ml.data_processing.preprocessing.discretisation.equal_width_discretiser import (
     EqualWidthDiscretiserWithOriginal,
+)
+from kvbiii_ml.data_processing.preprocessing.discretisation.kbins_discretiser import (
+    KBinsDiscretiserWithOriginal,
 )
 from kvbiii_ml.data_processing.preprocessing.outlier_handling.outlier_trimmer import (
     OutlierTrimmerWithOriginal,
@@ -43,6 +49,20 @@ CONTRACT_CASES = [
         "woe_categorical_data",
         ["categorical_1", "categorical_2"],
         id="woe_encoder",
+    ),
+    pytest.param(
+        KBinsDiscretiserWithOriginal,
+        {"variables": ["numeric_1", "numeric_2"], "n_bins": 4},
+        "numeric_positive_data",
+        ["numeric_1", "numeric_2"],
+        id="kbins_discretiser",
+    ),
+    pytest.param(
+        TargetEncoderWithOriginal,
+        {"variables": ["categorical_1", "categorical_2"]},
+        "woe_categorical_data",
+        ["categorical_1", "categorical_2"],
+        id="target_encoder",
     ),
 ]
 

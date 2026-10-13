@@ -1,3 +1,4 @@
+import copy
 import warnings
 from typing import ClassVar
 
@@ -7,6 +8,10 @@ import pandas as pd
 from sklearn.base import BaseEstimator
 from sklearn.model_selection import KFold
 
+from kvbiii_ml.modeling.training.base_trainer import (
+    order_x_for_estimator,
+    to_metric_proba,
+)
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
 warnings.filterwarnings(
@@ -31,9 +36,9 @@ class EnsembleWeightTunerCV:
     rewarding a weight vector that only exploits noise in one fixed pooled
     sample. After the search, the winning weights are chosen by comparing
     the search result against uniform averaging and against each single
-    estimator on that same robust score, so tuning can never hand back
-    weights that score worse than simply averaging the estimators on the
-    evidence it was given.
+    estimator on that same penalized score: whichever scores best wins
+    outright, so tuning can never hand back weights that score worse than
+    simply averaging the estimators on the evidence it was given.
     """
 
     MIN_WEIGHT_MASS: ClassVar[float] = 1e-6
@@ -46,6 +51,7 @@ class EnsembleWeightTunerCV:
         n_trials: int = 50,
         seed: int = 17,
         allow_negative_weights: bool = False,
+        verbose: bool = True,
     ) -> None:
         """Initialize the tuner.
 
@@ -55,20 +61,30 @@ class EnsembleWeightTunerCV:
             n_trials (int): Number of Optuna trials. Defaults to 50.
             seed (int): Random seed for the TPE sampler. Defaults to 17.
             allow_negative_weights (bool): Whether to allow negative blending weights. Defaults to False.
+            verbose (bool): Whether to print the tuner's own start, per-trial, and
+                finish logs. Independent of ``cross_validator.verbose``: the tuner
+                fits on a private silent copy of the trainer, so the trainer passed
+                in is never modified. Defaults to True.
         """
         self.estimators = list(estimators)
         self.cross_validator = cross_validator
         self.n_trials = n_trials
         self.seed = seed
         self.allow_negative_weights = allow_negative_weights
+        self.verbose = verbose
         self.fold_std_penalty = self.FOLD_STD_PENALTY
         self.problem_type = cross_validator.problem_type
         self.metric_fn = cross_validator.metric_fn
         self.metric_type = cross_validator.metric_type
         self.metric_direction = cross_validator.metric_direction
+        self.metric_name = cross_validator.metric_name
         self.best_weights: np.ndarray | None = None
         self.best_score_: float | None = None
         self.selection_source_: str | None = None
+        self.baseline_name_: str | None = None
+        self.baseline_score_: float | None = None
+        self.n_baselines_: int | None = None
+        self.optimized_score_: float | None = None
 
     def tune(self, X: pd.DataFrame, y: pd.Series) -> optuna.study.Study:
         """Run Optuna to find blending weights that beat naive baselines on cross-validated evidence.
@@ -77,28 +93,48 @@ class EnsembleWeightTunerCV:
             X (pd.DataFrame): Feature matrix.
             y (pd.Series): Target vector.
 
+        The cross-validation runs on a shallow copy of ``cross_validator`` with
+        its own result lists and ``verbose=False``, so after ``tune`` the trainer
+        you passed in still holds whatever it held before (its
+        ``fitted_estimators_`` are not overwritten) and its ``verbose`` flag is
+        never touched, which also makes concurrent use of one trainer safe.
+
         Returns:
-            optuna.study.Study: Completed study. Best weights are stored in
-                ``self.best_weights``; ``self.best_score_`` and
-                ``self.selection_source_`` record what was selected and why.
+            optuna.study.Study: Completed study. The selected weights are stored in
+                ``self.best_weights``, their score in ``self.best_score_`` and the
+                winner's origin in ``self.selection_source_`` (``"optimized"`` or a
+                baseline name such as ``"uniform"`` / ``"single_estimator_<i>"``).
+                The study and the selection can disagree: when a baseline wins,
+                ``study.best_value``/``study.best_params`` describe the best searched
+                trial, not the weights returned, and ``self.best_score_`` (the
+                fold-std penalised score of the selected weights) is the number to
+                report. Read ``self.best_weights``/``self.best_score_``, never
+                ``study.best_*``, for the result.
         """
         X, y = self.check_x(X), self.check_y(y)
-        y_true, preds_list, fold_boundaries = self._perform_cv(X, y)
-        candidates = self._baseline_candidates(len(self.estimators))
-        study = self._create_study()
-        self._enqueue_baselines(study, candidates)
-        study.optimize(
-            lambda trial: self._objective(trial, y_true, preds_list, fold_boundaries),
-            n_trials=self.n_trials,
-        )
-        self.best_weights, self.best_score_, self.selection_source_ = self._select_best(
-            study, y_true, preds_list, fold_boundaries, candidates
-        )
-        if self.cross_validator.verbose:
-            print(
-                f"[EnsembleWeightTunerCV] Selected '{self.selection_source_}' weights "
-                f"(score={self.best_score_:.5f}): {np.round(self.best_weights, 4)}"
+        previous_verbosity = optuna.logging.get_verbosity()
+        optuna.logging.set_verbosity(optuna.logging.WARNING)
+        try:
+            self._log_start()
+            y_true, preds_list, fold_boundaries = self._perform_cv(X, y)
+            candidates = self._baseline_candidates(len(self.estimators))
+            study = self._create_study()
+            self._enqueue_baselines(study, candidates)
+            study.optimize(
+                lambda trial: self._objective(
+                    trial, y_true, preds_list, fold_boundaries
+                ),
+                n_trials=self.n_trials,
+                callbacks=[self._log_trial] if self.verbose else None,
             )
+            self.best_weights, self.best_score_, self.selection_source_ = (
+                self._select_best(
+                    study, y_true, preds_list, fold_boundaries, candidates
+                )
+            )
+            self._log_finish()
+        finally:
+            optuna.logging.set_verbosity(previous_verbosity)
         return study
 
     @staticmethod
@@ -197,46 +233,59 @@ class EnsembleWeightTunerCV:
         return pd.Series(blended, index=first.index)
 
     def _collect_fold_predictions(
-        self, X: pd.DataFrame, splits: list[tuple[np.ndarray, np.ndarray]]
+        self,
+        X: pd.DataFrame,
+        splits: list[tuple[np.ndarray, np.ndarray]],
+        cross_validator: CrossValidationTrainer,
     ) -> pd.Series | pd.DataFrame:
         """Applies each fold's fitted pipeline and estimator to that fold's validation split.
 
         Args:
             X (pd.DataFrame): Full feature matrix.
             splits (list[tuple[np.ndarray, np.ndarray]]): CV train/validation index pairs.
+            cross_validator (CrossValidationTrainer): Trainer copy just fitted on
+                this estimator.
 
         Returns:
-            pd.Series | pd.DataFrame: This estimator's pooled OOF predictions, in fold order.
+            pd.Series | pd.DataFrame: This estimator's pooled OOF predictions, in fold
+                order: positive-class probabilities (binary), a probability frame
+                (multiclass) or predictions (regression).
         """
         est_preds = []
         for (_, val_idx), fitted_est, fold_pipeline in zip(
             splits,
-            self.cross_validator.fitted_estimators_,
-            self.cross_validator.fitted_pipelines_,
+            cross_validator.fitted_estimators_,
+            cross_validator.fitted_pipelines_,
         ):
-            X_valid = CrossValidationTrainer._transform_with_pipeline(
-                fold_pipeline, X.iloc[val_idx]
+            index = X.index[val_idx]
+            X_valid = order_x_for_estimator(
+                CrossValidationTrainer._transform_with_pipeline(
+                    fold_pipeline, X.iloc[val_idx]
+                ),
+                fitted_est,
             )
             if self.problem_type == "classification":
-                proba = fitted_est.predict_proba(X_valid)
-                if proba.shape[1] == 2:
-                    pred = pd.Series(proba[:, 1], index=X.iloc[val_idx].index)
-                else:
-                    pred = pd.DataFrame(proba, index=X.iloc[val_idx].index)
-            else:
-                pred = pd.Series(
-                    fitted_est.predict(X_valid), index=X.iloc[val_idx].index
+                proba = to_metric_proba(fitted_est.predict_proba(X_valid))
+                pred = (
+                    pd.Series(proba, index=index)
+                    if proba.ndim == 1
+                    else pd.DataFrame(proba, index=index)
                 )
+            else:
+                pred = pd.Series(fitted_est.predict(X_valid), index=index)
             est_preds.append(pred)
         return pd.concat(est_preds)
 
     def _create_study(self) -> optuna.study.Study:
-        """Create an Optuna study with a TPE sampler and a pruner matched to per-fold reporting.
+        """Create an Optuna study with a TPE sampler and no pruning.
 
-        MedianPruner (rather than HyperbandPruner) is used because trials
-        only report one intermediate value per CV fold -- a handful of
-        steps -- which is the regime MedianPruner targets, unlike Hyperband's
-        many-step resource allocation designed for iterative training curves.
+        Each trial only slices OOF predictions already cached once in
+        ``_perform_cv`` and evaluates a metric on them -- there is no
+        iterative, per-step cost to cut short, unlike the training-curve
+        scenarios pruners are designed for. Pruning here would risk
+        discarding a weight vector based on one or two noisy folds before it
+        has a chance to average out across all folds, for no real compute
+        saving.
 
         Returns:
             optuna.study.Study: Configured study.
@@ -244,11 +293,10 @@ class EnsembleWeightTunerCV:
         sampler = optuna.samplers.TPESampler(
             seed=self.seed, n_startup_trials=25, multivariate=True
         )
-        pruner = optuna.pruners.MedianPruner(n_startup_trials=10, n_warmup_steps=1)
         return optuna.create_study(
             direction=self.metric_direction,
             sampler=sampler,
-            pruner=pruner,
+            pruner=optuna.pruners.NopPruner(),
             study_name="Ensemble weight tuning",
         )
 
@@ -264,6 +312,114 @@ class EnsembleWeightTunerCV:
         """
         for weights in candidates.values():
             study.enqueue_trial({f"w{i}": float(w) for i, w in enumerate(weights)})
+
+    def _explain_baseline_fallback(self) -> str:
+        """Explains why a baseline weight vector was kept over the searched result.
+
+        Returns:
+            str: Human-readable reason, tailored to whether the search produced no
+                usable candidate at all or simply scored lower than the baseline.
+        """
+        label = (
+            "uniform averaging"
+            if self.baseline_name_ == "uniform"
+            else f"the '{self.baseline_name_}' baseline"
+        )
+        if self.optimized_score_ is None:
+            return (
+                f"No searched weight vector produced a valid, non-degenerate score, "
+                f"so {label} (score={self.baseline_score_:.5f}) was kept."
+            )
+        return (
+            f"The search's best weights scored {self.optimized_score_:.5f}, which "
+            f"does not beat {label} (score={self.baseline_score_:.5f}), so {label} "
+            f"was kept."
+        )
+
+    def _format_weights(self, weights: np.ndarray) -> dict[str, float]:
+        """Labels a weight vector with each estimator's class name for logging.
+
+        Args:
+            weights (np.ndarray): Weight vector aligned with ``self.estimators``.
+
+        Returns:
+            dict[str, float]: Mapping from ``"<index> (<ClassName>)"`` to the
+                weight rounded to four decimals.
+        """
+        return {
+            f"{i} ({type(estimator).__name__})": round(float(weight), 4)
+            for i, (estimator, weight) in enumerate(zip(self.estimators, weights))
+        }
+
+    def _log_finish(self) -> None:
+        """Prints the final weight-selection summary when verbose mode is enabled."""
+        if not self.verbose:
+            return
+        print(
+            f"\n🎯 Best {self.metric_name}: {self.best_score_:.5f} "
+            f"(selected: '{self.selection_source_}')"
+        )
+        if self.selection_source_ == "optimized":
+            if self.n_baselines_ == 1:
+                print(
+                    f"✨ Search beat the only baseline ('{self.baseline_name_}', "
+                    f"scored {self.baseline_score_:.5f})."
+                )
+            else:
+                print(
+                    f"✨ Search beat all {self.n_baselines_} baseline candidates "
+                    f"(strongest: '{self.baseline_name_}' scored "
+                    f"{self.baseline_score_:.5f})."
+                )
+        else:
+            print(f"🛑 {self._explain_baseline_fallback()}")
+        print(f"🏆 Best weights: {self._format_weights(self.best_weights)}")
+
+    def _log_start(self) -> None:
+        """Prints a search-start banner when verbose mode is enabled."""
+        if not self.verbose:
+            return
+        names = [type(estimator).__name__ for estimator in self.estimators]
+        print(
+            f"🔍 Starting ensemble weight search with {self.n_trials} trials via "
+            f"cross-validation, target metric: {self.metric_name} "
+            f"({self.metric_direction}).\n"
+            f"🎛️  Blending {len(self.estimators)} estimators: {names}"
+        )
+
+    def _log_trial(
+        self, study: optuna.study.Study, trial: optuna.trial.FrozenTrial
+    ) -> None:
+        """Prints a one-line summary for a finished trial.
+
+        Registered as an Optuna study callback, so it fires once per trial in
+        place of Optuna's own default per-trial logging, which is muted for
+        the duration of ``tune()`` in favor of formatting consistent with the
+        rest of the package.
+
+        Args:
+            study (optuna.study.Study): The study being optimized.
+            trial (optuna.trial.FrozenTrial): The trial that just finished.
+        """
+        duration = (
+            (trial.datetime_complete - trial.datetime_start).total_seconds()
+            if trial.datetime_complete and trial.datetime_start
+            else float("nan")
+        )
+        prefix = f"Trial {trial.number + 1}/{self.n_trials}"
+        if trial.state == optuna.trial.TrialState.PRUNED:
+            print(f"✂️  {prefix} pruned ({duration:.2f}s)")
+            return
+        if trial.state != optuna.trial.TrialState.COMPLETE:
+            print(f"⚠️  {prefix} {trial.state.name.lower()} ({duration:.2f}s)")
+            return
+        weights = np.round(self._trial_weights(trial), 4).tolist()
+        marker = "🌟" if study.best_trial.number == trial.number else "🔁"
+        print(
+            f"{marker} {prefix} | {self.metric_name}: {trial.value:.6f} | "
+            f"Best: {study.best_value:.6f} (trial {study.best_trial.number + 1}) | "
+            f"{duration:.2f}s | weights: {weights}"
+        )
 
     def _normalize_weights(self, weights: np.ndarray) -> np.ndarray | None:
         """Rescales weights so they sum to exactly 1, preserving their sign.
@@ -318,9 +474,7 @@ class EnsembleWeightTunerCV:
             raise optuna.TrialPruned(
                 "Degenerate weight vector: weights summed too close to zero."
             )
-        score = self._score_weights(
-            weights, y_true, preds_list, fold_boundaries, trial=trial
-        )
+        score = self._score_weights(weights, y_true, preds_list, fold_boundaries)
         if score is None:
             raise optuna.TrialPruned(
                 "No cross-validation fold produced a valid metric for these weights."
@@ -334,11 +488,12 @@ class EnsembleWeightTunerCV:
 
         Applies each fold's fitted pipeline to the validation split before calling
         the estimator, ensuring consistency with training-time transformations.
-        Each estimator's own cross-validation fit is temporarily silenced so N
-        estimators do not each reproduce the trainer's full per-iteration
-        boosting logs; the trainer's original verbosity is restored afterwards
-        and reused here to decide whether a one-line OOF summary is printed
-        per estimator instead.
+        Each estimator is fitted on a silent shallow copy of the trainer,
+        regardless of the tuner's own ``verbose`` setting, so N estimators do
+        not each reproduce the trainer's full per-iteration boosting logs and
+        the caller's trainer is left untouched. Whether a one-line
+        OOF summary is printed per estimator instead is controlled by the
+        tuner's own ``verbose`` flag.
 
         Args:
             X (pd.DataFrame): Feature matrix.
@@ -356,24 +511,29 @@ class EnsembleWeightTunerCV:
         ).tolist()
         y_valid_true = pd.concat([y.iloc[val_idx] for _, val_idx in splits])
         preds_per_estimator = []
-        report_summary = bool(self.cross_validator.verbose)
-        original_verbose = self.cross_validator.verbose
+        cross_validator = self._private_trainer()
 
         for estimator in self.estimators:
-            self.cross_validator.verbose = False
-            try:
-                self.cross_validator.fit(estimator, X, y)
-            finally:
-                self.cross_validator.verbose = original_verbose
-
-            pooled_preds = self._collect_fold_predictions(X, splits)
+            cross_validator.fit(estimator, X, y)
+            pooled_preds = self._collect_fold_predictions(X, splits, cross_validator)
             preds_per_estimator.append(pooled_preds)
-            if report_summary:
+            if self.verbose:
                 self._summarize_oof(
                     estimator, y_valid_true, pooled_preds, fold_boundaries
                 )
 
         return y_valid_true, preds_per_estimator, fold_boundaries
+
+    def _private_trainer(self) -> CrossValidationTrainer:
+        """Return a silent shallow copy of the trainer with its own result lists."""
+        trainer = copy.copy(self.cross_validator)
+        trainer.verbose = False
+        trainer.fit_verbose = False
+        trainer.train_scores_ = []
+        trainer.valid_scores_ = []
+        trainer.fitted_estimators_ = []
+        trainer.fitted_pipelines_ = []
+        return trainer
 
     def _score_weights(
         self,
@@ -381,8 +541,8 @@ class EnsembleWeightTunerCV:
         y_true: pd.Series,
         preds_list: list[pd.Series | pd.DataFrame],
         fold_boundaries: list[int],
-        trial: optuna.Trial | None = None,
-    ) -> float | None:
+        return_fold_scores: bool = False,
+    ) -> float | None | tuple[float | None, list[float]]:
         """Scores one weight vector as mean-minus-std across cross-validation folds.
 
         Evaluating per fold instead of on the pooled OOF set discourages
@@ -395,46 +555,42 @@ class EnsembleWeightTunerCV:
             y_true (pd.Series): OOF targets with preserved fold order.
             preds_list (list[pd.Series | pd.DataFrame]): Per-estimator OOF predictions.
             fold_boundaries (list[int]): Cumulative per-fold row counts for slicing.
-            trial (optuna.Trial | None): Active trial for pruning/reporting. Defaults to None.
+            return_fold_scores (bool): When True, also return the raw (unpenalized)
+                per-fold metric values alongside the aggregate score. Defaults to False.
 
         Returns:
-            float | None: Penalized aggregate score, or None if no fold produced a
-                valid metric (e.g. a fold contains a single class for Roc AUC).
-
-        Raises:
-            optuna.TrialPruned: When ``trial`` determines the running score is
-                worse than the median of prior trials at the same fold step.
+            float | None | tuple[float | None, list[float]]: Penalized aggregate
+                score, or None if no fold produced a valid metric (e.g. a fold
+                contains a single class for Roc AUC). When ``return_fold_scores``
+                is True, returns ``(aggregate_score, fold_scores)`` instead.
         """
         blended = self._blend_predictions(preds_list, weights)
         if self.problem_type == "classification" and self.metric_type == "preds":
             blended = self._threshold_predictions(blended)
 
         fold_scores: list[float] = []
-        for step, (start, end) in enumerate(
-            zip(fold_boundaries[:-1], fold_boundaries[1:])
-        ):
+        for start, end in zip(fold_boundaries[:-1], fold_boundaries[1:]):
             fold_y_true = y_true.iloc[start:end]
             fold_pred = blended.iloc[start:end]
             try:
-                fold_scores.append(float(self.metric_fn(fold_y_true, fold_pred)))
+                fold_scores.append(
+                    float(self.metric_fn(fold_y_true, fold_pred.to_numpy()))
+                )
             except ValueError:
                 continue
-            if trial is not None:
-                trial.report(float(np.mean(fold_scores)), step=step)
-                if trial.should_prune():
-                    raise optuna.TrialPruned()
 
         if not fold_scores:
-            return None
+            return (None, []) if return_fold_scores else None
 
         scores = np.array(fold_scores)
         penalty = self.fold_std_penalty * float(scores.std())
         mean_score = float(scores.mean())
-        return (
+        aggregate_score = (
             mean_score - penalty
             if self.metric_direction == "maximize"
             else mean_score + penalty
         )
+        return (aggregate_score, fold_scores) if return_fold_scores else aggregate_score
 
     def _select_best(
         self,
@@ -448,7 +604,9 @@ class EnsembleWeightTunerCV:
 
         Guarantees the tuner never returns weights that score worse, on the
         same cross-validated evidence, than uniform averaging or the single
-        best estimator.
+        best estimator: the search result and every baseline are scored with
+        the same mean-minus-std penalized metric, and whichever scores best
+        (highest to maximize, lowest to minimize) is returned outright.
 
         Args:
             study (optuna.study.Study): Completed Optuna study.
@@ -458,31 +616,21 @@ class EnsembleWeightTunerCV:
             candidates (dict[str, np.ndarray]): Baseline weight vectors to compare against.
 
         Returns:
-            tuple[np.ndarray, float, str]: Winning weights, its score, and a label
-                identifying whether the search result or a baseline was chosen.
+            tuple[np.ndarray, float, str]: Winning weights, its penalized score, and
+                a label identifying whether the search result or a baseline was chosen.
 
         Raises:
             RuntimeError: If no weight vector, including every baseline,
                 produced a valid metric on any fold.
+
+        Note:
+            Also records ``baseline_name_``, ``baseline_score_``, and
+            ``optimized_score_`` on ``self`` so ``_log_finish`` can explain
+            the outcome.
         """
         n = len(self.estimators)
         results: dict[str, tuple[np.ndarray, float]] = {}
-
-        completed_trials = [
-            t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE
-        ]
-        if completed_trials:
-            optimized_raw = np.array(
-                [study.best_params[f"w{i}"] for i in range(n)], dtype=float
-            )
-            optimized_weights = self._normalize_weights(optimized_raw)
-            if optimized_weights is not None:
-                results["optimized"] = (optimized_weights, study.best_value)
-        else:
-            warnings.warn(
-                "All Optuna trials were pruned; falling back to baseline weight vectors.",
-                stacklevel=2,
-            )
+        self.optimized_score_ = None
 
         for name, weights in candidates.items():
             score = self._score_weights(weights, y_true, preds_list, fold_boundaries)
@@ -495,13 +643,48 @@ class EnsembleWeightTunerCV:
                 "failed to produce a valid metric."
             )
 
-        best_name = (
+        baseline_name = (
             max(results, key=lambda k: results[k][1])
             if self.metric_direction == "maximize"
             else min(results, key=lambda k: results[k][1])
         )
-        best_weights, best_score = results[best_name]
-        return best_weights, best_score, best_name
+        baseline_weights, baseline_score = results[baseline_name]
+        self.baseline_name_ = baseline_name
+        self.baseline_score_ = baseline_score
+        self.n_baselines_ = len(results)
+
+        completed_trials = [
+            t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE
+        ]
+        if not completed_trials:
+            warnings.warn(
+                "All Optuna trials were pruned; falling back to baseline weight vectors.",
+                stacklevel=2,
+            )
+            return baseline_weights, baseline_score, baseline_name
+
+        optimized_raw = np.array(
+            [study.best_params[f"w{i}"] for i in range(n)], dtype=float
+        )
+        optimized_weights = self._normalize_weights(optimized_raw)
+        if optimized_weights is None:
+            return baseline_weights, baseline_score, baseline_name
+
+        optimized_score = self._score_weights(
+            optimized_weights, y_true, preds_list, fold_boundaries
+        )
+        if optimized_score is None:
+            return baseline_weights, baseline_score, baseline_name
+        self.optimized_score_ = optimized_score
+
+        beats_baseline = (
+            optimized_score > baseline_score
+            if self.metric_direction == "maximize"
+            else optimized_score < baseline_score
+        )
+        if beats_baseline:
+            return optimized_weights, optimized_score, "optimized"
+        return baseline_weights, baseline_score, baseline_name
 
     def _summarize_oof(
         self,
@@ -533,7 +716,7 @@ class EnsembleWeightTunerCV:
                 fold_scores.append(
                     float(
                         self.metric_fn(
-                            y_true.iloc[start:end], fold_pred.iloc[start:end]
+                            y_true.iloc[start:end], fold_pred.iloc[start:end].to_numpy()
                         )
                     )
                 )
@@ -561,6 +744,23 @@ class EnsembleWeightTunerCV:
         if isinstance(blended, pd.DataFrame):
             return blended.idxmax(axis=1)
         return (blended >= 0.5).astype(int)
+
+    def _trial_weights(self, trial: optuna.trial.FrozenTrial) -> np.ndarray:
+        """Recovers a trial's normalized blending weights for logging.
+
+        Args:
+            trial (optuna.trial.FrozenTrial): Completed trial to read weights from.
+
+        Returns:
+            np.ndarray: Normalized weights, or the raw suggested values when
+                normalization is degenerate. A completed trial should not hit
+                that fallback, since ``_objective`` prunes degenerate weight
+                vectors before returning a value.
+        """
+        n = len(self.estimators)
+        raw = np.array([trial.params[f"w{i}"] for i in range(n)], dtype=float)
+        normalized = self._normalize_weights(raw)
+        return normalized if normalized is not None else raw
 
 
 if __name__ == "__main__":

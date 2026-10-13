@@ -2,6 +2,7 @@
 
 import numpy as np
 import pytest
+from sklearn.metrics import mean_poisson_deviance
 
 from kvbiii_ml.evaluation.metrics import (
     METRICS,
@@ -61,14 +62,14 @@ def test_metrics_dictionary_structure_is_valid():
     """Tests METRICS dictionary has proper structure for all defined metrics.
 
     Asserts:
-        - Each metric entry is a list with exactly 3 elements
+        - Each metric entry is a tuple with exactly 3 elements
         - First element is callable (metric function)
         - Second element is prediction type ('preds' or 'probs')
         - Third element is optimization direction ('minimize' or 'maximize')
     """
     for metric_name, metric_config in METRICS.items():
-        if not isinstance(metric_config, list):
-            raise AssertionError(f"Metric {metric_name} config must be list")
+        if not isinstance(metric_config, tuple):
+            raise AssertionError(f"Metric {metric_name} config must be tuple")
         if len(metric_config) != 3:
             raise AssertionError(f"Metric {metric_name} must have 3 config elements")
 
@@ -367,3 +368,24 @@ def test_roc_auc_metric_requires_probabilities(
 
 if __name__ == "__main__":
     print("Run this file with pytest to execute tests.")
+
+
+def test_metrics_registry_lists_count_deviances_and_no_phantom_probs_metric():
+    """Tests the count-target deviances are registered and no unknown name is flagged probs.
+
+    Asserts:
+        - Poisson and Tweedie deviance are "preds" metrics to minimize
+        - Poisson Deviance matches sklearn's mean_poisson_deviance
+        - "Mean Average Precision" (never implemented) is not in METRICS
+    """
+    for name in ("Poisson Deviance", "Tweedie Deviance"):
+        if METRICS[name][1:] != ("preds", "minimize"):
+            raise AssertionError(f"{name}: {METRICS[name][1:]}")
+    y_true, y_pred = np.array([0.0, 1.0, 3.0]), np.array([0.5, 1.0, 2.0])
+    if not np.isclose(
+        METRICS["Poisson Deviance"][0](y_true, y_pred),
+        mean_poisson_deviance(y_true, y_pred),
+    ):
+        raise AssertionError("Poisson Deviance mismatch")
+    if "Mean Average Precision" in METRICS:
+        raise AssertionError("phantom metric registered")

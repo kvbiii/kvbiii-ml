@@ -4,33 +4,54 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.utils.validation import check_is_fitted
+
+FLOAT32_EXACT_INT_LIMIT = 2**24
+FLOAT_PRECISIONS = ("lossless", "float32")
+LOSSLESS_RTOL = 0.0
+INTEGER_DTYPES = (np.int8, np.int16, np.int32)
 
 
 class NumericalDowncaster(BaseEstimator, TransformerMixin):
     """
     Transformer to downcast numerical columns to smaller dtypes to reduce memory usage.
+
+    Downcasting never changes a value by default: floats move to float32 only when
+    every value survives the round trip, and integer columns with missing values
+    become float32 only while float32 still represents every integer exactly
+    (absolute value up to 2**24), float64 otherwise.
     """
 
     def __init__(
         self,
-        columns: list[str] | None = None,
+        variables: list[str] | None = None,
         int_downcast: bool = True,
         float_downcast: bool = True,
+        float_precision: str = "lossless",
+        columns: list[str] | None = None,
     ):
         """
         Initialize the NumericalDowncaster.
 
         Args:
-            columns (list[str] | None, optional): List of column names to downcast.
-                If None, all numeric columns will be downcasted. Defaults to None.
+            variables (list[str] | None, optional): Column names to downcast. If None,
+                all numeric columns are downcast. Named ``variables`` so
+                ``build_restricted_pipeline`` can narrow it. Defaults to None.
             int_downcast (bool, optional): Whether to downcast integer types. Defaults to True.
-            float_downcast (bool, optional):
-                Whether to downcast float types to float32. Defaults to True.
+            float_downcast (bool, optional): Whether to downcast float types. Defaults to True.
+            float_precision (str, optional): ``"lossless"`` downcasts a float column to
+                float32 only when ``np.allclose(s, s.astype(np.float32), rtol=0, atol=0,
+                equal_nan=True)`` holds, i.e. no value changes, otherwise it stays as is
+                (checked again on every transformed frame). ``"float32"`` always
+                downcasts, accepting ~7 significant digits. Defaults to "lossless".
+            columns (list[str] | None, optional): Deprecated alias of ``variables``,
+                used only when ``variables`` is None. Defaults to None.
         """
-        self.columns = columns
+        self.variables = variables
         self.int_downcast = int_downcast
         self.float_downcast = float_downcast
-        self.dtype_map_ = None
+        self.float_precision = float_precision
+        self.columns = columns
 
     def fit(
         self, df: pd.DataFrame, _y: pd.Series | None = None
@@ -44,8 +65,21 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
 
         Returns:
             NumericalDowncaster: Fitted transformer.
+
+        Raises:
+            ValueError: If float_precision is not "lossless" or "float32".
         """
-        columns_to_process = self.columns if self.columns is not None else df.columns
+        if self.float_precision not in FLOAT_PRECISIONS:
+            raise ValueError(f"float_precision must be one of {FLOAT_PRECISIONS}.")
+        variables = self.variables
+        if variables is None and self.columns is not None:
+            warnings.warn(
+                "NumericalDowncaster(columns=...) is deprecated; use variables=... instead.",
+                FutureWarning,
+                stacklevel=2,
+            )
+            variables = self.columns
+        columns_to_process = variables if variables is not None else df.columns
         self.dtype_map_ = {
             col: self._get_optimal_dtype(df[col])
             for col in columns_to_process
@@ -62,19 +96,49 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
 
         Returns:
             pd.DataFrame: Transformed data with downcasted dtypes.
+
+        Raises:
+            NotFittedError: If called before fit.
         """
+        check_is_fitted(self, "dtype_map_")
         df = df.copy()
         for column, target_dtype in self.dtype_map_.items():
             if column in df.columns:
+                safe_dtype = self._get_safe_dtype(df[column], target_dtype)
                 try:
-                    df[column] = df[column].astype(target_dtype)
+                    df[column] = df[column].astype(safe_dtype)
                 except (ValueError, TypeError) as e:
                     warnings.warn(
-                        f"Failed to downcast column '{column}' to {target_dtype}: {e}",
+                        f"Failed to downcast column '{column}' to {safe_dtype}: {e}",
                         UserWarning,
                         stacklevel=2,
                     )
         return df
+
+    def _get_safe_dtype(self, series: pd.Series, target_dtype: Any) -> Any:
+        """
+        Adjust a learned dtype so the series being transformed loses no value.
+
+        An integer dtype becomes a float when the series has missing values (see
+        `_nan_integer_dtype`); a float32 target in lossless mode is skipped when this
+        series' values would not survive the cast.
+
+        Args:
+            series (pd.Series): Column data being transformed.
+            target_dtype (Any): Dtype learned during fit for this column.
+
+        Returns:
+            Any: Dtype safe to cast the series to.
+        """
+        if pd.api.types.is_integer_dtype(target_dtype) and series.isna().any():
+            return self._nan_integer_dtype(series)
+        if (
+            target_dtype is np.float32
+            and self.float_precision == "lossless"
+            and not self._is_float32_lossless(series)
+        ):
+            return series.dtype
+        return target_dtype
 
     def _get_optimal_dtype(self, series: pd.Series) -> Any:
         """
@@ -102,37 +166,55 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
             series (pd.Series): Integer series to downcast.
 
         Returns:
-            Any: Optimal signed integer dtype.
+            Any: Optimal signed integer dtype, or a float dtype when the (nullable)
+                series has missing values.
         """
         if series.isna().any():
-            return np.float32
+            return self._nan_integer_dtype(series)
 
         min_val, max_val = series.min(), series.max()
-
         return next(
             (
                 dtype
-                for dtype, info in [
-                    (np.int8, np.iinfo(np.int8)),
-                    (np.int16, np.iinfo(np.int16)),
-                    (np.int32, np.iinfo(np.int32)),
-                ]
-                if info.min <= min_val and max_val <= info.max
+                for dtype in INTEGER_DTYPES
+                if np.iinfo(dtype).min <= min_val and max_val <= np.iinfo(dtype).max
             ),
             np.int64,
         )
 
-    def _downcast_float(self, _series: pd.Series) -> Any:
+    def _downcast_float(self, series: pd.Series) -> Any:
         """
-        Downcast float series to float32.
+        Downcast a float series to float32 when allowed by ``float_precision``.
 
         Args:
-            _series (pd.Series): Float series to downcast.
+            series (pd.Series): Float series to downcast.
 
         Returns:
-            Any: float32 dtype.
+            Any: float32, or the original dtype when lossless mode would lose precision.
         """
-        return np.float32
+        if self.float_precision == "float32" or self._is_float32_lossless(series):
+            return np.float32
+        return series.dtype
+
+    @staticmethod
+    def _is_float32_lossless(series: pd.Series) -> bool:
+        """Whether every value of series survives a float32 round trip unchanged."""
+        values = series.to_numpy(dtype=np.float64, na_value=np.nan)
+        with np.errstate(over="ignore"):
+            as_float32 = values.astype(np.float32)
+        return bool(
+            np.allclose(
+                values, as_float32, rtol=LOSSLESS_RTOL, atol=0.0, equal_nan=True
+            )
+        )
+
+    @staticmethod
+    def _nan_integer_dtype(series: pd.Series) -> Any:
+        """Float dtype that holds an integer series with NaN exactly (float32 up to 2**24)."""
+        abs_max = series.abs().max()
+        if pd.isna(abs_max) or abs_max <= FLOAT32_EXACT_INT_LIMIT:
+            return np.float32
+        return np.float64
 
 
 if __name__ == "__main__":
@@ -160,9 +242,9 @@ if __name__ == "__main__":
     print(df_train.dtypes)
     print(f"\nOriginal memory: {df_train.memory_usage(deep=True).sum() / 1024:.2f} KB")
 
-    downcaster = NumericalDowncaster(["price", "mileage", "rating", "efficiency"]).fit(
-        df_train
-    )
+    downcaster = NumericalDowncaster(
+        variables=["price", "mileage", "rating", "efficiency"]
+    ).fit(df_train)
     transformed_train = downcaster.transform(df_train)
     transformed_test = downcaster.transform(df_test)
 

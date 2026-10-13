@@ -3,6 +3,7 @@ from typing import Literal
 
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.utils.validation import check_is_fitted
 
 DEFAULT_FILL_VALUE = "Unknown"
 FILL_STRATEGIES = ("mode", "constant")
@@ -16,19 +17,22 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
 
     def __init__(
         self,
-        categorical_features: list[str] | None = None,
+        variables: list[str] | None = None,
         fill_values: dict[str, str] | None = None,
         fill_strategy: Literal["mode", "constant"] = "constant",
         default_value: str = DEFAULT_FILL_VALUE,
         warn_on_unknown: bool = True,
+        categorical_features: list[str] | None = None,
     ):
         """
         Initialize the CategoricalAligner.
 
         Args:
-            categorical_features (list[str] | None, optional):
-                List of categorical features names. If None, auto-detects object
-                and category columns during fit. Defaults to None.
+            variables (list[str] | None, optional):
+                List of categorical features names. If None, auto-detects object,
+                string and category columns during fit (stored in
+                ``categorical_features_``). Named ``variables`` so
+                ``build_restricted_pipeline`` can narrow it. Defaults to None.
             fill_values (dict[str, str] | None, optional):
                 Feature-specific fill values for unknown categories, keyed by feature
                 name (e.g. {"color": "Puste"}). Features listed here always use their
@@ -44,14 +48,15 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
             warn_on_unknown (bool, optional):
                 Whether to raise warnings when unknown categories are found.
                 Defaults to True.
+            categorical_features (list[str] | None, optional): Deprecated alias of
+                ``variables``, used only when ``variables`` is None. Defaults to None.
         """
-        self.categorical_features = categorical_features
+        self.variables = variables
         self.fill_values = fill_values
         self.fill_strategy = fill_strategy
         self.default_value = default_value
         self.warn_on_unknown = warn_on_unknown
-        self.categories_ = {}
-        self.modes_ = {}
+        self.categorical_features = categorical_features
 
     @classmethod
     def create_fill_values(
@@ -90,6 +95,9 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
         """
         Fit the transformer by learning categories and modes from training data.
 
+        Every fit starts from scratch: ``categorical_features_``, ``categories_``
+        and ``modes_`` are rebuilt, and constructor parameters are never modified.
+
         Args:
             df (pd.DataFrame): Training data.
             _y (pd.Series | None, optional): Target (unused). Defaults to None.
@@ -106,11 +114,23 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
                 f"'{self.fill_strategy}'."
             )
         df = df.copy()
-        if self.categorical_features is None:
-            self.categorical_features = df.select_dtypes(
+        features = self.variables
+        if features is None and self.categorical_features is not None:
+            warnings.warn(
+                "CategoricalAligner(categorical_features=...) is deprecated; use "
+                "variables=... instead.",
+                FutureWarning,
+                stacklevel=2,
+            )
+            features = self.categorical_features
+        if features is None:
+            features = df.select_dtypes(
                 include=["object", "string", "category"]
             ).columns.tolist()
-        for feature in self.categorical_features:
+        self.categorical_features_ = list(features)
+        self.categories_: dict[str, list[str]] = {}
+        self.modes_: dict[str, str] = {}
+        for feature in self.categorical_features_:
             if feature not in df.columns:
                 continue
             mode_series = df[feature].mode(dropna=True)
@@ -136,7 +156,11 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
 
         Returns:
             pd.DataFrame: Transformed data with aligned categories.
+
+        Raises:
+            NotFittedError: If called before fit.
         """
+        check_is_fitted(self, "categories_")
         df = df.copy()
         for feature, categories in self.categories_.items():
             if feature not in df.columns:
@@ -203,7 +227,7 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
         if feature in fill_values:
             return fill_values[feature]
         if self.fill_strategy == "mode":
-            return self.modes_.get(feature, self.default_value)
+            return getattr(self, "modes_", {}).get(feature, self.default_value)
         return self.default_value
 
 

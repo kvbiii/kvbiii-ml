@@ -18,6 +18,10 @@ from kvbiii_ml.data_processing.preprocessing.discretisation.geometric_width_disc
     GeometricWidthDiscretiser,
     GeometricWidthDiscretiserWithOriginal,
 )
+from kvbiii_ml.data_processing.preprocessing.discretisation.kbins_discretiser import (
+    KBinsDiscretiserWithOriginal,
+    KBinsDiscretizer,
+)
 
 __all__ = [
     "ArbitraryDiscretiser",
@@ -30,4 +34,6 @@ __all__ = [
     "EqualWidthDiscretiserWithOriginal",
     "GeometricWidthDiscretiser",
     "GeometricWidthDiscretiserWithOriginal",
+    "KBinsDiscretiserWithOriginal",
+    "KBinsDiscretizer",
 ]

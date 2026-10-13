@@ -1,6 +1,11 @@
+from typing import Literal
+
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
+
+AUTO_DIGITS = "auto"
+MAX_AUTO_DECIMAL_DIGITS = 3
 
 
 class DigitsEncodingFeatureGenerator(BaseEstimator, TransformerMixin):
@@ -14,17 +19,31 @@ class DigitsEncodingFeatureGenerator(BaseEstimator, TransformerMixin):
     - Position -1 extracts '4' (first decimal place)
     - Position -2 extracts '5' (second decimal place)
 
-    The relevant digit positions per feature are determined automatically from
-    the min/max values seen during fitting.
+    Derived columns are named ``{original}_PREPROCESS_DIGIT_{n}`` for
+    non-negative positions and ``{original}_PREPROCESS_DIGIT_N{n}`` for
+    negative (decimal) positions - an ``N`` prefix replaces the minus sign so
+    generated feature names stay hyphen-free.
+
+    The digit positions extracted per feature can either be set explicitly
+    (``min_digits``/``max_digits`` as integers) or, by default, determined
+    automatically from the min/max values seen during fitting
+    (``min_digits`` and ``max_digits`` both ``"auto"``). In "auto" mode the
+    integer-part range is sized to the feature's actual magnitude with no
+    forced minimum, and the decimal-part range is capped at
+    ``MAX_AUTO_DECIMAL_DIGITS`` places, so a feature with values up to the
+    millions and five observed decimal places still only yields digits down
+    to the thousandths place.
     """
+
+    _suffix = "PREPROCESS_DIGIT"
 
     def __init__(
         self,
         features_names: list[str] | None = None,
         fill_value: int = -1,
         dtype: str = "int8",
-        min_digits: int = 2,
-        max_digits: int = 6,
+        min_digits: int | Literal["auto"] = AUTO_DIGITS,
+        max_digits: int | Literal["auto"] = AUTO_DIGITS,
     ) -> None:
         """
         Initialize the DigitsEncodingFeatureGenerator.
@@ -35,10 +54,15 @@ class DigitsEncodingFeatureGenerator(BaseEstimator, TransformerMixin):
             fill_value (int, optional): Value used for NaN entries. Defaults to -1.
             dtype (str, optional): Output dtype for the generated digit columns.
                 Defaults to "int8".
-            min_digits (int, optional): Minimum number of digit positions to
-                extract per feature. Defaults to 2.
-            max_digits (int, optional): Maximum number of digit positions to
-                extract per feature. Defaults to 6.
+            min_digits (int | Literal["auto"], optional): Minimum number of digit
+                positions to extract per feature, or ``"auto"`` to derive it from
+                the fitted data with no forced minimum. Must be ``"auto"`` iff
+                ``max_digits`` is too. Defaults to ``"auto"``.
+            max_digits (int | Literal["auto"], optional): Maximum number of digit
+                positions to extract per feature, or ``"auto"`` to derive it from
+                the fitted data, capping decimal places at
+                ``MAX_AUTO_DECIMAL_DIGITS``. Must be ``"auto"`` iff ``min_digits``
+                is too. Defaults to ``"auto"``.
         """
         self.features_names = features_names
         self.fill_value = fill_value
@@ -58,7 +82,15 @@ class DigitsEncodingFeatureGenerator(BaseEstimator, TransformerMixin):
 
         Returns:
             DigitsEncodingFeatureGenerator: The fitted generator instance.
+
+        Raises:
+            ValueError: When only one of min_digits/max_digits is "auto".
         """
+        if (self.min_digits == AUTO_DIGITS) != (self.max_digits == AUTO_DIGITS):
+            raise ValueError(
+                'min_digits and max_digits must either both be "auto" '
+                "or both be explicit integers."
+            )
         columns = self.features_names if self.features_names else list(df.columns)
         columns = [c for c in columns if pd.api.types.is_numeric_dtype(df[c])]
         self.feature_names_in_ = np.asarray(df.columns, dtype=object)
@@ -78,7 +110,7 @@ class DigitsEncodingFeatureGenerator(BaseEstimator, TransformerMixin):
             pd.DataFrame: Original features plus one column per extracted digit.
         """
         digit_data = {
-            f"{col}_d{position}": self._extract_digit(df[col], position)
+            self._column_name(col, position): self._extract_digit(df[col], position)
             for col, (start, end) in self.feature_configs_.items()
             for position in range(start, end)
         }
@@ -101,15 +133,37 @@ class DigitsEncodingFeatureGenerator(BaseEstimator, TransformerMixin):
             np.ndarray: Output feature names in the order produced by ``transform``.
         """
         generated = [
-            f"{col}_d{position}"
+            self._column_name(col, position)
             for col, (start, end) in self.feature_configs_.items()
             for position in range(start, end)
         ]
         return np.asarray(list(self.feature_names_in_) + generated, dtype=object)
 
+    def _column_name(self, col: str, position: int) -> str:
+        """
+        Build the derived column name for one digit position of one feature.
+
+        Args:
+            col (str): Source feature name.
+            position (int): Power of 10 identifying the digit (see class docstring).
+
+        Returns:
+            str: Derived column name, e.g. "price_PREPROCESS_DIGIT_2" for the
+                hundreds place or "price_PREPROCESS_DIGIT_N1" for the first
+                decimal place.
+        """
+        label = f"N{abs(position)}" if position < 0 else str(position)
+        return f"{col}_{self._suffix}_{label}"
+
     def _digit_range(self, series: pd.Series) -> tuple[int, int]:
         """
         Determine the (start, end) digit positions to extract for one feature.
+
+        When ``max_digits`` is ``"auto"`` the range is derived purely from the
+        observed data: the integer-part bound matches the feature's actual
+        magnitude and the decimal-part bound is capped at
+        ``MAX_AUTO_DECIMAL_DIGITS`` places. Otherwise the explicit
+        ``min_digits``/``max_digits`` bounds are applied.
 
         Args:
             series (pd.Series): Numeric series to analyze.
@@ -129,6 +183,9 @@ class DigitsEncodingFeatureGenerator(BaseEstimator, TransformerMixin):
         if (clean % 1 != 0).any():
             decimal_places = abs_values.astype(str).str.split(".").str[-1].str.len()
             min_power = -int(decimal_places.max())
+
+        if self.max_digits == AUTO_DIGITS:
+            return (max(min_power, -MAX_AUTO_DECIMAL_DIGITS), max_power)
 
         start = max(min_power, -self.max_digits // 2)
         end = min(max_power, self.max_digits // 2)

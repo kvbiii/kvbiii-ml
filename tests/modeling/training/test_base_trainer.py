@@ -2,11 +2,19 @@
 
 from unittest.mock import Mock, patch
 
+import lightgbm
 import numpy as np
 import pandas as pd
 import pytest
+from catboost import CatBoostClassifier
+from sklearn.ensemble import HistGradientBoostingClassifier
+from xgboost import XGBClassifier
 
-from kvbiii_ml.modeling.training.base_trainer import BaseTrainer
+from kvbiii_ml.modeling.training.base_trainer import (
+    VERBOSE_LOG_PERIOD,
+    BaseTrainer,
+    to_metric_proba,
+)
 
 
 def test_basetrainer_fit_estimator_basic_fitting(
@@ -362,5 +370,261 @@ def test_basetrainer_predict_proba_returns_none_when_no_data_provided(mock_estim
     mock_estimator.predict_proba.assert_not_called()
 
 
+def test_basetrainer_resolve_verbose_period_caps_truthy_values():
+    """Tests _resolve_verbose_period maps any truthy verbose to VERBOSE_LOG_PERIOD.
+
+    Asserts:
+        - True and arbitrary truthy ints all resolve to VERBOSE_LOG_PERIOD.
+        - False, 0, and None all resolve to False.
+    """
+    for truthy in (True, 1, 5, 200):
+        if BaseTrainer._resolve_verbose_period(truthy) != VERBOSE_LOG_PERIOD:
+            raise AssertionError(f"Expected VERBOSE_LOG_PERIOD for {truthy!r}.")
+    for falsy in (False, 0, None):
+        if BaseTrainer._resolve_verbose_period(falsy) is not False:
+            raise AssertionError(f"Expected False for {falsy!r}.")
+
+
+def test_basetrainer_fit_estimator_lgbm_caps_verbose_to_log_period(
+    binary_classification_data,
+):
+    """Tests fit_estimator throttles LightGBM's log_evaluation callback period.
+
+    Args:
+        binary_classification_data: Numeric feature matrix and binary target.
+
+    Asserts:
+        - The callbacks fit kwarg carries a log_evaluation callback whose
+          period is VERBOSE_LOG_PERIOD, not every single iteration.
+    """
+    X, y = binary_classification_data
+    estimator = lightgbm.LGBMClassifier(n_estimators=2, verbose=-1)
+
+    with patch.object(type(estimator), "fit", autospec=True) as mock_fit:
+        BaseTrainer.fit_estimator(estimator, X, y, verbose=True)
+        callbacks = mock_fit.call_args.kwargs["callbacks"]
+
+    periods = [cb.period for cb in callbacks if hasattr(cb, "period")]
+    if VERBOSE_LOG_PERIOD not in periods:
+        raise AssertionError(
+            f"Expected a log_evaluation callback with period={VERBOSE_LOG_PERIOD}, "
+            f"got periods={periods}."
+        )
+
+
+def test_basetrainer_fit_estimator_xgb_caps_verbose_to_log_period(
+    binary_classification_data,
+):
+    """Tests fit_estimator throttles XGBoost's verbose fit kwarg to VERBOSE_LOG_PERIOD.
+
+    Args:
+        binary_classification_data: Numeric feature matrix and binary target.
+
+    Asserts:
+        - verbose is passed as VERBOSE_LOG_PERIOD, not True (every iteration).
+    """
+    X, y = binary_classification_data
+    estimator = XGBClassifier(n_estimators=2)
+
+    with patch.object(type(estimator), "fit", autospec=True) as mock_fit:
+        BaseTrainer.fit_estimator(estimator, X, y, verbose=True)
+        verbose_kwarg = mock_fit.call_args.kwargs["verbose"]
+
+    if verbose_kwarg != VERBOSE_LOG_PERIOD:
+        raise AssertionError(
+            f"Expected verbose={VERBOSE_LOG_PERIOD}, got {verbose_kwarg!r}."
+        )
+
+
+def test_basetrainer_fit_estimator_catboost_caps_verbose_to_log_period(
+    binary_classification_data,
+):
+    """Tests fit_estimator throttles CatBoost's verbose fit kwarg to VERBOSE_LOG_PERIOD.
+
+    Args:
+        binary_classification_data: Numeric feature matrix and binary target.
+
+    Asserts:
+        - verbose is passed as VERBOSE_LOG_PERIOD, not True (every iteration).
+    """
+    X, y = binary_classification_data
+    estimator = CatBoostClassifier(n_estimators=2, allow_writing_files=False)
+
+    with patch.object(type(estimator), "fit", autospec=True) as mock_fit:
+        BaseTrainer.fit_estimator(estimator, X, y, verbose=True)
+        verbose_kwarg = mock_fit.call_args.kwargs["verbose"]
+
+    if verbose_kwarg != VERBOSE_LOG_PERIOD:
+        raise AssertionError(
+            f"Expected verbose={VERBOSE_LOG_PERIOD}, got {verbose_kwarg!r}."
+        )
+
+
+def test_basetrainer_fit_estimator_histgb_enables_plain_verbose(
+    binary_classification_data,
+):
+    """Tests fit_estimator toggles HistGradientBoosting's constructor-level verbose.
+
+    scikit-learn's HistGradientBoosting has no fit-time verbose parameter and no
+    periodic-logging support (only a coarse 0/1/2 level set at construction), so
+    a truthy `verbose` request sets its constructor `verbose=1` rather than the
+    (inapplicable) VERBOSE_LOG_PERIOD.
+
+    Args:
+        binary_classification_data: Numeric feature matrix and binary target.
+
+    Asserts:
+        - The estimator handed to fit() has verbose=1 in its own get_params().
+    """
+    X, y = binary_classification_data
+    estimator = HistGradientBoostingClassifier(max_iter=2)
+
+    with patch.object(type(estimator), "fit", autospec=True) as mock_fit:
+        BaseTrainer.fit_estimator(estimator, X, y, verbose=True)
+        fitted_self = mock_fit.call_args.args[0]
+
+    if fitted_self.get_params()["verbose"] != 1:
+        raise AssertionError(
+            f"Expected verbose=1, got {fitted_self.get_params()['verbose']!r}."
+        )
+
+
+def test_basetrainer_fit_estimator_realigns_cuda_xgb_device_to_cpu(
+    binary_classification_data,
+):
+    """Tests fit_estimator switches a CUDA-configured XGBoost estimator to CPU inference.
+
+    Prevents regressions of the "Falling back to prediction using DMatrix due to
+    mismatched devices" UserWarning that XGBoost raises when a booster trained
+    with device="cuda" is later asked to predict on CPU-resident pandas data.
+
+    Args:
+        binary_classification_data: Numeric feature matrix and binary target.
+
+    Asserts:
+        - The estimator handed to fit() still has device="cuda" (GPU training
+          is left untouched).
+        - The returned fitted estimator has device="cpu" so later predict calls
+          on CPU data match without warning.
+    """
+    X, y = binary_classification_data
+    estimator = XGBClassifier(n_estimators=2, device="cuda")
+    devices_at_fit_call: list[str | None] = []
+
+    def _record_device_and_fit(self, *_args, **_kwargs):
+        """Record the device configured on self at call time, skipping real fit."""
+        devices_at_fit_call.append(self.get_params()["device"])
+
+    with patch.object(
+        type(estimator), "fit", autospec=True, side_effect=_record_device_and_fit
+    ):
+        fitted = BaseTrainer.fit_estimator(estimator, X, y)
+    fit_time_device = devices_at_fit_call[0]
+
+    if fit_time_device != "cuda":
+        raise AssertionError(
+            f"Expected fit-time device='cuda', got {fit_time_device!r}."
+        )
+    if fitted.get_params()["device"] != "cpu":
+        raise AssertionError(
+            f"Expected post-fit device='cpu', got {fitted.get_params()['device']!r}."
+        )
+
+
+def test_basetrainer_fit_estimator_leaves_cpu_xgb_device_untouched(
+    binary_classification_data,
+):
+    """Tests fit_estimator does not alter an XGBoost estimator already targeting CPU.
+
+    Args:
+        binary_classification_data: Numeric feature matrix and binary target.
+
+    Asserts:
+        - device stays None (XGBoost's own default) after fit_estimator runs.
+    """
+    X, y = binary_classification_data
+    estimator = XGBClassifier(n_estimators=2)
+
+    with patch.object(type(estimator), "fit", autospec=True):
+        fitted = BaseTrainer.fit_estimator(estimator, X, y)
+
+    if fitted.get_params()["device"] is not None:
+        raise AssertionError(
+            f"Expected device=None, got {fitted.get_params()['device']!r}."
+        )
+
+
 if __name__ == "__main__":
     print("Run this file with pytest to execute tests.")
+
+
+@pytest.mark.parametrize(
+    "estimator",
+    [
+        lightgbm.LGBMClassifier(n_estimators=5, early_stopping_round=3, verbose=-1),
+        lightgbm.LGBMClassifier(n_estimators=5, early_stopping_rounds=3, verbose=-1),
+        XGBClassifier(n_estimators=5, early_stopping_rounds=3),
+        CatBoostClassifier(
+            iterations=5, early_stopping_rounds=3, od_type="Iter", verbose=0
+        ),
+    ],
+)
+def test_basetrainer_fit_estimator_disables_early_stopping_without_eval_set(
+    binary_classification_data, estimator
+):
+    """Tests every boosting family trains without early stopping when no eval set is given.
+
+    Asserts:
+        - fit succeeds and warns once that early stopping was turned off
+        - The caller's estimator keeps its early-stopping params
+    """
+    X, y = binary_classification_data
+    params_before = estimator.get_params()
+
+    with pytest.warns(UserWarning, match="early stopping") as record:
+        BaseTrainer.fit_estimator(estimator, X, y)
+
+    if sum("early stopping" in str(w.message) for w in record) != 1:
+        raise AssertionError([str(w.message) for w in record])
+    if estimator.get_params() != params_before:
+        raise AssertionError("caller's estimator was mutated")
+
+
+def test_basetrainer_fit_estimator_does_not_pass_validation_set_as_x_test(
+    sample_dataframe,
+):
+    """Tests an estimator whose fit accepts X_test is not handed the validation set as X_test.
+
+    Asserts:
+        - fit is called without an X_test keyword
+    """
+    received: dict = {}
+
+    class _XTestEstimator:
+        """Estimator whose fit signature has an X_test parameter."""
+
+        def fit(self, X, y, X_test=None):
+            """Record the X_test argument."""
+            received["X_test"] = X_test
+            return self
+
+    X = sample_dataframe
+    y = pd.Series(np.zeros(len(X)))
+    BaseTrainer.fit_estimator(_XTestEstimator(), X, y, X.iloc[:5], y.iloc[:5])
+    if received["X_test"] is not None:
+        raise AssertionError("validation set was passed as X_test")
+
+
+def test_to_metric_proba_returns_positive_column_for_binary_and_matrix_for_multiclass():
+    """Tests the shared metric-boundary probability convention.
+
+    Asserts:
+        - (n, 2) becomes the 1-D positive-class column
+        - (n, 3) is returned unchanged
+    """
+    binary = np.array([[0.2, 0.8], [0.6, 0.4]])
+    multi = np.array([[0.2, 0.3, 0.5]])
+    if not np.array_equal(to_metric_proba(binary), np.array([0.8, 0.4])):
+        raise AssertionError()
+    if to_metric_proba(multi).shape != (1, 3):
+        raise AssertionError()

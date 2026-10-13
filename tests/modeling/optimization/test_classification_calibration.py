@@ -1,18 +1,21 @@
 """Tests for kvbiii_ml.modeling.optimization.classification_calibration module."""
 
 import os
+from unittest.mock import Mock, patch
 
 os.environ["MPLBACKEND"] = "Agg"
 
 import numpy as np
 import pandas as pd
 import pytest
+from pandas.io.formats.style import Styler
 from sklearn.datasets import make_classification
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
 
 from kvbiii_ml.modeling.optimization.classification_calibration import (
     ClassificationCalibrator,
+    _show_figure,
 )
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
@@ -340,6 +343,146 @@ def test_classificationcalibrator_predict_proba_and_predict_work_after_fit_multi
         raise AssertionError()
     if not set(np.unique(preds)).issubset(set(np.unique(y))):
         raise AssertionError()
+
+
+def test_classificationcalibrator_plot_calibration_curves_returns_none(
+    binary_calibration_data, logistic_regression_estimator, calibration_cv_trainer
+):
+    """Tests plot_calibration_curves returns None, only side-effecting a display call.
+
+    Args:
+        binary_calibration_data (tuple): Feature matrix and binary target vector.
+        logistic_regression_estimator (LogisticRegression): Configured estimator.
+        calibration_cv_trainer (CrossValidationTrainer): Configured CV trainer.
+
+    Asserts:
+        - plot_calibration_curves() returns None.
+        - The module's _show_figure helper is invoked exactly once.
+    """
+    X, y = binary_calibration_data
+    calibrator = ClassificationCalibrator(
+        estimator=logistic_regression_estimator, cross_validator=calibration_cv_trainer
+    )
+    calibrator.fit(X, y)
+
+    with patch(
+        "kvbiii_ml.modeling.optimization.classification_calibration._show_figure"
+    ) as mock_show_figure:
+        result = calibrator.plot_calibration_curves()
+
+    if result is not None:
+        raise AssertionError()
+    mock_show_figure.assert_called_once()
+
+
+def test_show_figure_uses_plain_show_outside_notebook():
+    """Tests _show_figure falls back to plt.show() when get_ipython() is None.
+
+    Asserts:
+        - plt.show() is called and IPython's display() is not.
+    """
+    fig = Mock()
+    with (
+        patch(
+            "kvbiii_ml.modeling.optimization.classification_calibration.get_ipython",
+            return_value=None,
+        ),
+        patch(
+            "kvbiii_ml.modeling.optimization.classification_calibration.plt.show"
+        ) as mock_show,
+        patch(
+            "kvbiii_ml.modeling.optimization.classification_calibration.display"
+        ) as mock_display,
+    ):
+        _show_figure(fig)
+
+    mock_show.assert_called_once()
+    mock_display.assert_not_called()
+
+
+def test_show_figure_displays_inline_image_inside_notebook():
+    """Tests _show_figure rasterizes and displays fig via IPython inside a notebook.
+
+    Asserts:
+        - IPython's display() is invoked instead of plt.show().
+        - The figure is rasterized to PNG and closed afterward.
+    """
+    fig = Mock()
+    fig.dpi = 100
+    fig.get_facecolor.return_value = "white"
+
+    with (
+        patch(
+            "kvbiii_ml.modeling.optimization.classification_calibration.get_ipython",
+            return_value=Mock(),
+        ),
+        patch(
+            "kvbiii_ml.modeling.optimization.classification_calibration.plt.show"
+        ) as mock_show,
+        patch(
+            "kvbiii_ml.modeling.optimization.classification_calibration.plt.close"
+        ) as mock_close,
+        patch(
+            "kvbiii_ml.modeling.optimization.classification_calibration.display"
+        ) as mock_display,
+    ):
+        _show_figure(fig)
+
+    mock_show.assert_not_called()
+    mock_display.assert_called_once()
+    mock_close.assert_called_once_with(fig)
+    fig.savefig.assert_called_once()
+
+
+def test_classificationcalibrator_style_scores_raises_runtimeerror_before_fit(
+    logistic_regression_estimator, calibration_cv_trainer
+):
+    """Tests style_scores raises before fit() has been called.
+
+    Args:
+        logistic_regression_estimator (LogisticRegression): Configured estimator.
+        calibration_cv_trainer (CrossValidationTrainer): Configured CV trainer.
+
+    Asserts:
+        - RuntimeError is raised instructing the caller to fit first.
+    """
+    calibrator = ClassificationCalibrator(
+        estimator=logistic_regression_estimator, cross_validator=calibration_cv_trainer
+    )
+
+    with pytest.raises(RuntimeError, match=r"Call fit\(\) before style_scores\(\)\."):
+        calibrator.style_scores()
+
+
+def test_classificationcalibrator_style_scores_returns_styler_with_best_row_highlighted(
+    binary_calibration_data, logistic_regression_estimator, calibration_cv_trainer
+):
+    """Tests style_scores returns a Styler that bolds the winning method's row.
+
+    Args:
+        binary_calibration_data (tuple): Feature matrix and binary target vector.
+        logistic_regression_estimator (LogisticRegression): Configured estimator.
+        calibration_cv_trainer (CrossValidationTrainer): Configured CV trainer.
+
+    Asserts:
+        - style_scores() returns a pandas Styler.
+        - The rendered HTML contains a bold-font rule (the best method's row).
+    """
+    X, y = binary_calibration_data
+    calibrator = ClassificationCalibrator(
+        estimator=logistic_regression_estimator, cross_validator=calibration_cv_trainer
+    )
+    calibrator.fit(X, y)
+
+    styled = calibrator.style_scores()
+
+    if not isinstance(styled, Styler):
+        raise AssertionError()
+    html = styled.to_html()
+    if "font-weight: 800" not in html:
+        raise AssertionError(
+            "Expected the best method's row to be bolded in the rendered table."
+        )
 
 
 if __name__ == "__main__":

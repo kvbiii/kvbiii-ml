@@ -78,5 +78,50 @@ def test_meanencoderwithoriginal_transform_higher_smoothing_shrinks_toward_globa
         )
 
 
+@pytest.fixture
+def numeric_category_data() -> tuple[pd.DataFrame, pd.Series]:
+    """Provides a low-cardinality numeric column with a target whose category means diverge.
+
+    Category 1 has a target mean of 2/3, category 2 has 1/3, and category 3 has 0.5.
+
+    Returns:
+        tuple[pd.DataFrame, pd.Series]: Feature matrix with an integer `num_cat`
+            column and a binary target.
+    """
+    X = pd.DataFrame({"num_cat": [1, 2, 1, 3, 2, 1, 3, 2]})
+    y = pd.Series([1, 0, 1, 0, 1, 0, 1, 0], name="target")
+    return X, y
+
+
+def test_meanencoderwithoriginal_transform_accepts_explicit_numeric_variable(
+    numeric_category_data,
+):
+    """Tests that an explicitly-named numeric column encodes without a dtype error.
+
+    feature_engine's MeanEncoder normally rejects numeric input with "Some of
+    the variables are not categorical..." unless ignore_format=True; this
+    wrapper instead recasts explicitly-configured numeric variables to object
+    dtype internally so they encode directly.
+
+    Args:
+        numeric_category_data: DataFrame and target with diverging category means.
+
+    Asserts:
+        - transform() succeeds and encodes the exact per-category target means.
+        - The original numeric column's dtype is left untouched in the output.
+    """
+    X, y = numeric_category_data
+    encoder = MeanEncoderWithOriginal(variables=["num_cat"], smoothing=0.0)
+    encoder.fit(X, y)
+    result = encoder.transform(X)
+    expected = [2 / 3, 1 / 3, 2 / 3, 0.5, 1 / 3, 2 / 3, 0.5, 1 / 3]
+    if not np.allclose(result["num_cat_PREPROCESS_MEAN_ENC"].to_numpy(), expected):
+        raise AssertionError("Mean encoding did not match expected per-category means.")
+    if not pd.api.types.is_numeric_dtype(result["num_cat"]):
+        raise AssertionError(
+            "Original numeric column dtype was altered by transform()."
+        )
+
+
 if __name__ == "__main__":
     print("Run this file with pytest to execute tests.")
