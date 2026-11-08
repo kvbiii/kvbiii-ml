@@ -55,17 +55,13 @@ class CalibratedModel:
 
         Args:
             estimator (BaseEstimator): Unfitted estimator or EnsembleModel to calibrate.
-            problem_type (str): Problem type. Only "classification" is supported.
-                Defaults to "classification".
-            calibration_method (str): Calibration method, "isotonic" or "sigmoid".
-                Defaults to "isotonic".
-            calibration_size (float): Fraction of the training data held out to fit the
-                calibrator. Defaults to 0.2.
+            problem_type (str): Only "classification" is supported. Defaults to "classification".
+            calibration_method (str): "isotonic" or "sigmoid". Defaults to "isotonic".
+            calibration_size (float): Held-out share for the calibrator. Defaults to 0.2.
             seed (int): Random seed for the hold-out split. Defaults to 17.
 
         Raises:
-            ValueError: If problem_type is not "classification", calibration_method is
-                not "isotonic"/"sigmoid", or calibration_size is not in (0, 1).
+            ValueError: If problem_type, calibration_method or calibration_size is invalid.
         """
         if problem_type != "classification":
             raise ValueError("CalibratedModel only supports problem_type='classification'.")
@@ -92,15 +88,16 @@ class CalibratedModel:
     ) -> CalibratedModel:
         """Fit the calibrator on a hold-out split and refit the base estimator fully.
 
+        Notes:
+        - eval_set: Validation data for early stopping during the full-data refit, in EnsembleModel
+          format [(X_train, y_train), (X_valid, y_valid)] or [(X_valid, y_valid)]. When used inside
+          CrossValidationTrainer the fold's validation split is injected automatically. Defaults to
+          None.
+
         Args:
-            X (pd.DataFrame): Training features. Expected already preprocessed when used
-                inside CrossValidationTrainer (which applies its pipeline per fold).
+            X (pd.DataFrame): Training features; already preprocessed inside CrossValidationTrainer.
             y (pd.Series): Training target.
-            eval_set (list[tuple[pd.DataFrame, pd.Series]] | None): Validation data for
-                early stopping during the full-data refit, in EnsembleModel format
-                [(X_train, y_train), (X_valid, y_valid)] or [(X_valid, y_valid)]. When
-                used inside CrossValidationTrainer the fold's validation split is injected
-                automatically. Defaults to None.
+            eval_set (list[tuple[pd.DataFrame, pd.Series]] | None): Data for early stopping.
 
         Returns:
             CalibratedModel: Fitted instance.

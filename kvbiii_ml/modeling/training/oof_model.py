@@ -166,8 +166,7 @@ def _apply_calibrator(
     estimate used for method selection. Clipping keeps both consistent and finite.
 
     Args:
-        calibrator (IsotonicRegression | LogisticRegression | list): Calibrator(s)
-            produced by _fit_calibrator.
+        calibrator (IsotonicRegression | LogisticRegression | list): Fitted calibrator(s).
         raw_probas (np.ndarray): Raw probabilities of shape (n_samples, n_classes).
         classes (np.ndarray): Unique class labels used during fitting.
         method (str): Calibration method used when fitting, either "isotonic" or "sigmoid".
@@ -213,6 +212,9 @@ def _collect_oof_probas(
     Returns:
         tuple[np.ndarray, np.ndarray]: OOF true labels of shape (n_samples,) and
             OOF probabilities of shape (n_samples, n_classes).
+
+    Raises:
+        RuntimeError: If no folds were iterated (the cross_validator may not be fitted).
     """
     n_samples = len(y)
     y_arr = y.to_numpy()
@@ -257,15 +259,19 @@ class OOFModel:
     ) -> None:
         """Initialize the OOF generator.
 
+        Notes:
+        - calibrate: If True, fit a probability calibrator on OOF probabilities and refit the base
+          estimator on the full dataset. Only valid for classification. Defaults to False.
+
         Args:
             estimator (BaseEstimator): Estimator to train on each fold.
             cross_validator (CrossValidationTrainer): Cross-validation trainer to use.
             problem_type (str): Problem type, either "classification" or "regression".
-            calibrate (bool): If True, fit a probability calibrator on OOF probabilities
-                and refit the base estimator on the full dataset. Only valid for
-                classification. Defaults to False.
-            calibration_method (str): Calibration method, "isotonic" or "sigmoid".
-                Only used when calibrate=True. Defaults to "isotonic".
+            calibrate (bool): Calibrate OOF probabilities and refit on all data. Defaults to False.
+            calibration_method (str): "isotonic" or "sigmoid". Defaults to "isotonic".
+
+        Raises:
+            ValueError: If problem_type is invalid or calibrate=True is used with regression.
         """
         if problem_type not in {"classification", "regression"}:
             raise ValueError("problem_type must be either 'classification' or 'regression'.")
@@ -300,15 +306,16 @@ class OOFModel:
         is preserved for that final refit; otherwise it is disabled and the fixed
         iteration count is used.
 
+        Notes:
+        - eval_set: Validation data for early stopping during the calibrated full refit. Accepts the
+          same format as EnsembleModel: [(X_train, y_train), (X_valid, y_valid)] or [(X_valid,
+          y_valid)]. Only used when calibrate=True. Defaults to None.
+
         Args:
             X (pd.DataFrame): Feature matrix aligned with target.
             y (pd.Series): Target vector.
-            X_test (pd.DataFrame | None): Optional test features passed through the
-                pipeline per fold. Defaults to None.
-            eval_set (list[tuple[pd.DataFrame, pd.Series]] | None): Validation data for
-                early stopping during the calibrated full refit. Accepts the same format
-                as EnsembleModel: [(X_train, y_train), (X_valid, y_valid)] or
-                [(X_valid, y_valid)]. Only used when calibrate=True. Defaults to None.
+            X_test (pd.DataFrame | None): Test features run through the pipeline per fold.
+            eval_set (list[tuple[pd.DataFrame, pd.Series]] | None): Data for early stopping.
 
         Returns:
             OOFModel: Fitted instance with fitted_estimators_ populated.
@@ -407,9 +414,11 @@ class OOFModel:
     ) -> tuple[pd.DataFrame | None, pd.Series | None]:
         """Extract validation data from an eval_set in EnsembleModel format.
 
+        Notes:
+        - eval_set: [(X_train, y_train), (X_valid, y_valid)] or [(X_valid, y_valid)], or None.
+
         Args:
-            eval_set (list[tuple] | None): [(X_train, y_train), (X_valid, y_valid)] or
-                [(X_valid, y_valid)], or None.
+            eval_set (list[tuple] | None): Early-stopping data, or None.
 
         Returns:
             tuple: (X_valid, y_valid) or (None, None) if eval_set is absent.

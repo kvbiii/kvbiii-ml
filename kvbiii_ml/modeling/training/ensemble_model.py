@@ -37,44 +37,42 @@ class EnsembleModel(BaseEstimator):
         on_estimator_error: str = "raise",
         offset_column: str | None = None,
     ) -> None:
-        """
+        """Initialize the ensemble model.
+
+        Notes:
+        - n_jobs: Base estimators fitted concurrently, in threads. The boosting libraries release
+          the GIL while training, so the threads run truly in parallel; keep n_jobs times each
+          estimator's own thread count within the physical cores. Fitted estimators keep the order
+          of `estimators`, so the result is identical to a sequential fit. Leave it at 1 when the
+          ensemble is itself fitted inside parallel cross-validation folds. Defaults to 1.
+        - cv: Splitter used to build the stacking meta-features out-of-fold when ``meta_learner`` is
+          set: each base estimator is refitted on every training split and predicts its held-out
+          split, so the meta-learner never learns from in-sample (overfit) base predictions. The
+          base estimators used at predict time are still fitted on all rows. Ignored for blending.
+          Defaults to None, which means ``KFold(5, shuffle=True, random_state=17)``.
+        - on_estimator_error: What ``predict``/``predict_proba`` do when a base estimator raises
+          ValueError, AttributeError or TypeError. ``"raise"`` lets the exception propagate.
+          ``"skip"`` drops that estimator, warns, and renormalises the remaining weights - the
+          result is then a different model from the one that was fitted. Defaults to "raise".
+        - offset_column: Column of every X passed to fit/predict (and of the eval_set X) holding a
+          link-scale offset such as ``log(exposure)``. Base estimators never see it as a feature: it
+          is passed to training as LightGBM ``init_score``, XGBoost ``base_margin`` or CatBoost
+          ``baseline`` and added to the raw score before the inverse link at predict time (see
+          ``base_trainer.predict_with_offset``). LightGBM, XGBoost and CatBoost only. Defaults to
+          None.
+
         Args:
             estimators (list): Base estimators to include in the ensemble.
-            problem_type (str): Problem type, either "classification" or
-                "regression".
-            weights (np.ndarray | None): Weights for each estimator, stored normalised
-                to sum to 1. If None, equal weights are used.
-            meta_learner (BaseEstimator | None): Meta-learner for stacking.
-                If None, ensemble uses blending (weighted averaging).
-            n_jobs (int): Base estimators fitted concurrently, in threads. The boosting
-                libraries release the GIL while training, so the threads run truly in
-                parallel; keep n_jobs times each estimator's own thread count within the
-                physical cores. Fitted estimators keep the order of `estimators`, so the
-                result is identical to a sequential fit. Leave it at 1 when the ensemble
-                is itself fitted inside parallel cross-validation folds. Defaults to 1.
-            cv (BaseCrossValidator | None): Splitter used to build the stacking
-                meta-features out-of-fold when ``meta_learner`` is set: each base
-                estimator is refitted on every training split and predicts its held-out
-                split, so the meta-learner never learns from in-sample (overfit) base
-                predictions. The base estimators used at predict time are still fitted on
-                all rows. Ignored for blending. Defaults to None, which means
-                ``KFold(5, shuffle=True, random_state=17)``.
-            on_estimator_error (str): What ``predict``/``predict_proba`` do when a base
-                estimator raises ValueError, AttributeError or TypeError. ``"raise"``
-                lets the exception propagate. ``"skip"`` drops that estimator, warns,
-                and renormalises the remaining weights - the result is then a different
-                model from the one that was fitted. Defaults to "raise".
-            offset_column (str | None): Column of every X passed to fit/predict (and of
-                the eval_set X) holding a link-scale offset such as ``log(exposure)``.
-                Base estimators never see it as a feature: it is passed to training as
-                LightGBM ``init_score``, XGBoost ``base_margin`` or CatBoost
-                ``baseline`` and added to the raw score before the inverse link at
-                predict time (see ``base_trainer.predict_with_offset``). LightGBM,
-                XGBoost and CatBoost only. Defaults to None.
+            problem_type (str): Problem type, either "classification" or "regression".
+            weights (np.ndarray | None): Estimator weights (normalised); None means equal.
+            meta_learner (BaseEstimator | None): Stacking meta-learner; None means blending.
+            n_jobs (int): Base estimators fitted concurrently, in threads.
+            cv (BaseCrossValidator | None): Splitter for out-of-fold stacking meta-features.
+            on_estimator_error (str): "raise" or "skip" a base estimator that fails in predict.
+            offset_column (str | None): Link-scale offset column of X (e.g. log(exposure)).
 
         Raises:
-            ValueError: If estimators is empty, n_jobs is not positive, problem_type or
-                on_estimator_error is invalid, or weights are invalid.
+            ValueError: If estimators are empty or an option or the weights are invalid.
         """
         if not isinstance(estimators, Iterable) or len(estimators) == 0:
             raise ValueError("estimators must be a non-empty list of estimators.")
@@ -163,8 +161,7 @@ class EnsembleModel(BaseEstimator):
             np.ndarray: Normalized weights that sum to 1.
 
         Raises:
-            ValueError: If weights length mismatches estimators, contains
-                non-finite values, or sums to zero.
+            ValueError: If weights have the wrong length, are non-finite or sum to zero.
         """
         if weights is None:
             return np.ones(len(self._estimators_list), dtype=float) / len(self._estimators_list)
@@ -193,11 +190,14 @@ class EnsembleModel(BaseEstimator):
         With a ``meta_learner``, its training features are built out-of-fold with
         ``cv`` (see ``__init__``).
 
+        Notes:
+        - eval_set: Optional validation set for early stopping; the last of up to two (X, y) pairs
+          is used.
+
         Args:
             X_train (pd.DataFrame): Training features.
             y_train (pd.Series): Training target.
-            eval_set (list[tuple[pd.DataFrame, pd.Series]] | None): Optional validation
-                set for early stopping; the last of up to two (X, y) pairs is used.
+            eval_set (list[tuple[pd.DataFrame, pd.Series]] | None): Early-stopping data.
             sample_weight (pd.Series | None): Optional sample weights.
             verbose (int | None): Optional verbosity for fitting.
 
@@ -435,11 +435,13 @@ class EnsembleModel(BaseEstimator):
     ) -> tuple[np.ndarray, np.ndarray]:
         """Run predict_fn on every base estimator, honouring ``on_estimator_error``.
 
+        Notes:
+        - predict_fn: Called as ``predict_fn(estimator, X)``; it orders columns and handles the
+          offset itself (via ``_estimator_output``).
+
         Args:
             X (pd.DataFrame): Features to score.
-            predict_fn (Callable[[BaseEstimator, pd.DataFrame], np.ndarray]): Called
-                as ``predict_fn(estimator, X)``; it orders columns and handles the
-                offset itself (via ``_estimator_output``).
+            predict_fn (Callable[[BaseEstimator, pd.DataFrame], np.ndarray]): Prediction callable.
 
         Returns:
             tuple[np.ndarray, np.ndarray]: Stacked predictions of the estimators that
@@ -485,6 +487,9 @@ class EnsembleModel(BaseEstimator):
 
         Returns:
             dict[str, np.ndarray]: Dictionary with keys depending on problem type.
+
+        Raises:
+            RuntimeError: If the ensemble has not been fitted.
         """
         if not hasattr(self, "fitted_estimators_") or len(self.fitted_estimators_) == 0:
             raise RuntimeError(
@@ -584,9 +589,6 @@ class EnsembleModel(BaseEstimator):
 
         Returns:
             pd.DataFrame: Reordered features (see ``order_x_for_estimator``).
-
-        Raises:
-            ValueError: If the estimator exposes feature names that X cannot supply.
         """
         return order_x_for_estimator(X, estimator, strict=True)
 
@@ -600,8 +602,7 @@ class EnsembleModel(BaseEstimator):
             that support this attribute.
 
         Raises:
-            RuntimeError: If called before fitting or if no estimators support
-                feature importances.
+            RuntimeError: If called before fitting or if no estimators support feature importances.
         """
         if not hasattr(self, "fitted_estimators_") or len(self.fitted_estimators_) == 0:
             raise RuntimeError(
