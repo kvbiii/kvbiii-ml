@@ -67,17 +67,18 @@ try:  # optional notebook dependency
 
 except ImportError:  # pragma: no cover
 
-    def _show_figure(fig: Figure) -> None:
+    def _show_figure(_fig: Figure) -> None:
         """Fallback for environments without IPython installed.
 
         Args:
-            fig (Figure): Figure to display.
+            _fig (Figure): Unused; plt.show() displays every open figure.
         """
         plt.show()
 
 
 _DEFAULT_SEED = 17
 _DEFAULT_N_BINS = 10
+_BINARY_N_CLASSES = 2
 _DEFAULT_METHODS = ("isotonic", "sigmoid")
 _UNCALIBRATED = "Uncalibrated"
 _BUILTIN_SELECTION_COLS: dict[str, tuple[str, str]] = {
@@ -146,7 +147,7 @@ def _compute_ece(
     Returns:
         float: Expected Calibration Error in [0, 1].
     """
-    if len(classes) == 2:
+    if len(classes) == _BINARY_N_CLASSES:
         y_bin = (y_true == classes[1]).astype(int)
         return _binary_ece(y_bin, probas[:, 1], n_bins)
     return float(
@@ -180,7 +181,7 @@ def _brier(y_true: np.ndarray, probas: np.ndarray, classes: np.ndarray) -> float
     Returns:
         float: Brier score (lower is better).
     """
-    if len(classes) == 2:
+    if len(classes) == _BINARY_N_CLASSES:
         return float(_brier_score((y_true == classes[1]).astype(int), probas[:, 1]))
     return float(_brier_score(y_true, probas))
 
@@ -368,8 +369,8 @@ class ClassificationCalibrator:
         if self._fitted_full_estimator is None:
             raise RuntimeError("Call fit() before predict_proba().")
 
-        x_proc = CrossValidationTrainer._transform_with_pipeline(self._fitted_full_pipeline, X)
-        x_ord = CrossValidationTrainer._order_x_for_estimator(x_proc, self._fitted_full_estimator)
+        x_proc = CrossValidationTrainer._transform_with_pipeline(self._fitted_full_pipeline, X)  # noqa: SLF001
+        x_ord = CrossValidationTrainer._order_x_for_estimator(x_proc, self._fitted_full_estimator)  # noqa: SLF001
         raw = self._fitted_full_estimator.predict_proba(x_ord)
         if raw.ndim == 1:
             raw = np.column_stack([1 - raw, raw])
@@ -413,7 +414,7 @@ class ClassificationCalibrator:
         method_names = list(self._oof_probas_by_method.keys())
         n_methods = len(method_names)
 
-        if len(self._classes) == 2:
+        if len(self._classes) == _BINARY_N_CLASSES:
             fig, axes = plt.subplots(
                 1,
                 n_methods,
@@ -825,7 +826,7 @@ class ClassificationCalibrator:
         x_proc = fitted_pipeline.fit_transform(X, y) if fitted_pipeline is not None else X
         self._fitted_full_pipeline = fitted_pipeline
 
-        X_valid, y_valid = OOFModel._parse_eval_set(eval_set)
+        X_valid, y_valid = OOFModel._parse_eval_set(eval_set)  # noqa: SLF001
         if X_valid is not None and fitted_pipeline is not None:
             X_valid = fitted_pipeline.transform(X_valid)
 
@@ -877,7 +878,7 @@ class ClassificationCalibrator:
                 multiclass "probs", or predicted class labels for "preds".
         """
         if metric_type == "probs":
-            return probas[:, 1] if probas.shape[1] == 2 else probas
+            return probas[:, 1] if probas.shape[1] == _BINARY_N_CLASSES else probas
         return classes[np.argmax(probas, axis=1)]
 
     @staticmethod

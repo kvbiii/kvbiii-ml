@@ -1,3 +1,4 @@
+import itertools
 import warnings
 from typing import ClassVar
 
@@ -13,6 +14,9 @@ warnings.filterwarnings(
     category=optuna.exceptions.ExperimentalWarning,
     message=".*multivariate.*",
 )
+
+
+BINARY_N_CLASSES = 2
 
 
 class CutoffTunerCV:
@@ -142,7 +146,7 @@ class CutoffTunerCV:
             y_proba = estimator.predict_proba(X)
         else:
             fold_pipeline = self.cross_validator.fitted_pipelines_[0]
-            x_proc = CrossValidationTrainer._transform_with_pipeline(fold_pipeline, X)
+            x_proc = CrossValidationTrainer._transform_with_pipeline(fold_pipeline, X)  # noqa: SLF001
             y_proba = self.fitted_estimators_[0].predict_proba(x_proc)
         return self._apply_cutoffs(y_proba, self.best_cutoffs, self._is_binary)
 
@@ -288,7 +292,10 @@ class CutoffTunerCV:
         labels = (
             self.fitted_estimators_[0].classes_ if self.fitted_estimators_ else range(len(cutoffs))
         )
-        return {str(label): round(float(cutoff), 4) for label, cutoff in zip(labels, cutoffs)}
+        return {
+            str(label): round(float(cutoff), 4)
+            for label, cutoff in zip(labels, cutoffs, strict=False)
+        }
 
     def _log_finish(self) -> None:
         """Prints the final cutoff-selection summary when verbose mode is enabled."""
@@ -438,8 +445,9 @@ class CutoffTunerCV:
             splits,
             self.cross_validator.fitted_estimators_,
             self.cross_validator.fitted_pipelines_,
+            strict=False,
         ):
-            X_valid = CrossValidationTrainer._transform_with_pipeline(
+            X_valid = CrossValidationTrainer._transform_with_pipeline(  # noqa: SLF001
                 fold_pipeline, X.iloc[val_idx]
             )
             oof_proba.append(est.predict_proba(X_valid))
@@ -447,7 +455,7 @@ class CutoffTunerCV:
 
         y_true = np.concatenate(oof_true)
         y_proba_full = np.concatenate(oof_proba, axis=0)
-        self._is_binary = y_proba_full.shape[1] == 2
+        self._is_binary = y_proba_full.shape[1] == BINARY_N_CLASSES
         y_proba = y_proba_full[:, 1] if self._is_binary else y_proba_full
 
         if self.verbose:
@@ -479,7 +487,7 @@ class CutoffTunerCV:
         """
         y_pred = self._apply_cutoffs(y_proba, cutoffs, self._is_binary)
         fold_scores: list[float] = []
-        for start, end in zip(fold_boundaries[:-1], fold_boundaries[1:]):
+        for start, end in itertools.pairwise(fold_boundaries):
             try:
                 fold_scores.append(float(self.metric_fn(y_true[start:end], y_pred[start:end])))
             except ValueError:
@@ -582,7 +590,7 @@ class CutoffTunerCV:
         default_cutoffs = self._default_cutoffs(y_proba)
         y_pred = self._apply_cutoffs(y_proba, default_cutoffs, self._is_binary)
         fold_scores = []
-        for start, end in zip(fold_boundaries[:-1], fold_boundaries[1:]):
+        for start, end in itertools.pairwise(fold_boundaries):
             try:
                 fold_scores.append(float(self.metric_fn(y_true[start:end], y_pred[start:end])))
             except ValueError:

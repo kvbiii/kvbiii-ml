@@ -9,7 +9,7 @@ import numpy as np
 import optuna
 import pandas as pd
 from sklearn.base import BaseEstimator, clone
-from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
+from sklearn.model_selection import BaseCrossValidator, KFold, StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 
 from kvbiii_ml.modeling.training.base_trainer import BaseTrainer, to_metric_proba
@@ -24,6 +24,7 @@ warnings.filterwarnings(
 
 GridEntry = tuple[str, list[object]] | tuple[str, list[object], dict[str, Any]]
 ParamsGrid = dict[str, GridEntry]
+GRID_ENTRY_WITH_OPTIONS = 3
 
 CATBOOST_PREFIX = "CatBoost"
 CATBOOST_ITERATIONS_PARAM = "iterations"
@@ -654,7 +655,9 @@ class RandomSearchCV:
         plan.cached = [self._build_fold(plan, 0, train_idx, valid_idx)]
         return plan
 
-    def _build_plan(self, X: pd.DataFrame, y: pd.Series, cv: Any, label: str) -> _EvaluationPlan:
+    def _build_plan(
+        self, X: pd.DataFrame, y: pd.Series, cv: BaseCrossValidator, label: str
+    ) -> _EvaluationPlan:
         """Build an evaluation plan, caching its folds when they fit the memory budget.
 
         The first fold is always built so its footprint can be measured; the rest are
@@ -788,7 +791,7 @@ class RandomSearchCV:
         fold_scores: list[float] = []
         best_iterations: list[int] = []
         for step, fold in enumerate(self._iter_folds(plan)):
-            fold_estimator = CrossValidationTrainer._clone_estimator(estimator)
+            fold_estimator = CrossValidationTrainer._clone_estimator(estimator)  # noqa: SLF001
             fold_estimator.set_params(**fold_params)
             fitted = BaseTrainer.fit_estimator(
                 fold_estimator,
@@ -799,7 +802,7 @@ class RandomSearchCV:
                 verbose=False,
                 eval_on_train=False,
             )
-            x_valid = CrossValidationTrainer._order_x_for_estimator(fold.x_valid, fitted)
+            x_valid = CrossValidationTrainer._order_x_for_estimator(fold.x_valid, fitted)  # noqa: SLF001
             fold_scores.append(float(self.metric_fn(fold.y_valid, predict(fitted, x_valid))))
             n_iterations = _get_n_iterations(fitted)
             if n_iterations is not None:
@@ -807,7 +810,7 @@ class RandomSearchCV:
             if trial is not None:
                 trial.report(float(np.mean(fold_scores)), step)
                 if trial.should_prune():
-                    raise optuna.TrialPruned()
+                    raise optuna.TrialPruned
         return fold_scores, best_iterations
 
     @staticmethod
@@ -986,7 +989,7 @@ class RandomSearchCV:
             f"🎛️  Search space: {tunable} ({len(tunable)} tunable dimensions)"
         )
 
-    def _make_explore_splitter(self) -> Any:
+    def _make_explore_splitter(self) -> BaseCrossValidator:
         """Build the explore-stage splitter, seeded apart from the caller's own.
 
         A different seed keeps the confirm stage independent evidence rather than a
@@ -1289,7 +1292,7 @@ class RandomSearchCV:
         self.n_estimators_censored_ = self._is_censored(
             median_iterations, estimator, params, param_name
         )
-        return {param_name: max(1, int(round(median_iterations * refit_scale)))}
+        return {param_name: max(1, round(median_iterations * refit_scale))}
 
     def _run_confirm_stage(
         self,
@@ -1440,7 +1443,7 @@ class RandomSearchCV:
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 continue
             if isinstance(value, int):
-                scaled[name] = max(1, int(round(value * fidelity)))
+                scaled[name] = max(1, round(value * fidelity))
             else:
                 scaled[name] = max(1e-6, float(value * fidelity))
         return scaled
@@ -1556,8 +1559,8 @@ class RandomSearchCV:
         param_type: str,
         values: list[object],
         options: dict[str, Any],
-        value: Any,
-    ) -> Any:
+        value: Any,  # noqa: ANN401
+    ) -> Any:  # noqa: ANN401
         """Clamp and snap a value onto one grid entry.
 
         Library defaults routinely sit outside a hand-written grid (LightGBM's reg_alpha
@@ -1582,7 +1585,7 @@ class RandomSearchCV:
         snapped = min(max(float(value), low), high)
         if step:
             snapped = min(max(low + round((snapped - low) / step) * step, low), high)
-        return int(round(snapped)) if param_type == "int" else float(snapped)
+        return round(snapped) if param_type == "int" else float(snapped)
 
     def _split_early_stopping(
         self, y: pd.Series, train_idx: np.ndarray, fold_idx: int
@@ -1665,7 +1668,7 @@ class RandomSearchCV:
         param_values: GridEntry,
     ) -> tuple[str, list[object], dict[str, Any]]:
         """Split a grid entry into its type, values, and keyword options."""
-        options = param_values[2] if len(param_values) == 3 else {}
+        options = param_values[2] if len(param_values) == GRID_ENTRY_WITH_OPTIONS else {}
         return param_values[0], param_values[1], options
 
     def _validate_settings(self) -> None:

@@ -1,4 +1,5 @@
 import copy
+import itertools
 import warnings
 from typing import ClassVar
 
@@ -20,6 +21,9 @@ warnings.filterwarnings(
     category=optuna.exceptions.ExperimentalWarning,
     message=".*multivariate.*",
 )
+
+
+PROBABILITY_THRESHOLD = 0.5
 
 
 class EnsembleWeightTunerCV:
@@ -205,7 +209,7 @@ class EnsembleWeightTunerCV:
         is_df = isinstance(first, pd.DataFrame)
         has_negative = bool(np.any(weights < 0.0))
         neg_clf = self.problem_type == "classification" and has_negative
-        stacked = np.stack([p.values for p in preds_list])
+        stacked = np.stack([p.to_numpy() for p in preds_list])
 
         if neg_clf and not is_df:
             eps = 1e-9
@@ -252,16 +256,17 @@ class EnsembleWeightTunerCV:
             splits,
             cross_validator.fitted_estimators_,
             cross_validator.fitted_pipelines_,
+            strict=False,
         ):
             index = X.index[val_idx]
             x_raw, offset = split_offset(X.iloc[val_idx], cross_validator.offset_column)
             X_valid = order_x_for_estimator(
-                CrossValidationTrainer._transform_with_pipeline(fold_pipeline, x_raw),
+                CrossValidationTrainer._transform_with_pipeline(fold_pipeline, x_raw),  # noqa: SLF001
                 fitted_est,
             )
             if self.problem_type == "classification":
                 proba = to_metric_proba(
-                    CrossValidationTrainer._estimator_output(
+                    CrossValidationTrainer._estimator_output(  # noqa: SLF001
                         fitted_est, X_valid, offset, proba=True
                     )
                 )
@@ -272,7 +277,7 @@ class EnsembleWeightTunerCV:
                 )
             else:
                 pred = pd.Series(
-                    CrossValidationTrainer._estimator_output(
+                    CrossValidationTrainer._estimator_output(  # noqa: SLF001
                         fitted_est, X_valid, offset, proba=False
                     ),
                     index=index,
@@ -348,7 +353,7 @@ class EnsembleWeightTunerCV:
         """
         return {
             f"{i} ({type(estimator).__name__})": round(float(weight), 4)
-            for i, (estimator, weight) in enumerate(zip(self.estimators, weights))
+            for i, (estimator, weight) in enumerate(zip(self.estimators, weights, strict=False))
         }
 
     def _log_finish(self) -> None:
@@ -535,7 +540,7 @@ class EnsembleWeightTunerCV:
         preds_list: list[pd.Series | pd.DataFrame],
         fold_boundaries: list[int],
         return_fold_scores: bool = False,
-    ) -> float | None | tuple[float | None, list[float]]:
+    ) -> float | tuple[float | None, list[float]] | None:
         """Scores one weight vector as mean-minus-std across cross-validation folds.
 
         Evaluating per fold instead of on the pooled OOF set discourages
@@ -565,7 +570,7 @@ class EnsembleWeightTunerCV:
             blended = self._threshold_predictions(blended)
 
         fold_scores: list[float] = []
-        for start, end in zip(fold_boundaries[:-1], fold_boundaries[1:]):
+        for start, end in itertools.pairwise(fold_boundaries):
             fold_y_true = y_true.iloc[start:end]
             fold_pred = blended.iloc[start:end]
             try:
@@ -698,7 +703,7 @@ class EnsembleWeightTunerCV:
             fold_pred = self._threshold_predictions(preds)
 
         fold_scores = []
-        for start, end in zip(fold_boundaries[:-1], fold_boundaries[1:]):
+        for start, end in itertools.pairwise(fold_boundaries):
             try:
                 fold_scores.append(
                     float(
@@ -728,7 +733,7 @@ class EnsembleWeightTunerCV:
         """
         if isinstance(blended, pd.DataFrame):
             return blended.idxmax(axis=1)
-        return (blended >= 0.5).astype(int)
+        return (blended >= PROBABILITY_THRESHOLD).astype(int)
 
     def _trial_weights(self, trial: optuna.trial.FrozenTrial) -> np.ndarray:
         """Recovers a trial's normalized blending weights for logging.
