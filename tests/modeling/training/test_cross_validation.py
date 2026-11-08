@@ -756,7 +756,11 @@ def test_cross_validation_import_does_not_modify_sys_path():
             objective="count:poisson", n_estimators=40, early_stopping_rounds=5
         ),
         CatBoostRegressor(
-            loss_function="Poisson", iterations=40, early_stopping_rounds=5, verbose=0
+            loss_function="Poisson",
+            iterations=40,
+            early_stopping_rounds=5,
+            verbose=0,
+            allow_writing_files=False,
         ),
         EnsembleModel(
             [LGBMRegressor(objective="poisson", n_estimators=20, verbose=-1)],

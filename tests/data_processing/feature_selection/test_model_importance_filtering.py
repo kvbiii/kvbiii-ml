@@ -367,7 +367,11 @@ def test_modelimportancefiltering_run_bootstraps_catboost_cat_features_from_grap
 
     pipeline = Pipeline([("mean_enc", MeanEncoder(variables=["cat_col"]))])
     estimator = CatBoostClassifier(
-        n_estimators=10, verbose=0, random_state=17, cat_features=["cat_col"]
+        n_estimators=10,
+        verbose=0,
+        random_state=17,
+        cat_features=["cat_col"],
+        allow_writing_files=False,
     )
     selector = ModelImportanceFiltering(
         estimator=estimator,

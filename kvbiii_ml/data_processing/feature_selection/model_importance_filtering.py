@@ -757,6 +757,7 @@ if __name__ == "__main__":
             verbose=0,
             RANDOM_STATE=RANDOM_STATE,
             CAT_FEATURES=CAT_FEATURES,
+            allow_writing_files=False,
         )
         cat_multi = CatBoostClassifier(
             n_estimators=200,
@@ -765,6 +766,7 @@ if __name__ == "__main__":
             RANDOM_STATE=RANDOM_STATE,
             CAT_FEATURES=CAT_FEATURES,
             loss_function="MultiClass",
+            allow_writing_files=False,
         )
         cat_reg = CatBoostRegressor(
             n_estimators=200,
@@ -772,6 +774,7 @@ if __name__ == "__main__":
             verbose=0,
             RANDOM_STATE=RANDOM_STATE,
             CAT_FEATURES=CAT_FEATURES,
+            allow_writing_files=False,
         )
 
         x_bin, y_bin = _make_clf_data(n_classes=2)
