@@ -24,9 +24,11 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
+      # pip PRs raise minimum versions in requirements.txt, so Dependabot reports no update-type for them.
       - name: Enable auto-merge for low-risk updates
         if: |
           steps.metadata.outputs.package-ecosystem == 'github_actions' ||
+          steps.metadata.outputs.package-ecosystem == 'pip' ||
           steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
           steps.metadata.outputs.update-type == 'version-update:semver-minor'
         env:
