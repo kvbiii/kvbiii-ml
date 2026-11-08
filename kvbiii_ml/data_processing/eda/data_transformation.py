@@ -101,11 +101,12 @@ class DataTransformer:
 if __name__ == "__main__":
     import numpy as np
 
+    rng = np.random.default_rng(42)
     sample_data = pd.DataFrame(
         {
-            "numerical_feature": np.random.randint(0, 1000, 5000),
-            "categorical_feature": np.random.choice(["A", "B", "C", "D"], 5000),
-            "target_feature": np.random.choice(["yes", "no"], 5000, p=[0.3, 0.7]),
+            "numerical_feature": rng.integers(0, 1000, 5000),
+            "categorical_feature": rng.choice(["A", "B", "C", "D"], 5000),
+            "target_feature": rng.choice(["yes", "no"], 5000, p=[0.3, 0.7]),
         }
     )
 

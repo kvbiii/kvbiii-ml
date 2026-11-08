@@ -5,6 +5,33 @@ import pandas as pd
 from scipy.stats import chi2_contingency, kruskal, ks_2samp, wasserstein_distance
 from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
 
+BINARY_CARDINALITY = 2
+MIN_ITEMS_TO_COMPARE = 2
+MIN_BREAKPOINTS = 3
+ASSOCIATION_NEGLIGIBLE = 0.05
+ASSOCIATION_WEAK = 0.15
+ASSOCIATION_MODERATE = 0.30
+ENTROPY_WELL_DISTRIBUTED = 0.80
+ENTROPY_MODERATE = 0.50
+EFFECT_SIZE_NEGLIGIBLE = 0.01
+EFFECT_SIZE_SMALL = 0.06
+EFFECT_SIZE_MEDIUM = 0.14
+P_VALUE_VERY_LOW = 0.001
+P_VALUE_LOW = 0.01
+P_VALUE_SIGNIFICANT = 0.05
+P_VALUE_MARGINAL = 0.10
+DRIFT_SCORE_STABLE = 0.05
+DRIFT_SCORE_SLIGHT = 0.10
+DRIFT_SCORE_MODERATE = 0.20
+DRIFT_DISTANCE_SIGNIFICANT = 0.20
+DRIFT_DISTANCE_MODERATE = 0.10
+DRIFT_DISTANCE_SLIGHT = 0.05
+PSI_SIGNIFICANT = 0.25
+PSI_MODERATE = 0.20
+PSI_SLIGHT = 0.10
+SKEW_LOW = 0.5
+SKEW_EXTREME = 5.0
+
 
 class DataAnalyzer:
     """A comprehensive data analysis class for exploratory data analysis (EDA).
@@ -28,8 +55,8 @@ class DataAnalyzer:
         df = pd.DataFrame(data.dtypes, columns=["dtypes"])
         df["Number of missing values"] = data.isna().sum()
         df["Percentage of missing values"] = data.isna().sum() / data.shape[0] * 100
-        df["Unique values"] = data.nunique().values
-        df["Count"] = data.count().values
+        df["Unique values"] = data.nunique().to_numpy()
+        df["Count"] = data.count().to_numpy()
         df = df.reset_index().rename(columns={"index": "Feature"})
         styled_df = (
             df.style.set_caption("📝 Base Information")
@@ -98,7 +125,7 @@ class DataAnalyzer:
         nunique = df.nunique()
 
         categorical_features = [col for col in categorical_cols if nunique[col] < unique_threshold]
-        binary_features = [col for col in df.columns if nunique[col] == 2]
+        binary_features = [col for col in df.columns if nunique[col] == BINARY_CARDINALITY]
         return list(set(categorical_features) | set(binary_features))
 
     @staticmethod
@@ -254,8 +281,8 @@ class DataAnalyzer:
         stats = pd.DataFrame(
             {
                 "Category": counts.index.tolist(),
-                "Count": counts.values.tolist(),
-                "Percentage (%)": percentages.values.tolist(),
+                "Count": counts.to_numpy().tolist(),
+                "Percentage (%)": percentages.to_numpy().tolist(),
             }
         )
 
@@ -325,7 +352,7 @@ class DataAnalyzer:
         else:
             raise ValueError("Invalid aggregation frequency. Use 'ME', 'YE', 'D', 'W', or 'H'.")
 
-        df = pd.DataFrame({label: counts.index.astype(int), "Count": counts.values})
+        df = pd.DataFrame({label: counts.index.astype(int), "Count": counts.to_numpy()})
         if missing_count > 0:
             df = pd.concat(
                 [df, pd.DataFrame([{label: "Unknown", "Count": missing_count}])],
@@ -364,14 +391,14 @@ class DataAnalyzer:
     def _skewness_cell_color(val: float) -> str:
         """Maps an absolute skewness value to a background colour string."""
         abs_val = abs(val)
-        if abs_val < 0.5:
+        if abs_val < SKEW_LOW:
             r, g, b = 76, 175, 80
         elif abs_val < 1.0:
             t = (abs_val - 0.5) / 0.5
             r = int(76 + t * (255 - 76))
             g = int(175 + t * (193 - 175))
             b = int(80 + t * (7 - 80))
-        elif abs_val < 5.0:
+        elif abs_val < SKEW_EXTREME:
             t = min((abs_val - 1.0) / 4.0, 1.0)
             r = 255
             g = int(193 - t * 193)
@@ -547,11 +574,11 @@ class DataAnalyzer:
         Thresholds follow Cohen (1988): negligible < 0.01, small < 0.06,
         medium < 0.14, large ≥ 0.14.
         """
-        if val < 0.01:
+        if val < EFFECT_SIZE_NEGLIGIBLE:
             r, g, b = 189, 189, 189
-        elif val < 0.06:
+        elif val < EFFECT_SIZE_SMALL:
             r, g, b = 255, 183, 77
-        elif val < 0.14:
+        elif val < EFFECT_SIZE_MEDIUM:
             r, g, b = 230, 81, 0
         else:
             r, g, b = 56, 142, 60
@@ -563,13 +590,13 @@ class DataAnalyzer:
     @staticmethod
     def _pvalue_cell_color(val: float) -> str:
         """Maps a p-value to a background colour (green = significant, red = not)."""
-        if val < 0.001:
+        if val < P_VALUE_VERY_LOW:
             r, g, b = 27, 94, 32
-        elif val < 0.01:
+        elif val < P_VALUE_LOW:
             r, g, b = 56, 142, 60
-        elif val < 0.05:
+        elif val < P_VALUE_SIGNIFICANT:
             r, g, b = 104, 159, 56
-        elif val < 0.10:
+        elif val < P_VALUE_MARGINAL:
             r, g, b = 245, 127, 23
         else:
             r, g, b = 198, 40, 40
@@ -869,10 +896,12 @@ class DataAnalyzer:
         rows = []
         for col in numerical_features:
             clean = data_work[[col, group_col]].dropna()
-            groups = [clean.loc[clean[group_col] == cls, col].values for cls in classes]
+            groups = [
+                clean.loc[clean[group_col] == cls, col].to_numpy(dtype=float) for cls in classes
+            ]
 
             row: dict = {"Feature": col}
-            for cls, grp in zip(classes, groups):
+            for cls, grp in zip(classes, groups, strict=True):
                 row[f"{cls} Median"] = float(np.median(grp)) if len(grp) else np.nan
                 row[f"{cls} IQR"] = (
                     float(np.percentile(grp, 75) - np.percentile(grp, 25)) if len(grp) else np.nan
@@ -884,7 +913,7 @@ class DataAnalyzer:
             eta_sq = ss_between / ss_total if ss_total > 0 else 0.0
 
             valid_groups = [g for g in groups if len(g) >= 1]
-            if len(valid_groups) >= 2:
+            if len(valid_groups) >= MIN_ITEMS_TO_COMPARE:
                 h_stat, p_val = kruskal(*valid_groups)
             else:
                 h_stat, p_val = np.nan, np.nan
@@ -899,7 +928,7 @@ class DataAnalyzer:
             mean_iqr = float(np.mean(valid_iqrs)) if valid_iqrs else 1.0
             median_range_iqr = (
                 (max(valid_medians) - min(valid_medians)) / mean_iqr
-                if mean_iqr > 0 and len(valid_medians) >= 2
+                if mean_iqr > 0 and len(valid_medians) >= MIN_ITEMS_TO_COMPARE
                 else 0.0
             )
 
@@ -1002,11 +1031,11 @@ class DataAnalyzer:
 
         Thresholds: negligible < 0.05, weak < 0.15, moderate < 0.30, strong ≥ 0.30.
         """
-        if val < 0.05:
+        if val < ASSOCIATION_NEGLIGIBLE:
             r, g, b = 189, 189, 189
-        elif val < 0.15:
+        elif val < ASSOCIATION_WEAK:
             r, g, b = 255, 183, 77
-        elif val < 0.30:
+        elif val < ASSOCIATION_MODERATE:
             r, g, b = 230, 81, 0
         else:
             r, g, b = 56, 142, 60
@@ -1021,9 +1050,9 @@ class DataAnalyzer:
 
         Green (≥ 0.80, well-distributed) → orange (≥ 0.50) → red (< 0.50, highly concentrated).
         """
-        if val >= 0.80:
+        if val >= ENTROPY_WELL_DISTRIBUTED:
             r, g, b = 56, 142, 60
-        elif val >= 0.50:
+        elif val >= ENTROPY_MODERATE:
             r, g, b = 230, 81, 0
         else:
             r, g, b = 198, 40, 40
@@ -1035,7 +1064,7 @@ class DataAnalyzer:
     @staticmethod
     def _compute_theil_u(feature: pd.Series, target: pd.Series) -> float:
         """Return Theil's U(target|feature): the share of target entropy explained by feature."""
-        contingency = pd.crosstab(feature, target).values.astype(float)
+        contingency = pd.crosstab(feature, target).to_numpy(dtype=float)
         n = contingency.sum()
         if n == 0:
             return 0.0
@@ -1060,7 +1089,7 @@ class DataAnalyzer:
         """Returns (Cramér's V, chi-squared statistic, p-value) for two categorical series."""
         contingency = pd.crosstab(feature, target)
         chi2, p_val, _, _ = chi2_contingency(contingency)
-        n = contingency.values.sum()
+        n = contingency.to_numpy().sum()
         r, c = contingency.shape
         min_dim = min(r - 1, c - 1)
         v = float(np.sqrt(chi2 / (n * min_dim))) if min_dim > 0 and n > 0 else 0.0
@@ -1103,7 +1132,7 @@ class DataAnalyzer:
             mode_pct = value_counts.iloc[0] / n_total * 100 if n_unique > 0 else 0.0
             top3_pct = value_counts.head(3).sum() / n_total * 100
 
-            probs = value_counts.values / value_counts.values.sum()
+            probs = value_counts.to_numpy() / value_counts.to_numpy().sum()
             nonzero_probs = probs[probs > 0]
             h = -float(np.sum(nonzero_probs * np.log(nonzero_probs)))
             h_max = np.log(n_unique) if n_unique > 1 else 1.0
@@ -1284,7 +1313,7 @@ class DataAnalyzer:
             row["Count"] = total_count
             row["Count %"] = total_count / n_total * 100
             for cls in classes:
-                cls_count = int(contingency.at[cat, cls]) if cls in contingency.columns else 0
+                cls_count = int(contingency.loc[cat, cls]) if cls in contingency.columns else 0
                 row[f"{cls} Count"] = cls_count
                 row[f"{cls} Row %"] = cls_count / total_count * 100 if total_count > 0 else 0.0
             rows.append(row)
@@ -1442,7 +1471,7 @@ class DataAnalyzer:
         rows = []
         for col in categorical_features:
             clean = data_work[[col, group_col]].dropna()
-            if len(clean) == 0 or clean[col].nunique() < 2:
+            if len(clean) == 0 or clean[col].nunique() < MIN_ITEMS_TO_COMPARE:
                 continue
             v, chi2, p_val = DataAnalyzer._compute_cramers_v_chi2(clean[col], clean[group_col])
             u = DataAnalyzer._compute_theil_u(clean[col], clean[group_col])
@@ -1541,11 +1570,11 @@ class DataAnalyzer:
     @staticmethod
     def _drift_score_cell_color(val: float) -> str:
         """Maps a drift score to a colour (green = stable, red = significant drift)."""
-        if val < 0.05:
+        if val < DRIFT_SCORE_STABLE:
             r, g, b = 56, 142, 60
-        elif val < 0.10:
+        elif val < DRIFT_SCORE_SLIGHT:
             r, g, b = 255, 183, 77
-        elif val < 0.20:
+        elif val < DRIFT_SCORE_MODERATE:
             r, g, b = 230, 81, 0
         else:
             r, g, b = 198, 40, 40
@@ -1557,13 +1586,13 @@ class DataAnalyzer:
     @staticmethod
     def _drift_pvalue_cell_color(val: float) -> str:
         """Maps a drift-context p-value to colour: low p = drift detected = red."""
-        if val < 0.001:
+        if val < P_VALUE_VERY_LOW:
             r, g, b = 198, 40, 40
-        elif val < 0.01:
+        elif val < P_VALUE_LOW:
             r, g, b = 230, 81, 0
-        elif val < 0.05:
+        elif val < P_VALUE_SIGNIFICANT:
             r, g, b = 255, 183, 77
-        elif val < 0.10:
+        elif val < P_VALUE_MARGINAL:
             r, g, b = 104, 159, 56
         else:
             r, g, b = 56, 142, 60
@@ -1591,7 +1620,7 @@ class DataAnalyzer:
     def _compute_numerical_psi(train: np.ndarray, test: np.ndarray, n_bins: int = 10) -> float:
         """PSI for a numerical feature using equal-frequency bins derived from train."""
         breakpoints = np.unique(np.percentile(train, np.linspace(0, 100, n_bins + 1)))
-        if len(breakpoints) < 3:
+        if len(breakpoints) < MIN_BREAKPOINTS:
             return np.nan
         bins = np.concatenate([[-np.inf], breakpoints[1:-1], [np.inf]])
         train_pcts = np.maximum(np.histogram(train, bins=bins)[0].astype(float) / len(train), 1e-6)
@@ -1671,19 +1700,19 @@ class DataAnalyzer:
         def _flag(ks_stat: float, psi: float) -> str:
             """Derives drift flag from KS statistic and PSI."""
             eff_psi = psi if not np.isnan(psi) else 0.0
-            if ks_stat >= 0.20 or eff_psi >= 0.25:
+            if ks_stat >= DRIFT_DISTANCE_SIGNIFICANT or eff_psi >= PSI_SIGNIFICANT:
                 return "SIGNIFICANT DRIFT"
-            if ks_stat >= 0.10 or eff_psi >= 0.20:
+            if ks_stat >= DRIFT_DISTANCE_MODERATE or eff_psi >= PSI_MODERATE:
                 return "MODERATE DRIFT"
-            if ks_stat >= 0.05 or eff_psi >= 0.10:
+            if ks_stat >= DRIFT_DISTANCE_SLIGHT or eff_psi >= PSI_SLIGHT:
                 return "SLIGHT DRIFT"
             return "STABLE"
 
         rows = []
         for col in numerical_features:
-            tr = train_data[col].dropna().values
-            te = test_data[col].dropna().values
-            if len(tr) < 2 or len(te) < 2:
+            tr = train_data[col].dropna().to_numpy(dtype=float)
+            te = test_data[col].dropna().to_numpy(dtype=float)
+            if len(tr) < MIN_ITEMS_TO_COMPARE or len(te) < MIN_ITEMS_TO_COMPARE:
                 continue
 
             ks_stat, ks_p = ks_2samp(tr, te)
@@ -1849,11 +1878,11 @@ class DataAnalyzer:
         def _flag(js_dist: float, psi: float) -> str:
             """Derives drift flag from JS distance and PSI."""
             eff_psi = psi if not np.isnan(psi) else 0.0
-            if js_dist >= 0.20 or eff_psi >= 0.25:
+            if js_dist >= DRIFT_DISTANCE_SIGNIFICANT or eff_psi >= PSI_SIGNIFICANT:
                 return "SIGNIFICANT DRIFT"
-            if js_dist >= 0.10 or eff_psi >= 0.20:
+            if js_dist >= DRIFT_DISTANCE_MODERATE or eff_psi >= PSI_MODERATE:
                 return "MODERATE DRIFT"
-            if js_dist >= 0.05 or eff_psi >= 0.10:
+            if js_dist >= DRIFT_DISTANCE_SLIGHT or eff_psi >= PSI_SLIGHT:
                 return "SLIGHT DRIFT"
             return "STABLE"
 
@@ -1875,7 +1904,7 @@ class DataAnalyzer:
             psi = DataAnalyzer._compute_categorical_psi(tr, te)
 
             common_cats = sorted(train_cats & test_cats)
-            if len(common_cats) >= 2:
+            if len(common_cats) >= MIN_ITEMS_TO_COMPARE:
                 counts_tr = np.array([(tr == c).sum() for c in common_cats])
                 counts_te = np.array([(te == c).sum() for c in common_cats])
                 _, chi2_p, _, _ = chi2_contingency(np.array([counts_tr, counts_te]))
@@ -2061,10 +2090,11 @@ class DataAnalyzer:
 
 if __name__ == "__main__":
     # Create sample data for demonstration
+    rng = np.random.default_rng(42)
     sample_data = pd.DataFrame(
         {
-            "numerical_feature": np.random.normal(100, 15, 1000),
-            "categorical_feature": np.random.choice(["A", "B", "C", "D"], 1000),
+            "numerical_feature": rng.normal(100, 15, 1000),
+            "categorical_feature": rng.choice(["A", "B", "C", "D"], 1000),
             "date_feature": pd.date_range("2023-01-01", periods=1000, freq="D"),
         }
     )
