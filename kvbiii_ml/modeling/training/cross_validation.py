@@ -463,7 +463,9 @@ class CrossValidationTrainer(BaseTrainer):
             ),
             valid_score=self.metric_fn(
                 y_valid,
-                self._metric_predictions(fitted_estimator, x_valid_proc, off_valid),
+                self._metric_predictions(
+                    fitted_estimator, cast("pd.DataFrame", x_valid_proc), off_valid
+                ),
             ),
             fitted_estimator=fitted_estimator,
             fitted_pipeline=fitted_pipeline,

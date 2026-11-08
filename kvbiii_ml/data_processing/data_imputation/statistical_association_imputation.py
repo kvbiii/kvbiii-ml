@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from math import log
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -46,7 +47,7 @@ class StatisticalAssociationImputer:
         self.rankings = None
         self.bin_edges = {}
         self.categorical_columns: list[str] = None  # ty: ignore[invalid-assignment]
-        self.impute_stats = None
+        self.impute_stats: dict[str, dict[str, Any]] | None = None
 
     def fit(self, df: pd.DataFrame) -> StatisticalAssociationImputer:
         """
@@ -401,7 +402,7 @@ class StatisticalAssociationImputer:
         self,
         df: pd.DataFrame,
         feature_name: str,
-        impute_stats: dict[str, object],
+        impute_stats: dict[str, Any],
         selected_cols: list[str],
     ) -> pd.DataFrame:
         """
@@ -410,7 +411,7 @@ class StatisticalAssociationImputer:
         Args:
             df (pd.DataFrame): Data containing the feature to impute.
             feature_name (str): Feature to impute.
-            impute_stats (dict[str, object]): Mapping with "group" and "overall" statistics.
+            impute_stats (dict[str, Any]): Mapping with "group" and "overall" statistics.
             selected_cols (list[str]): Grouping columns selected during fitting.
 
         Returns:

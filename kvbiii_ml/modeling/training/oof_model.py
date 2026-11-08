@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -176,18 +177,25 @@ def _apply_calibrator(
     """
 
     def _apply_one(cal: IsotonicRegression | LogisticRegression, p: np.ndarray) -> np.ndarray:
-        return cal.predict_proba(p.reshape(-1, 1))[:, 1] if method == "sigmoid" else cal.predict(p)
+        return cal.predict_proba(p.reshape(-1, 1))[:, 1] if method == "sigmoid" else cal.predict(p)  # ty: ignore[unresolved-attribute]
 
     if len(classes) == BINARY_N_CLASSES:
         p_cal = np.clip(
-            _apply_one(calibrator, raw_probas[:, 1]),
+            _apply_one(
+                cast("IsotonicRegression | LogisticRegression", calibrator), raw_probas[:, 1]
+            ),
             _CALIBRATION_PROBA_EPS,
             1.0 - _CALIBRATION_PROBA_EPS,
         )
         return np.column_stack([1 - p_cal, p_cal])
 
     cal_matrix = np.column_stack(
-        [_apply_one(cal, raw_probas[:, i]) for i, cal in enumerate(calibrator)]
+        [
+            _apply_one(cal, raw_probas[:, i])
+            for i, cal in enumerate(
+                cast("list[IsotonicRegression | LogisticRegression]", calibrator)
+            )
+        ]
     )
     cal_matrix = cal_matrix / np.clip(cal_matrix.sum(axis=1, keepdims=True), _PROBA_SUM_FLOOR, None)
     cal_matrix = np.clip(cal_matrix, _CALIBRATION_PROBA_EPS, None)

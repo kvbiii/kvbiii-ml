@@ -262,7 +262,7 @@ if __name__ == "__main__":
 
         print("=== CalibratedModel(EnsembleModel) inside CrossValidationTrainer ===")
         start = time.perf_counter()
-        _, valid_scores, _ = cv.fit(calibrated, x_df, y_ser)
+        _, valid_scores, _ = cv.fit(calibrated, x_df, y_ser)  # ty: ignore[invalid-argument-type]
         elapsed = time.perf_counter() - start
         print(f"  Calibrated CV valid: {np.mean(valid_scores):.4f} ± {np.std(valid_scores):.4f}")
         print(f"  Time for CV fit: {elapsed:.2f} seconds")

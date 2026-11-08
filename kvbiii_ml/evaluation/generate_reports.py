@@ -435,8 +435,12 @@ def classification_results(
     if cutoffs is None:
         return overall_default, per_class_default
 
-    y_train_pred_cutoff = pd.Series(_apply_cutoff(y_train_proba, cutoffs)).map(id2label)
-    y_test_pred_cutoff = pd.Series(_apply_cutoff(y_test_proba, cutoffs)).map(id2label)
+    y_train_pred_cutoff = pd.Series(_apply_cutoff(cast("np.ndarray", y_train_proba), cutoffs)).map(
+        id2label
+    )
+    y_test_pred_cutoff = pd.Series(_apply_cutoff(cast("np.ndarray", y_test_proba), cutoffs)).map(
+        id2label
+    )
     cutoff_label = str(cutoffs)
 
     overall_cutoff = _build_overall_table(
