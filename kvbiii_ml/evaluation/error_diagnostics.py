@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from typing import cast
+
 import numpy as np
 import pandas as pd
 from pandas.io.formats.style import Styler
+
+from kvbiii_ml._typing import StylerFormat
 
 try:  # optional notebook dependency
     from IPython.display import display
@@ -84,14 +88,14 @@ def display_regression_under_over_errors(
     """
 
     def _style(df: pd.DataFrame, title: str) -> Styler:
-        fmt: dict[str, str] = {}
+        fmt: StylerFormat = {}
         for col in df.columns:
             if df[col].dtype.kind in "fc":
                 if "Percentage Error" in col:
                     fmt[col] = "{:+.2f}%"
                 else:
                     fmt[col] = "{:.4f}"
-        styler = df.style.set_caption(title).format(fmt)
+        styler = cast("Styler", df.style.set_caption(title).format(fmt))
         error_cols = [c for c in df.columns if "Error" in c]
         if error_cols:
             styler = styler.background_gradient(subset=error_cols, cmap="RdYlGn_r")
@@ -256,7 +260,7 @@ def display_classification_errors(errors_by_class: dict, id2label: dict[int, str
     """
 
     def _style(df: pd.DataFrame, title: str) -> Styler:
-        fmt: dict[str, str] = {}
+        fmt: StylerFormat = {}
         for col in df.columns:
             if df[col].dtype.kind in "fc" and "Probability" in col:
                 fmt[col] = "{:.4f}"
@@ -264,7 +268,7 @@ def display_classification_errors(errors_by_class: dict, id2label: dict[int, str
             empty_df = pd.DataFrame({"No errors found": [""]})
             styler = empty_df.style.set_caption(title)
         else:
-            styler = df.style.set_caption(title).format(fmt)
+            styler = cast("Styler", df.style.set_caption(title).format(fmt))
 
         prob_cols = [c for c in df.columns if "Probability" in c and df[c].dtype.kind in "fc"]
         if prob_cols:

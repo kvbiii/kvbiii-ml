@@ -1,4 +1,5 @@
 # ruff: noqa: ANN401
+from collections.abc import Callable
 from typing import Any, Protocol
 
 
@@ -20,3 +21,6 @@ class Estimator(Protocol):
     def predict_proba(self, *args: Any, **kwargs: Any) -> Any: ...
 
     def set_params(self, *args: Any, **kwargs: Any) -> Any: ...
+
+
+StylerFormat = dict[Any, str | Callable[..., Any] | None]
