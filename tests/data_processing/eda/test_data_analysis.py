@@ -72,23 +72,23 @@ def test_base_information_computes_dataset_overview(sample_dataframe):
     # Check missing value counts
     numerical_missing = result_df[result_df["Feature"] == "numerical_feature"][
         "Number of missing values"
-    ].values[0]
+    ].iloc[0]
     if numerical_missing != 11:
         raise AssertionError()
 
     categorical_missing = result_df[result_df["Feature"] == "categorical_feature"][
         "Number of missing values"
-    ].values[0]
+    ].iloc[0]
     if categorical_missing != 6:
         raise AssertionError()
 
     # Check unique value counts
-    binary_unique = result_df[result_df["Feature"] == "binary_feature"]["Unique values"].values[0]
+    binary_unique = result_df[result_df["Feature"] == "binary_feature"]["Unique values"].iloc[0]
     if binary_unique != 2:
         raise AssertionError()
 
     # Check counts (non-missing values)
-    num_feature_count = result_df[result_df["Feature"] == "numerical_feature"]["Count"].values[0]
+    num_feature_count = result_df[result_df["Feature"] == "numerical_feature"]["Count"].iloc[0]
     if num_feature_count != len(sample_dataframe) - 11:
         raise AssertionError()
 
@@ -120,7 +120,8 @@ def test_get_categorical_features_identifies_correct_features(sample_dataframe):
     categorical_features_high = DataAnalyzer.get_categorical_features(
         sample_dataframe, unique_threshold=200
     )
-    # Implementation filters strictly by threshold on categorical/object columns; high_cardinality is numeric so won't appear
+    # Implementation filters strictly by threshold on categorical/object columns;
+    # high_cardinality is numeric so won't appear
     # Relax expectation accordingly
     if not isinstance(categorical_features_high, list):
         raise AssertionError()
@@ -144,7 +145,7 @@ def test_extract_unique_items_handles_various_inputs():
         - Whitespace is stripped
     """
     # Test string representation of list
-    # The current implementation uses eval and returns set order; ensure content match ignoring order
+    # The implementation uses eval and returns set order; compare ignoring order
     string_list = "['apple', 'banana', 'apple', ' Orange ']"
     result = DataAnalyzer.extract_unique_items(string_list)
     if set(result) != {"apple", "banana", "orange"}:
@@ -157,9 +158,8 @@ def test_extract_unique_items_handles_various_inputs():
     except ValueError:
         # Current implementation uses pd.isna which errors on list; treat as acceptable empty result
         result = []
-    if result:  # only assert content if non-empty
-        if set(result) != {"red", "green", "blue"}:
-            raise AssertionError()
+    if result and set(result) != {"red", "green", "blue"}:  # only assert content if non-empty
+        raise AssertionError()
 
     # Test None/NaN
     result = DataAnalyzer.extract_unique_items(None)
@@ -222,22 +222,22 @@ def test_describe_numerical_feature_computes_correct_statistics(sample_dataframe
     # Compare with manually computed values
     numerical_data = sample_dataframe["numerical_feature"].dropna()
 
-    if result_df["Count"].values[0] != len(numerical_data):
+    if result_df["Count"].iloc[0] != len(numerical_data):
         raise AssertionError()
-    if not abs(result_df["Mean"].values[0] - numerical_data.mean()) < 1e-10:
+    if not abs(result_df["Mean"].iloc[0] - numerical_data.mean()) < 1e-10:
         raise AssertionError()
-    if not abs(result_df["Std"].values[0] - numerical_data.std()) < 1e-10:
+    if not abs(result_df["Std"].iloc[0] - numerical_data.std()) < 1e-10:
         raise AssertionError()
-    if not abs(result_df["Min"].values[0] - numerical_data.min()) < 1e-10:
+    if not abs(result_df["Min"].iloc[0] - numerical_data.min()) < 1e-10:
         raise AssertionError()
-    if not abs(result_df["Max"].values[0] - numerical_data.max()) < 1e-10:
+    if not abs(result_df["Max"].iloc[0] - numerical_data.max()) < 1e-10:
         raise AssertionError()
 
     # Check missing values
-    if result_df["Missing"].values[0] != 11:
+    if result_df["Missing"].iloc[0] != 11:
         raise AssertionError()
     expected_missing_pct = 11 / len(sample_dataframe) * 100
-    if not abs(result_df["Missing (%)"].values[0] - expected_missing_pct) < 1e-10:
+    if not abs(result_df["Missing (%)"].iloc[0] - expected_missing_pct) < 1e-10:
         raise AssertionError()
 
 
@@ -288,9 +288,10 @@ def test_describe_categorical_feature_provides_distribution_analysis(sample_data
         raise AssertionError()
 
     # Check "Other" category is present if there are more than top_n categories
-    if sample_dataframe["high_cardinality"].nunique() > 5:
-        if not any("Other" in str(cat) for cat in limited_df["Category"]):
-            raise AssertionError()
+    if sample_dataframe["high_cardinality"].nunique() > 5 and not any(
+        "Other" in str(cat) for cat in limited_df["Category"]
+    ):
+        raise AssertionError()
 
     # Test without null values
     no_null_result = DataAnalyzer.describe_categorical_feature(
@@ -367,8 +368,40 @@ def test_describe_time_series_feature_analyzes_temporal_patterns(sample_datafram
     unknown_rows = missing_df[missing_df["Month"] == "Unknown"]
     if len(unknown_rows) != 1:
         raise AssertionError()
-    if unknown_rows["Count"].values[0] != 6:
+    if unknown_rows["Count"].iloc[0] != 6:
         raise AssertionError()
+
+
+def test_numerical_drift_analysis_is_the_same_for_nullable_and_plain_floats():
+    """Tests numerical_drift_analysis returns the same statistics for float64 and Float64 columns.
+
+    Asserts:
+        - SMD and Std Ratio do not depend on the column dtype
+    """
+    rng = np.random.default_rng(0)
+    plain = pd.DataFrame({"x": rng.normal(size=200)})
+    nullable = plain.astype("Float64")
+    expected = DataAnalyzer.numerical_drift_analysis(plain.iloc[:120], plain.iloc[120:]).data
+    result = DataAnalyzer.numerical_drift_analysis(nullable.iloc[:120], nullable.iloc[120:]).data
+    pd.testing.assert_frame_equal(result, expected)
+
+
+def test_numerical_drift_analysis_treats_boolean_columns_like_integers():
+    """Tests numerical_drift_analysis accepts a boolean column and matches the 0/1 integer result.
+
+    Asserts:
+        - A bool column no longer raises and gives the same statistics as the same data as int
+    """
+    rng = np.random.default_rng(0)
+    as_int = pd.DataFrame({"x": rng.integers(0, 2, 200)})
+    as_bool = as_int.astype(bool)
+    expected = DataAnalyzer.numerical_drift_analysis(
+        as_int.iloc[:120], as_int.iloc[120:], ["x"]
+    ).data
+    result = DataAnalyzer.numerical_drift_analysis(
+        as_bool.iloc[:120], as_bool.iloc[120:], ["x"]
+    ).data
+    pd.testing.assert_frame_equal(result, expected)
 
 
 if __name__ == "__main__":

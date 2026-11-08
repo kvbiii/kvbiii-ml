@@ -132,8 +132,9 @@ def test_datacleaner_remove_duplicate_features_handles_no_duplicates():
 
 
 def test_datacleaner_categorize_categorical_features_by_missing_boundary_thresholds():
-    """Tests DataCleaner.categorize_categorical_features_by_missing at exact threshold
-    boundaries (0.0 and 0.1 missing ratio).
+    """Test categorize_categorical_features_by_missing at exact threshold boundaries.
+
+    The boundaries are 0.0 and 0.1 missing ratio.
 
     Asserts:
         - A feature with exactly 0.0 missing ratio is treated as non-missing, not

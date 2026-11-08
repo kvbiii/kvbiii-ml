@@ -3,6 +3,11 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 
+BINARY_CARDINALITY = 2
+MAX_GROUP_CARDINALITY = 1000
+MIN_GROUP_SIZE = 2
+MANY_MISSING_RATIO = 0.1
+
 
 class DataCleaner:
     """
@@ -23,8 +28,7 @@ class DataCleaner:
 
         Args:
             df (pd.DataFrame): The input DataFrame.
-            threshold (int, optional): Maximum number of unique values for a feature
-                to be considered categorical. Defaults to 100.
+            threshold (int): Max unique values for a categorical feature. Defaults to 100.
 
         Returns:
             list[str]: List of categorical feature names.
@@ -33,7 +37,7 @@ class DataCleaner:
         nunique = df.nunique()
 
         categorical_features = [col for col in categorical_cols if nunique[col] < threshold]
-        binary_features = [col for col in df.columns if nunique[col] == 2]
+        binary_features = [col for col in df.columns if nunique[col] == BINARY_CARDINALITY]
 
         return list(set(categorical_features) | set(binary_features))
 
@@ -117,7 +121,7 @@ class DataCleaner:
                 feature_hash = pd.util.hash_array(df[feature].values).tobytes()
                 int_hash = hash(feature_hash)
             except (TypeError, AttributeError):
-                int_hash = hash(str(df[feature].values.tobytes()))
+                int_hash = hash(str(df[feature].to_numpy().tobytes()))
             if int_hash in feature_hash_map:
                 original_feature = feature_hash_map[int_hash]
                 if df[feature].equals(df[original_feature]):
@@ -144,10 +148,8 @@ class DataCleaner:
 
         Args:
             df (pd.DataFrame): The input DataFrame.
-            features_to_investigate (list[str]): List of categorical features
-                to investigate.
-            threshold (float, optional): The threshold for skewness in the
-                distribution. Defaults to 0.99.
+            features_to_investigate (list[str]): List of categorical features to investigate.
+            threshold (float): The threshold for skewness in the distribution. Defaults to 0.99.
 
         Returns:
             pd.DataFrame: The DataFrame with highly skewed categorical features dropped.
@@ -220,7 +222,7 @@ class DataCleaner:
         count_groups: dict[int, list[str]] = defaultdict(list)
         for col in df.columns:
             n_unique = df[col].nunique(dropna=False)
-            if 1 < n_unique <= 1000 and n_unique < len(df):
+            if 1 < n_unique <= MAX_GROUP_CARDINALITY and n_unique < len(df):
                 count_groups[n_unique].append(col)
         return count_groups
 
@@ -250,7 +252,7 @@ class DataCleaner:
 
         mapping: dict[int, int] = {}
         reverse_mapping: dict[int, int] = {}
-        for code_1, code_2 in zip(codes_1, codes_2):
+        for code_1, code_2 in zip(codes_1, codes_2, strict=False):
             if code_1 in mapping:
                 if mapping[code_1] != code_2:
                     return False
@@ -270,7 +272,7 @@ class DataCleaner:
         columns_to_remove: set[str],
     ) -> None:
         """Processes one cardinality group and marks bijective duplicates for removal."""
-        if len(cols_in_group) < 2:
+        if len(cols_in_group) < MIN_GROUP_SIZE:
             return
 
         factorized, valid_masks = DataCleaner._build_factorized_group(
@@ -340,15 +342,19 @@ class DataCleaner:
             dict[str, list[str]]: Dictionary with keys as types of categorical
                 features and values as lists of feature names.
         """
-        missing_ratio = data[categorical_features].isnull().mean()
+        missing_ratio = data[categorical_features].isna().mean()
 
         return {
             "categorical_not_many_missing_features": sorted(
-                [col for col in categorical_features if 0 < missing_ratio[col] <= 0.1],
+                [
+                    col
+                    for col in categorical_features
+                    if 0 < missing_ratio[col] <= MANY_MISSING_RATIO
+                ],
                 key=lambda col: missing_ratio[col],
             ),
             "categorical_many_missing_features": sorted(
-                [col for col in categorical_features if missing_ratio[col] > 0.1],
+                [col for col in categorical_features if missing_ratio[col] > MANY_MISSING_RATIO],
                 key=lambda col: missing_ratio[col],
             ),
             "categorical_missing_features": sorted(
@@ -364,15 +370,16 @@ class DataCleaner:
 def _demonstrate_usage() -> None:
     """Demonstrates the usage of DataCleaner class with sample data."""
     n_samples: int = 10000
+    rng = np.random.default_rng(42)
     sample_data = pd.DataFrame(
         {
-            "numerical_feature": np.random.randint(0, 100, n_samples),
-            "categorical_feature": np.random.choice(["A", "B", "C", "D"], n_samples),
-            "duplicate_feature": np.random.randint(0, 100, n_samples),
+            "numerical_feature": rng.integers(0, 100, n_samples),
+            "categorical_feature": rng.choice(["A", "B", "C", "D"], n_samples),
+            "duplicate_feature": rng.integers(0, 100, n_samples),
             "single_value_feature": ["constant"] * n_samples,
             "all_na_feature": [np.nan] * n_samples,
-            "high_cardinality_feature": np.random.choice(range(500), n_samples),
-            "skewed_cat_feature": np.random.choice(
+            "high_cardinality_feature": rng.choice(range(500), n_samples),
+            "skewed_cat_feature": rng.choice(
                 ["majority", "minority"],
                 n_samples,
                 p=[0.995, 0.005],
@@ -386,7 +393,7 @@ def _demonstrate_usage() -> None:
         {"A": "W", "B": "X", "C": "Y", "D": "Z"}
     )
     n_features = 2000
-    new_features = {f"feature_{i}": np.random.randint(0, 10, n_samples) for i in range(n_features)}
+    new_features = {f"feature_{i}": rng.integers(0, 10, n_samples) for i in range(n_features)}
     sample_data = pd.concat([sample_data, pd.DataFrame(new_features)], axis=1)
 
     print("Original DataFrame shape:", sample_data.shape)
