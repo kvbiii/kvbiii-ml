@@ -8,10 +8,11 @@ from typing import Any, ClassVar
 import numpy as np
 import optuna
 import pandas as pd
-from sklearn.base import BaseEstimator, clone
+from sklearn.base import clone
 from sklearn.model_selection import BaseCrossValidator, KFold, StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 
+from kvbiii_ml._typing import Estimator
 from kvbiii_ml.modeling.training.base_trainer import BaseTrainer, to_metric_proba
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 from kvbiii_ml.modeling.training.oof_model import _get_n_iterations
@@ -376,7 +377,7 @@ class RandomSearchCV:
 
     def evaluate_params(
         self,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         X: pd.DataFrame,
         y: pd.Series,
         params: dict[str, Any],
@@ -387,7 +388,7 @@ class RandomSearchCV:
         both early-stop on a split held out of the training fold.
 
         Args:
-            estimator (BaseEstimator): Estimator template to clone per fold.
+            estimator (Estimator): Estimator template to clone per fold.
             X (pd.DataFrame): Training features.
             y (pd.Series): Training target.
             params (dict[str, Any]): Configuration to score.
@@ -445,7 +446,7 @@ class RandomSearchCV:
         self,
         trial: optuna.Trial,
         plan: _EvaluationPlan,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         space: ParamsGrid | None = None,
     ) -> float:
         """Score one sampled configuration against a plan.
@@ -453,7 +454,7 @@ class RandomSearchCV:
         Args:
             trial (optuna.Trial): Active Optuna trial.
             plan (_EvaluationPlan): Fidelity level to score the configuration at.
-            estimator (BaseEstimator): Estimator template to clone per fold.
+            estimator (Estimator): Estimator template to clone per fold.
             space (ParamsGrid | None): Search space; None uses the caller's full grid.
 
         Returns:
@@ -469,7 +470,7 @@ class RandomSearchCV:
 
     def tune(
         self,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         X: pd.DataFrame,
         y: pd.Series,
         params_grid: ParamsGrid,
@@ -483,7 +484,7 @@ class RandomSearchCV:
           replaces cross-validation and the search runs single-stage. Defaults to None.
 
         Args:
-            estimator (BaseEstimator): Estimator to tune.
+            estimator (Estimator): Estimator to tune.
             X (pd.DataFrame): Training features.
             y (pd.Series): Training target.
             params_grid (ParamsGrid): Parameter search space.
@@ -517,7 +518,7 @@ class RandomSearchCV:
             optuna.logging.set_verbosity(previous_verbosity)
         return study
 
-    def _baseline_params(self, estimator: BaseEstimator, snap: bool = True) -> dict[str, Any]:
+    def _baseline_params(self, estimator: Estimator, snap: bool = True) -> dict[str, Any]:
         """Build the estimator's own parameters for every grid entry it exposes.
 
         Parameters the estimator does not expose through get_params are omitted so the
@@ -529,7 +530,7 @@ class RandomSearchCV:
           exactly as configured. Defaults to True.
 
         Args:
-            estimator (BaseEstimator): Estimator template supplying current values.
+            estimator (Estimator): Estimator template supplying current values.
             snap (bool): Clamp values into the grid (see notes). Defaults to True.
 
         Returns:
@@ -551,7 +552,7 @@ class RandomSearchCV:
                     baseline[name] = value
         return baseline
 
-    def _baseline_trial(self, estimator: BaseEstimator) -> dict[str, Any] | None:
+    def _baseline_trial(self, estimator: Estimator) -> dict[str, Any] | None:
         """Return the snapped baseline as enqueueable trial params, or None if incomplete."""
         baseline = self._baseline_params(estimator)
         tunable = self._tunable_names()
@@ -701,7 +702,7 @@ class RandomSearchCV:
         return plan
 
     def _commit_selection(
-        self, estimator: BaseEstimator, plan: _EvaluationPlan, candidate: _Candidate
+        self, estimator: Estimator, plan: _EvaluationPlan, candidate: _Candidate
     ) -> None:
         """Store the winning configuration in a form ready for a full-data refit.
 
@@ -709,7 +710,7 @@ class RandomSearchCV:
         stop against, and replaced by a concrete boosting-round count.
 
         Args:
-            estimator (BaseEstimator): Estimator template, used to pick the round-count key.
+            estimator (Estimator): Estimator template, used to pick the round-count key.
             plan (_EvaluationPlan): Full-fidelity plan the candidate was scored on.
             candidate (_Candidate): Winning configuration.
         """
@@ -758,7 +759,7 @@ class RandomSearchCV:
     def _evaluate_config(
         self,
         plan: _EvaluationPlan,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         params: dict[str, Any],
         trial: optuna.Trial | None = None,
     ) -> tuple[list[float], list[int]]:
@@ -769,7 +770,7 @@ class RandomSearchCV:
 
         Args:
             plan (_EvaluationPlan): Fidelity level to evaluate at.
-            estimator (BaseEstimator): Estimator template to clone per fold.
+            estimator (Estimator): Estimator template to clone per fold.
             params (dict[str, Any]): Parameters in full-data units.
             trial (optuna.Trial | None): Trial receiving pruning reports. None disables reporting.
 
@@ -878,7 +879,7 @@ class RandomSearchCV:
     @staticmethod
     def _is_censored(
         median_iterations: float,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         params: dict[str, Any],
         param_name: str,
     ) -> bool:
@@ -886,7 +887,7 @@ class RandomSearchCV:
 
         Args:
             median_iterations (float): Median iteration count across folds.
-            estimator (BaseEstimator): Estimator template, read when params is silent.
+            estimator (Estimator): Estimator template, read when params is silent.
             params (dict[str, Any]): Winning configuration.
             param_name (str): Name of the round-count parameter for this family.
 
@@ -1262,7 +1263,7 @@ class RandomSearchCV:
 
     def _resolve_n_estimators(
         self,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         best_iterations: list[int],
         params: dict[str, Any],
         refit_scale: float,
@@ -1275,7 +1276,7 @@ class RandomSearchCV:
         but the scaled value is still returned as the best estimate available.
 
         Args:
-            estimator (BaseEstimator): Estimator template, used to pick the parameter name.
+            estimator (Estimator): Estimator template, used to pick the parameter name.
             best_iterations (list[int]): Iteration counts observed per fold.
             params (dict[str, Any]): Winning configuration, read for the round ceiling.
             refit_scale (float): Refit rows divided by rows fitted per fold.
@@ -1297,7 +1298,7 @@ class RandomSearchCV:
     def _run_confirm_stage(
         self,
         plan: _EvaluationPlan,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         shortlist: list[dict[str, Any]],
     ) -> optuna.study.Study:
         """Run the full-fidelity search, warm-started from the explore shortlist if any.
@@ -1308,7 +1309,7 @@ class RandomSearchCV:
 
         Args:
             plan (_EvaluationPlan): Full-fidelity evaluation plan.
-            estimator (BaseEstimator): Estimator template to clone per fold.
+            estimator (Estimator): Estimator template to clone per fold.
             shortlist (list[dict[str, Any]]): Explore-stage configurations, best first.
 
         Returns:
@@ -1340,7 +1341,7 @@ class RandomSearchCV:
 
     def _run_explore_stage(
         self,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         X: pd.DataFrame,
         y: pd.Series,
         confirm_plan: _EvaluationPlan,
@@ -1348,7 +1349,7 @@ class RandomSearchCV:
         """Rank configurations cheaply on a fixed subsample and return the shortlist.
 
         Args:
-            estimator (BaseEstimator): Estimator template to clone per fold.
+            estimator (Estimator): Estimator template to clone per fold.
             X (pd.DataFrame): Full training features.
             y (pd.Series): Full training target.
             confirm_plan (_EvaluationPlan): Full-fidelity plan, the fidelity reference.
@@ -1449,7 +1450,7 @@ class RandomSearchCV:
         return scaled
 
     def _select_best(
-        self, plan: _EvaluationPlan, estimator: BaseEstimator, study: optuna.study.Study
+        self, plan: _EvaluationPlan, estimator: Estimator, study: optuna.study.Study
     ) -> None:
         """Choose between the searched configurations and the estimator's own parameters.
 
@@ -1460,7 +1461,7 @@ class RandomSearchCV:
 
         Args:
             plan (_EvaluationPlan): Full-fidelity plan the baseline is scored on.
-            estimator (BaseEstimator): Estimator template supplying the baseline.
+            estimator (Estimator): Estimator template supplying the baseline.
             study (optuna.study.Study): Completed final-stage study.
         """
         baseline_params = self._baseline_params(estimator, snap=False)

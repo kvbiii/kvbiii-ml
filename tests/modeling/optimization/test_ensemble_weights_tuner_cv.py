@@ -133,7 +133,10 @@ def test_tuner_regression_weights(small_regression_data):
     ]
     cv_trainer = _build_cv("MSE", "regression")
     tuner = EnsembleWeightTunerCV(
-        estimators=estimators, cross_validator=cv_trainer, n_trials=3, seed=5
+        estimators=estimators,  # ty: ignore[invalid-argument-type]
+        cross_validator=cv_trainer,
+        n_trials=3,
+        seed=5,
     )
     tuner.tune(X, y)
     if tuner.best_weights is None:

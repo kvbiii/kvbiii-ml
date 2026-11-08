@@ -4,11 +4,11 @@ from copy import deepcopy
 
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 
+from kvbiii_ml._typing import Estimator
 from kvbiii_ml.modeling.training.base_trainer import BaseTrainer
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 from kvbiii_ml.modeling.training.oof_model import (
@@ -45,7 +45,7 @@ class CalibratedModel:
 
     def __init__(
         self,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         problem_type: str = "classification",
         calibration_method: str = "isotonic",
         calibration_size: float = _DEFAULT_CALIBRATION_SIZE,
@@ -54,7 +54,7 @@ class CalibratedModel:
         """Initialize the calibrated wrapper.
 
         Args:
-            estimator (BaseEstimator): Unfitted estimator or EnsembleModel to calibrate.
+            estimator (Estimator): Unfitted estimator or EnsembleModel to calibrate.
             problem_type (str): Only "classification" is supported. Defaults to "classification".
             calibration_method (str): "isotonic" or "sigmoid". Defaults to "isotonic".
             calibration_size (float): Held-out share for the calibrator. Defaults to 0.2.
@@ -78,7 +78,7 @@ class CalibratedModel:
 
         self.classes_: np.ndarray = None  # ty: ignore[invalid-assignment]
         self.calibrator_: IsotonicRegression | LogisticRegression | list = None  # ty: ignore[invalid-assignment]
-        self.fitted_estimator_: BaseEstimator | None = None
+        self.fitted_estimator_: Estimator | None = None
 
     def fit(
         self,
@@ -170,7 +170,7 @@ class CalibratedModel:
         self,
         X: pd.DataFrame,
         y: pd.Series,
-        holdout_estimator: BaseEstimator,
+        holdout_estimator: Estimator,
         eval_set: list[tuple[pd.DataFrame, pd.Series]] | None,
     ) -> None:
         """Refit the base estimator on the full data for inference.
@@ -182,7 +182,7 @@ class CalibratedModel:
         Args:
             X (pd.DataFrame): Full training features.
             y (pd.Series): Full training target.
-            holdout_estimator (BaseEstimator): Estimator fitted on the hold-out split.
+            holdout_estimator (Estimator): Estimator fitted on the hold-out split.
             eval_set (list[tuple] | None): Validation data for early stopping, or None.
         """
         X_valid, y_valid = OOFModel._parse_eval_set(eval_set)  # noqa: SLF001

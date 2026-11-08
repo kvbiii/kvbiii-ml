@@ -2,8 +2,8 @@ import gc
 
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator
 
+from kvbiii_ml._typing import Estimator
 from kvbiii_ml.data_processing.eda.data_analysis import DataAnalyzer
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
@@ -18,7 +18,7 @@ class MutualInformationRecursiveFeatureElimination:
 
     def __init__(
         self,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         cross_validator: CrossValidationTrainer,
         steps: int = 5,
         alpha: float = 0.95,
@@ -28,7 +28,7 @@ class MutualInformationRecursiveFeatureElimination:
         """Initialize the MI selector.
 
         Args:
-            estimator (BaseEstimator): Estimator to fit within each fold for metric evaluation.
+            estimator (Estimator): Estimator to fit within each fold for metric evaluation.
             cross_validator (CrossValidationTrainer): Cross-validation trainer instance.
             steps (int): Number of elimination iterations. Defaults to 5.
             alpha (float): Weight for final selection score mix. Defaults to 0.95.

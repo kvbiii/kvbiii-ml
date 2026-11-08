@@ -6,11 +6,12 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator, clone
+from sklearn.base import clone
 from sklearn.model_selection import BaseCrossValidator, KFold
 from sklearn.pipeline import Pipeline
 from tqdm import tqdm
 
+from kvbiii_ml._typing import Estimator
 from kvbiii_ml.evaluation.custom_metrics_handler import CustomMetricsHandler
 from kvbiii_ml.evaluation.metrics import (
     METRICS,
@@ -37,7 +38,7 @@ class _FoldResult:
 
     train_score: Any
     valid_score: Any
-    fitted_estimator: BaseEstimator
+    fitted_estimator: Estimator
     fitted_pipeline: Pipeline | None
     test_pred: np.ndarray | None
 
@@ -173,7 +174,7 @@ class CrossValidationTrainer(BaseTrainer):
 
         self.train_scores_: list[float] = []
         self.valid_scores_: list[float] = []
-        self.fitted_estimators_: list[BaseEstimator] = []
+        self.fitted_estimators_: list[Estimator] = []
         self.fitted_pipelines_: list[Pipeline | None] = []
 
     @staticmethod
@@ -195,7 +196,7 @@ class CrossValidationTrainer(BaseTrainer):
         return False
 
     @staticmethod
-    def _clone_estimator(estimator: BaseEstimator) -> BaseEstimator:
+    def _clone_estimator(estimator: Estimator) -> Estimator:
         """Clone an estimator safely.
 
         Uses deepcopy for CatBoost because sklearn.clone cannot round-trip
@@ -203,10 +204,10 @@ class CrossValidationTrainer(BaseTrainer):
         parameter internally during __init__, violating sklearn's clone contract.
 
         Args:
-            estimator (BaseEstimator): Estimator instance to duplicate.
+            estimator (Estimator): Estimator instance to duplicate.
 
         Returns:
-            BaseEstimator: Independent estimator instance for a CV fold.
+            Estimator: Independent estimator instance for a CV fold.
         """
         if "CatBoost" in type(estimator).__name__:
             return deepcopy(estimator)
@@ -281,7 +282,7 @@ class CrossValidationTrainer(BaseTrainer):
 
     def fit(
         self,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         X: pd.DataFrame,
         y: pd.Series,
         X_test: pd.DataFrame | None = None,
@@ -301,7 +302,7 @@ class CrossValidationTrainer(BaseTrainer):
           state. Defaults to None.
 
         Args:
-            estimator (BaseEstimator): Unfitted estimator to clone and train each fold.
+            estimator (Estimator): Unfitted estimator to clone and train each fold.
             X (pd.DataFrame): Feature matrix aligned with target.
             y (pd.Series): Target values.
             X_test (pd.DataFrame | None): Optional test set transformed per fold. Defaults to None.
@@ -388,7 +389,7 @@ class CrossValidationTrainer(BaseTrainer):
     def _run_fold(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         pipeline: Pipeline | None,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         X: pd.DataFrame,
         y: pd.Series,
         X_test: pd.DataFrame | None,
@@ -399,7 +400,7 @@ class CrossValidationTrainer(BaseTrainer):
 
         Args:
             pipeline (Pipeline | None): Unfitted pipeline template, or None.
-            estimator (BaseEstimator): Unfitted estimator, cloned for this fold.
+            estimator (Estimator): Unfitted estimator, cloned for this fold.
             X (pd.DataFrame): Full feature matrix.
             y (pd.Series): Full target.
             X_test (pd.DataFrame | None): Optional test features.
@@ -470,7 +471,7 @@ class CrossValidationTrainer(BaseTrainer):
         )
 
     def _metric_predictions(
-        self, estimator: BaseEstimator, X: pd.DataFrame, offset: np.ndarray | None
+        self, estimator: Estimator, X: pd.DataFrame, offset: np.ndarray | None
     ) -> np.ndarray:
         """Predict X in the form the configured metric expects (see `to_metric_proba`).
 
@@ -485,7 +486,7 @@ class CrossValidationTrainer(BaseTrainer):
 
     @staticmethod
     def _estimator_output(
-        estimator: BaseEstimator,
+        estimator: Estimator,
         X: pd.DataFrame,
         offset: np.ndarray | None,
         proba: bool,
@@ -669,7 +670,7 @@ class CrossValidationTrainer(BaseTrainer):
         }
 
     @staticmethod
-    def _order_x_for_estimator(X: pd.DataFrame, estimator: BaseEstimator) -> pd.DataFrame:
+    def _order_x_for_estimator(X: pd.DataFrame, estimator: Estimator) -> pd.DataFrame:
         """Reorder columns to match an estimator's feature order (see `order_x_for_estimator`)."""
         return order_x_for_estimator(X, estimator)
 

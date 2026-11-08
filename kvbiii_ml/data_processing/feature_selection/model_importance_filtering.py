@@ -4,9 +4,9 @@ from typing import Any, ClassVar
 
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator
 from sklearn.pipeline import Pipeline
 
+from kvbiii_ml._typing import Estimator
 from kvbiii_ml.data_processing.preprocessing.pipeline_dependency import (
     PipelineDependencyGraph,
 )
@@ -35,7 +35,7 @@ class ModelImportanceFiltering:
 
     def __init__(
         self,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         cross_validator: CrossValidationTrainer,
         threshold: float = 0.0,
         protected_features: list[str] | None = None,
@@ -45,7 +45,7 @@ class ModelImportanceFiltering:
         """Initialize the filter and validate the options.
 
         Args:
-            estimator (BaseEstimator): Estimator with a ``feature_importances_`` attribute.
+            estimator (Estimator): Estimator with a ``feature_importances_`` attribute.
             cross_validator (CrossValidationTrainer): CV trainer, optionally holding a pipeline.
             threshold (float): Remove features with mean importance ≤ this. Defaults to 0.0.
             protected_features (list[str] | None): Processed names never removed. Defaults to None.
@@ -84,10 +84,10 @@ class ModelImportanceFiltering:
 
     @staticmethod
     def _restrict_catboost_cat_features(
-        estimator: BaseEstimator,
+        estimator: Estimator,
         current_features: set[str],
         post_pipeline_dtypes: pd.Series | None = None,
-    ) -> BaseEstimator:
+    ) -> Estimator:
         """Return a CatBoost clone whose cat_features are limited to active non-numeric columns.
 
         A column is kept in cat_features only when all three conditions hold:
@@ -98,12 +98,12 @@ class ModelImportanceFiltering:
         Returns the original estimator unchanged for non-CatBoost estimators.
 
         Args:
-            estimator (BaseEstimator): Estimator to potentially update.
+            estimator (Estimator): Estimator to potentially update.
             current_features (set[str]): Feature names still present in this step.
             post_pipeline_dtypes (pd.Series | None): Post-pipeline column dtypes. Defaults to None.
 
         Returns:
-            BaseEstimator: Updated estimator for CatBoost; original for all others.
+            Estimator: Updated estimator for CatBoost; original for all others.
         """
         if "CatBoost" not in type(estimator).__name__:
             return estimator
@@ -314,7 +314,7 @@ class ModelImportanceFiltering:
         X: pd.DataFrame,
         y: pd.Series,
         current_processed_features: list[str],
-        step_estimator: BaseEstimator,
+        step_estimator: Estimator,
         pipeline_override: Pipeline | None,
     ) -> tuple[dict[str, float], float, float]:
         """Fit CV with the restricted pipeline and extract mean feature importances.
@@ -323,7 +323,7 @@ class ModelImportanceFiltering:
             X (pd.DataFrame): Raw features for this step.
             y (pd.Series): Target.
             current_processed_features (list[str]): Processed column names the model sees.
-            step_estimator (BaseEstimator): Estimator restricted to active cat features.
+            step_estimator (Estimator): Estimator restricted to active cat features.
             pipeline_override (Pipeline | None): Restricted pipeline for this step.
 
         Returns:
@@ -606,7 +606,7 @@ if __name__ == "__main__":
 
     def _run_mif(
         label: str,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         X: pd.DataFrame,
         y: pd.Series,
         metric_name: str,
@@ -810,7 +810,7 @@ if __name__ == "__main__":
         )
         _run_mif(
             "CatBoost | regression | with pipeline",
-            cat_reg,
+            cat_reg,  # ty: ignore[invalid-argument-type]
             x_reg_cat,
             y_reg,
             "RMSE",

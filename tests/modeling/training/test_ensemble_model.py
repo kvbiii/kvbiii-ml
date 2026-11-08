@@ -482,7 +482,7 @@ def test_ensemblemodel_stacking_meta_learner_trusts_memorising_model_less_out_of
     ensemble = EnsembleModel(
         [DecisionTreeRegressor(random_state=0), LinearRegression()],
         problem_type="regression",
-        meta_learner=LinearRegression(),
+        meta_learner=LinearRegression(),  # ty: ignore[invalid-argument-type]
     ).fit(X, y)
 
     in_sample = LinearRegression().fit(ensemble._generate_meta_features(X), y)

@@ -7,7 +7,9 @@ import numpy as np
 import pandas as pd
 from catboost import Pool
 from lightgbm import log_evaluation
-from sklearn.base import BaseEstimator, is_classifier
+from sklearn.base import is_classifier
+
+from kvbiii_ml._typing import Estimator
 
 logging.getLogger("lightgbm").setLevel(logging.ERROR)
 
@@ -56,7 +58,7 @@ def split_offset(
 
 
 def predict_with_offset(
-    estimator: BaseEstimator,
+    estimator: Estimator,
     X: pd.DataFrame,
     offset: np.ndarray,
     proba: bool = False,
@@ -71,7 +73,7 @@ def predict_with_offset(
     apply ``exp`` for Poisson, Tweedie and Gamma objectives and identity otherwise.
 
     Args:
-        estimator (BaseEstimator): Fitted LightGBM, XGBoost or CatBoost estimator.
+        estimator (Estimator): Fitted LightGBM, XGBoost or CatBoost estimator.
         X (pd.DataFrame): Features without the offset column.
         offset (np.ndarray): Offset per row, on the link scale.
         proba (bool): Return the (n, 2) probability matrix for classifiers. Defaults to False.
@@ -111,7 +113,7 @@ def predict_with_offset(
     return raw
 
 
-def _objective_name(estimator: BaseEstimator) -> str:
+def _objective_name(estimator: Estimator) -> str:
     """Lower-cased objective / loss name of a fitted booster."""
     params = estimator.get_params()
     return str(
@@ -144,7 +146,7 @@ def to_metric_proba(proba: np.ndarray) -> np.ndarray:
 
 
 def order_x_for_estimator(
-    X: pd.DataFrame, estimator: BaseEstimator, strict: bool = False
+    X: pd.DataFrame, estimator: Estimator, strict: bool = False
 ) -> pd.DataFrame:
     """Reorder columns to match a fitted estimator's expected feature order.
 
@@ -161,7 +163,7 @@ def order_x_for_estimator(
 
     Args:
         X (pd.DataFrame): Input features.
-        estimator (BaseEstimator): Trained estimator.
+        estimator (Estimator): Trained estimator.
         strict (bool): Raise if the estimator's feature names are not all in X. Defaults to False.
 
     Returns:
@@ -205,7 +207,7 @@ class BaseTrainer:
     """
 
     @staticmethod
-    def _align_xgb_device_to_cpu(estimator: BaseEstimator) -> BaseEstimator:
+    def _align_xgb_device_to_cpu(estimator: Estimator) -> Estimator:
         """Realign a GPU-trained XGBoost estimator's inference device to CPU.
 
         XGBoost's sklearn wrapper predicts using whatever device is stored in its
@@ -220,10 +222,10 @@ class BaseTrainer:
         in this pipeline.
 
         Args:
-            estimator (BaseEstimator): Fitted estimator to inspect and adjust.
+            estimator (Estimator): Fitted estimator to inspect and adjust.
 
         Returns:
-            BaseEstimator: The same estimator with `device="cpu"` set when it was
+            Estimator: The same estimator with `device="cpu"` set when it was
                 configured for a CUDA device; unchanged otherwise.
         """
         if not type(estimator).__name__.startswith(XGB_PREFIX):
@@ -234,7 +236,7 @@ class BaseTrainer:
         return estimator
 
     @staticmethod
-    def _lgbm_cuda_categorical_override(estimator: BaseEstimator, sig: Signature) -> dict:
+    def _lgbm_cuda_categorical_override(estimator: Estimator, sig: Signature) -> dict:
         """Disable LightGBM's categorical auto-detection when training on CUDA.
 
         LightGBM's CUDA tree learner has a reproducible illegal-memory-access crash
@@ -249,7 +251,7 @@ class BaseTrainer:
         frequency/target-encoded numeric counterpart already carrying its signal.
 
         Args:
-            estimator (BaseEstimator): Estimator being fit.
+            estimator (Estimator): Estimator being fit.
             sig (Signature): Signature of estimator.fit, checked for a categorical_feature argument.
 
         Returns:
@@ -267,7 +269,7 @@ class BaseTrainer:
 
     @staticmethod
     def _build_fit_kwargs(
-        estimator: BaseEstimator,
+        estimator: Estimator,
         X_valid: pd.DataFrame,
         y_valid: pd.Series,
         verbose: bool | int | None = False,
@@ -282,7 +284,7 @@ class BaseTrainer:
         rather than logging every round.
 
         Args:
-            estimator (BaseEstimator): Unfitted sklearn-compatible estimator.
+            estimator (Estimator): Unfitted sklearn-compatible estimator.
             X_valid (pd.DataFrame): Validation features to use as eval_set.
             y_valid (pd.Series): Validation target to use as eval_set.
             verbose (bool | int | None): Verbosity for non-boosting estimators. Defaults to False.
@@ -315,7 +317,7 @@ class BaseTrainer:
 
     @staticmethod
     def _add_offset_fit_params(
-        estimator: BaseEstimator,
+        estimator: Estimator,
         fit_params: dict,
         offset_train: np.ndarray,
         offset_valid: np.ndarray | None,
@@ -358,7 +360,7 @@ class BaseTrainer:
             )
 
     @staticmethod
-    def _disable_early_stopping(estimator: BaseEstimator) -> BaseEstimator:
+    def _disable_early_stopping(estimator: Estimator) -> Estimator:
         """Return a copy of a boosting estimator with early stopping turned off.
 
         Early stopping needs a validation set, so it is dropped when none is
@@ -370,10 +372,10 @@ class BaseTrainer:
         mutated. One warning lists what was removed.
 
         Args:
-            estimator (BaseEstimator): Unfitted estimator.
+            estimator (Estimator): Unfitted estimator.
 
         Returns:
-            BaseEstimator: The original estimator when it is not a boosting model
+            Estimator: The original estimator when it is not a boosting model
                 or has no early stopping configured, otherwise a rebuilt copy.
         """
         class_name = type(estimator).__name__
@@ -421,7 +423,7 @@ class BaseTrainer:
 
     @staticmethod
     def fit_estimator(
-        estimator: BaseEstimator,
+        estimator: Estimator,
         X_train: pd.DataFrame,
         y_train: pd.Series,
         X_valid: pd.DataFrame | None = None,
@@ -431,7 +433,7 @@ class BaseTrainer:
         eval_on_train: bool = True,
         offset_train: np.ndarray | None = None,
         offset_valid: np.ndarray | None = None,
-    ) -> BaseEstimator:
+    ) -> Estimator:
         """Fit the estimator, injecting eval_set and suppressing output for boosting families.
 
         For LightGBM, XGBoost, and CatBoost the fit kwargs are built via
@@ -472,7 +474,7 @@ class BaseTrainer:
           that column of X instead.
 
         Args:
-            estimator (BaseEstimator): Estimator to fit.
+            estimator (Estimator): Estimator to fit.
             X_train (pd.DataFrame): Training features.
             y_train (pd.Series): Training target.
             X_valid (pd.DataFrame | None): Validation features for eval_set. Defaults to None.
@@ -484,7 +486,7 @@ class BaseTrainer:
             offset_valid (np.ndarray | None): Offset per validation row. Defaults to None.
 
         Returns:
-            BaseEstimator: Fitted estimator instance.
+            Estimator: Fitted estimator instance.
         """
         own_column = getattr(estimator, "offset_column", None)
         if offset_train is not None and own_column is not None:
@@ -564,7 +566,7 @@ class BaseTrainer:
 
     @staticmethod
     def fit_and_predict(
-        estimator: BaseEstimator,
+        estimator: Estimator,
         X_train: pd.DataFrame,
         y_train: pd.Series,
         X_valid: pd.DataFrame,
@@ -573,7 +575,7 @@ class BaseTrainer:
         X_test: pd.DataFrame | None = None,
         verbose: bool | int | None = False,
         sample_weight: pd.Series | np.ndarray | None = None,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, BaseEstimator]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, Estimator]:
         """Fit and produce predictions according to metric_type.
 
         Notes:
@@ -583,7 +585,7 @@ class BaseTrainer:
           None.
 
         Args:
-            estimator (BaseEstimator): Estimator to fit.
+            estimator (Estimator): Estimator to fit.
             X_train (pd.DataFrame): Training features.
             y_train (pd.Series): Training target.
             X_valid (pd.DataFrame): Validation features.
@@ -594,7 +596,7 @@ class BaseTrainer:
             sample_weight (pd.Series | np.ndarray | None): Training weights aligned to X_train.
 
         Returns:
-            tuple[np.ndarray, np.ndarray, np.ndarray | None, BaseEstimator]:
+            tuple[np.ndarray, np.ndarray, np.ndarray | None, Estimator]:
                 Training predictions, validation predictions, optional test predictions,
                 and the fitted estimator.
 
@@ -626,13 +628,13 @@ class BaseTrainer:
 
     @staticmethod
     def predict(
-        estimator: BaseEstimator,
+        estimator: Estimator,
         X: pd.DataFrame | None,
     ) -> np.ndarray | None:
         """Safely call predict if X is provided, else return None.
 
         Args:
-            estimator (BaseEstimator): Fitted estimator.
+            estimator (Estimator): Fitted estimator.
             X (pd.DataFrame | None): Features to predict on.
 
         Returns:
@@ -644,7 +646,7 @@ class BaseTrainer:
 
     @staticmethod
     def predict_proba(
-        estimator: BaseEstimator,
+        estimator: Estimator,
         X: pd.DataFrame | None,
     ) -> np.ndarray | None:
         """Safely call predict_proba if X is provided; returns full probability matrix.
@@ -654,7 +656,7 @@ class BaseTrainer:
         metric.
 
         Args:
-            estimator (BaseEstimator): Fitted estimator.
+            estimator (Estimator): Fitted estimator.
             X (pd.DataFrame | None): Features to predict on.
 
         Returns:
@@ -665,7 +667,7 @@ class BaseTrainer:
         return estimator.predict_proba(X)
 
     @staticmethod
-    def _set_categorical_params(estimator: BaseEstimator, X_train: pd.DataFrame) -> BaseEstimator:
+    def _set_categorical_params(estimator: Estimator, X_train: pd.DataFrame) -> Estimator:
         """Assign categorical feature parameters for supported estimators.
 
         For CatBoost: only auto-detects from X_train dtypes when ``cat_features``
@@ -674,11 +676,11 @@ class BaseTrainer:
         ``_build_fit_kwargs`` and are not touched here.
 
         Args:
-            estimator (BaseEstimator): Estimator to configure.
+            estimator (Estimator): Estimator to configure.
             X_train (pd.DataFrame): Training features to detect categorical cols.
 
         Returns:
-            BaseEstimator: Estimator with categorical parameters set when applicable.
+            Estimator: Estimator with categorical parameters set when applicable.
         """
         try:
             categorical_features = X_train.select_dtypes(

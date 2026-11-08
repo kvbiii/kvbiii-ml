@@ -4,10 +4,10 @@ from copy import deepcopy
 
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 
+from kvbiii_ml._typing import Estimator
 from kvbiii_ml.modeling.training.base_trainer import (
     BINARY_N_CLASSES,
     CATBOOST_PREFIX,
@@ -24,11 +24,11 @@ _CALIBRATION_PROBA_EPS = 1e-6
 _PROBA_SUM_FLOOR = 1e-9
 
 
-def _get_n_iterations(estimator: BaseEstimator) -> int | None:
+def _get_n_iterations(estimator: Estimator) -> int | None:
     """Extract the number of boosting iterations actually used by a fitted GBM estimator.
 
     Args:
-        estimator (BaseEstimator): A fitted boosting estimator.
+        estimator (Estimator): A fitted boosting estimator.
 
     Returns:
         int | None: Number of trees/rounds used, or None if not determinable.
@@ -55,11 +55,11 @@ def _get_n_iterations(estimator: BaseEstimator) -> int | None:
     return int(n_est) if n_est is not None else None
 
 
-def _set_n_iterations(estimator: BaseEstimator, n: int) -> None:
+def _set_n_iterations(estimator: Estimator, n: int) -> None:
     """Set the number of boosting iterations on an unfitted estimator.
 
     Args:
-        estimator (BaseEstimator): Unfitted estimator to configure.
+        estimator (Estimator): Unfitted estimator to configure.
         n (int): Number of iterations to set.
     """
     class_name = type(estimator).__name__
@@ -69,7 +69,7 @@ def _set_n_iterations(estimator: BaseEstimator, n: int) -> None:
         estimator.set_params(n_estimators=n)
 
 
-def _disable_early_stopping(estimator: BaseEstimator) -> BaseEstimator:
+def _disable_early_stopping(estimator: Estimator) -> Estimator:
     """Remove early-stopping configuration so an estimator can train without eval_set.
 
     Called before final refits on the full dataset where no held-out eval_set is
@@ -78,10 +78,10 @@ def _disable_early_stopping(estimator: BaseEstimator) -> BaseEstimator:
     every sub-estimator is also patched.
 
     Args:
-        estimator (BaseEstimator): Estimator to modify in-place (already a deepcopy).
+        estimator (Estimator): Estimator to modify in-place (already a deepcopy).
 
     Returns:
-        BaseEstimator: Same estimator with early-stopping disabled.
+        Estimator: Same estimator with early-stopping disabled.
     """
     if hasattr(estimator, "_estimators_list"):
         for sub in estimator._estimators_list:  # noqa: SLF001
@@ -252,7 +252,7 @@ class OOFModel:
 
     def __init__(
         self,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         cross_validator: CrossValidationTrainer,
         problem_type: str,
         calibrate: bool = False,
@@ -265,7 +265,7 @@ class OOFModel:
           estimator on the full dataset. Only valid for classification. Defaults to False.
 
         Args:
-            estimator (BaseEstimator): Estimator to train on each fold.
+            estimator (Estimator): Estimator to train on each fold.
             cross_validator (CrossValidationTrainer): Cross-validation trainer to use.
             problem_type (str): Problem type, either "classification" or "regression".
             calibrate (bool): Calibrate OOF probabilities and refit on all data. Defaults to False.
@@ -287,10 +287,10 @@ class OOFModel:
         self.eval_metric = cross_validator.metric_fn
         self.metric_type = cross_validator.metric_type
 
-        self.fitted_estimators_: list[BaseEstimator] = []
+        self.fitted_estimators_: list[Estimator] = []
         self.calibrator_: IsotonicRegression | LogisticRegression | list | None = None
         self.classes_: np.ndarray | None = None
-        self.fitted_estimator_: BaseEstimator | None = None
+        self.fitted_estimator_: Estimator | None = None
 
     def fit(
         self,

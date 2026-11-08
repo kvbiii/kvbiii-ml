@@ -6,10 +6,10 @@ from copy import deepcopy
 import joblib.parallel
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator
 from sklearn.inspection import permutation_importance
 from tqdm import tqdm
 
+from kvbiii_ml._typing import Estimator
 from kvbiii_ml.data_processing.preprocessing.pipeline_dependency import (
     PipelineDependencyGraph,
 )
@@ -71,7 +71,7 @@ class PermutationRecursiveFeatureElimination:
 
     def __init__(
         self,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         cross_validator: CrossValidationTrainer,
         steps: int = 5,
         alpha: float = 0.95,
@@ -84,7 +84,7 @@ class PermutationRecursiveFeatureElimination:
         """Initialize the permutation RFE selector.
 
         Args:
-            estimator (BaseEstimator): Estimator to fit within each fold.
+            estimator (Estimator): Estimator to fit within each fold.
             cross_validator (CrossValidationTrainer): Trainer holding the preprocessing pipeline.
             steps (int): Number of elimination iterations. Defaults to 5.
             alpha (float): Metric vs feature-count weight in final selection. Defaults to 0.95.
@@ -345,7 +345,7 @@ class PermutationRecursiveFeatureElimination:
         """
         is_classification = self.metric_type == "probs"
 
-        def _scorer(estimator: BaseEstimator, X: pd.DataFrame, y: np.ndarray) -> float:
+        def _scorer(estimator: Estimator, X: pd.DataFrame, y: np.ndarray) -> float:
             """Sklearn-compatible scorer wrapping the user metric."""
             pred = (
                 to_metric_proba(estimator.predict_proba(X))
@@ -382,10 +382,10 @@ class PermutationRecursiveFeatureElimination:
 
     @staticmethod
     def _restrict_catboost_cat_features(
-        estimator: BaseEstimator,
+        estimator: Estimator,
         current_features: set[str],
         post_pipeline_dtypes: pd.Series | None = None,
-    ) -> BaseEstimator:
+    ) -> Estimator:
         """Clone a CatBoost estimator, filtering cat_features to active non-numeric columns.
 
         A column is kept in cat_features only when all three conditions hold:
@@ -397,12 +397,12 @@ class PermutationRecursiveFeatureElimination:
         Returns the original estimator unchanged for non-CatBoost estimators.
 
         Args:
-            estimator (BaseEstimator): Estimator to potentially update.
+            estimator (Estimator): Estimator to potentially update.
             current_features (set[str]): Raw feature names still present in this step.
             post_pipeline_dtypes (pd.Series | None): Post-pipeline column dtypes. Defaults to None.
 
         Returns:
-            BaseEstimator: Updated estimator for CatBoost; original for all others.
+            Estimator: Updated estimator for CatBoost; original for all others.
         """
         if "CatBoost" not in type(estimator).__name__:
             return estimator
@@ -713,7 +713,7 @@ if __name__ == "__main__":
 
     def _run_rfe(
         label: str,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         X: pd.DataFrame,
         y: pd.Series,
         metric_name: str,
@@ -899,7 +899,7 @@ if __name__ == "__main__":
         )
         _run_rfe(
             "CatBoost | regression",
-            cat_reg,
+            cat_reg,  # ty: ignore[invalid-argument-type]
             x_reg_cat,
             y_reg,
             "RMSE",

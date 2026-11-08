@@ -3,9 +3,9 @@ from copy import deepcopy
 
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator
 from sklearn.pipeline import Pipeline
 
+from kvbiii_ml._typing import Estimator
 from kvbiii_ml.data_processing.preprocessing.pipeline_dependency import (
     PipelineDependencyGraph,
 )
@@ -29,7 +29,7 @@ class ModelImportanceRecursiveFeatureElimination:
 
     def __init__(
         self,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         cross_validator: CrossValidationTrainer,
         steps: int = 5,
         alpha: float = 0.95,
@@ -41,7 +41,7 @@ class ModelImportanceRecursiveFeatureElimination:
         Initialize the Model Importance RFE selector.
 
         Args:
-            estimator (BaseEstimator): Estimator with feature_importances_ attribute.
+            estimator (Estimator): Estimator with feature_importances_ attribute.
             cross_validator (CrossValidationTrainer): Trainer; its pipeline is refit per fold.
             steps (int, optional): Number of elimination iterations. Defaults to 5.
             alpha (float, optional): Weight for the final selection score mix. Defaults to 0.95.
@@ -70,10 +70,10 @@ class ModelImportanceRecursiveFeatureElimination:
 
     @staticmethod
     def _restrict_catboost_cat_features(
-        estimator: BaseEstimator,
+        estimator: Estimator,
         current_features: set[str],
         post_pipeline_dtypes: pd.Series | None = None,
-    ) -> BaseEstimator:
+    ) -> Estimator:
         """Clone a CatBoost estimator, filtering cat_features to active non-numeric columns.
 
         A column is kept in cat_features only when all three conditions hold:
@@ -84,12 +84,12 @@ class ModelImportanceRecursiveFeatureElimination:
         Returns the original estimator unchanged for non-CatBoost estimators.
 
         Args:
-            estimator (BaseEstimator): Estimator to potentially update.
+            estimator (Estimator): Estimator to potentially update.
             current_features (set[str]): Feature names still present in this step.
             post_pipeline_dtypes (pd.Series | None): Post-pipeline column dtypes. Defaults to None.
 
         Returns:
-            BaseEstimator: Updated estimator for CatBoost; original for all others.
+            Estimator: Updated estimator for CatBoost; original for all others.
         """
         if "CatBoost" not in type(estimator).__name__:
             return estimator
@@ -316,7 +316,7 @@ class ModelImportanceRecursiveFeatureElimination:
         x_data: pd.DataFrame,
         y_data: pd.Series,
         current_processed_features: list[str],
-        step_estimator: BaseEstimator,
+        step_estimator: Estimator,
         pipeline_override: Pipeline | None,
     ) -> tuple[dict[str, float], float, float]:
         """
@@ -326,7 +326,7 @@ class ModelImportanceRecursiveFeatureElimination:
             x_data (pd.DataFrame): Raw features for this step.
             y_data (pd.Series): The target series.
             current_processed_features (list[str]): Model columns, in feature_importances_ order.
-            step_estimator (BaseEstimator): Estimator restricted to active cat features.
+            step_estimator (Estimator): Estimator restricted to active cat features.
             pipeline_override (Pipeline | None): Restricted pipeline for this step.
 
         Returns:

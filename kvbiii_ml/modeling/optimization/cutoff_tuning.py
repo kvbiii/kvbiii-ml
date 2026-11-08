@@ -5,8 +5,8 @@ from typing import ClassVar
 import numpy as np
 import optuna
 import pandas as pd
-from sklearn.base import BaseEstimator
 
+from kvbiii_ml._typing import Estimator
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
 warnings.filterwarnings(
@@ -45,7 +45,7 @@ class CutoffTunerCV:
 
     def __init__(
         self,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         cross_validator: CrossValidationTrainer,
         n_trials: int = 100,
         seed: int = 17,
@@ -59,7 +59,7 @@ class CutoffTunerCV:
           estimator's cross-validation fit regardless. Defaults to True.
 
         Args:
-            estimator (BaseEstimator): Unfitted estimator to train during CV.
+            estimator (Estimator): Unfitted estimator to train during CV.
             cross_validator (CrossValidationTrainer): Configured CV trainer.
             n_trials (int): Number of Optuna trials. Defaults to 100.
             seed (int): Random seed for the TPE sampler. Defaults to 17.
@@ -74,7 +74,7 @@ class CutoffTunerCV:
         self.metric_fn = cross_validator.metric_fn
         self.metric_direction = cross_validator.metric_direction
         self.metric_name = cross_validator.metric_name
-        self.fitted_estimators_: list[BaseEstimator] = []
+        self.fitted_estimators_: list[Estimator] = []
         self.best_cutoffs: np.ndarray = None  # ty: ignore[invalid-assignment]
         self.best_score_: float | None = None
         self.selection_source_: str | None = None
@@ -118,7 +118,7 @@ class CutoffTunerCV:
             optuna.logging.set_verbosity(previous_verbosity)
         return study
 
-    def predict(self, X: pd.DataFrame, estimator: BaseEstimator | None = None) -> np.ndarray:
+    def predict(self, X: pd.DataFrame, estimator: Estimator | None = None) -> np.ndarray:
         """Apply tuned cutoffs to produce class predictions.
 
         When no estimator is provided, uses the first fold's fitted estimator with
@@ -132,7 +132,7 @@ class CutoffTunerCV:
 
         Args:
             X (pd.DataFrame): Feature matrix.
-            estimator (BaseEstimator | None): Fitted estimator. Defaults to the first fold's.
+            estimator (Estimator | None): Fitted estimator. Defaults to the first fold's.
 
         Returns:
             np.ndarray: Predicted class labels.
