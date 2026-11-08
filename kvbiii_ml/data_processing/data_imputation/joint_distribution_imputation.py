@@ -9,7 +9,7 @@ multivariate_plots = MultivariatePlots()
 
 def _get_joint_distribution(df: pd.DataFrame, col_impute: str, col_by: str) -> pd.DataFrame:
     """Build the contingency table used by the imputation routine."""
-    return df.groupby([col_impute, col_by], observed=False)[col_by].size().unstack().fillna(0)
+    return df.groupby([col_impute, col_by], observed=False)[col_by].size().unstack().fillna(0)  # noqa: PD010
 
 
 def _get_mapping(

@@ -9,12 +9,18 @@ from scipy.stats import chi2_contingency, ks_2samp
 from sklearn.feature_selection import mutual_info_classif
 
 try:  # optional interactive display
-    from IPython.display import display  # type: ignore
+    from IPython.display import display
 except ImportError:  # pragma: no cover
 
-    def display(obj):  # type: ignore
+    def display(obj: object) -> None:
         """Fallback display for non-interactive environments."""
         print(obj)
+
+
+MAX_CATEGORICAL_CARDINALITY = 100
+BINARY_CARDINALITY = 2
+MIN_ROWS_FOR_ASSOCIATION = 2
+KS_SIGNIFICANCE_LEVEL = 0.05
 
 
 class StatisticalAssociationImputer:
@@ -85,8 +91,11 @@ class StatisticalAssociationImputer:
             list[str]: Names of columns treated as categorical.
         """
         categorical_columns = df.select_dtypes(include=["object", "category"]).columns
-        categorical_columns = [col for col in categorical_columns if df[col].nunique() < 100]
-        categorical_columns = list(set(categorical_columns) | set(df.columns[df.nunique() == 2]))
+        categorical_columns = [
+            col for col in categorical_columns if df[col].nunique() < MAX_CATEGORICAL_CARDINALITY
+        ]
+        binary_columns = df.columns[df.nunique() == BINARY_CARDINALITY]
+        categorical_columns = list(set(categorical_columns) | set(binary_columns))
         return categorical_columns
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -106,7 +115,7 @@ class StatisticalAssociationImputer:
             raise ValueError("Must call fit() first to learn binning and grouping.")
 
         df = df.copy()
-        columns_with_missing = df.columns[df.isnull().any()].tolist()
+        columns_with_missing = df.columns[df.isna().any()].tolist()
 
         if self.verbose and columns_with_missing:
             print(f"Found missing values in columns: {columns_with_missing}")
@@ -126,13 +135,12 @@ class StatisticalAssociationImputer:
 
             if self.verbose:
                 self.ks_test(df, feature)
-                # self.plot_distribution(df, feature)
 
             df[feature] = df["imputed"]
-            df.drop(columns="imputed", inplace=True)
+            df = df.drop(columns="imputed")
 
             if f"{feature}_imputed" in df.columns:
-                df.drop(columns=f"{feature}_imputed", inplace=True)
+                df = df.drop(columns=f"{feature}_imputed")
 
         return df
 
@@ -165,7 +173,7 @@ class StatisticalAssociationImputer:
 
         if "cramers_v" in self.metrics:
             for col in df_bin.columns:
-                if col != feature_name and df_bin[col].nunique() > 1:
+                if col != feature_name and df_bin[col].nunique() > 1:  # noqa: PD101
                     rankings["cramers_v"][col] = self.cramers_v(df_bin[col], df_bin[feature_name])
 
         if "mutual_info" in self.metrics:
@@ -174,7 +182,7 @@ class StatisticalAssociationImputer:
             temp = df_bin.dropna()
             if len(temp) > 0:
                 temp_codes = temp.apply(lambda s: s.astype("category").cat.codes)
-                y = temp_codes[feature_name].values
+                y = temp_codes[feature_name].to_numpy()
                 x_codes = temp_codes.drop(columns=[feature_name])
                 if x_codes.shape[1] > 0:
                     mi = mutual_info_classif(x_codes.values, y, discrete_features=True)
@@ -183,7 +191,7 @@ class StatisticalAssociationImputer:
 
         if "theils_u" in self.metrics:
             for col in df_bin.columns:
-                if col != feature_name and df_bin[col].nunique() > 1:
+                if col != feature_name and df_bin[col].nunique() > 1:  # noqa: PD101
                     rankings["theils_u"][col] = self.theils_u(df_bin[col], df_bin[feature_name])
 
         df_ranks = pd.DataFrame(rankings)
@@ -246,9 +254,9 @@ class StatisticalAssociationImputer:
         """
         try:
             temp_df = pd.DataFrame({"x": x, "y": y}).dropna()
-            if len(temp_df) < 2:
+            if len(temp_df) < MIN_ROWS_FOR_ASSOCIATION:
                 return 0.0
-            if temp_df["x"].nunique() <= 1 or temp_df["y"].nunique() <= 1:
+            if temp_df["x"].nunique() <= 1 or temp_df["y"].nunique() <= 1:  # noqa: PD101
                 return 0.0
             confusion_matrix = pd.crosstab(temp_df["x"], temp_df["y"])
             chi2 = chi2_contingency(confusion_matrix)[0]
@@ -284,9 +292,9 @@ class StatisticalAssociationImputer:
         """
         try:
             temp_df = pd.DataFrame({"x": x, "y": y}).dropna()
-            if len(temp_df) < 2:
+            if len(temp_df) < MIN_ROWS_FOR_ASSOCIATION:
                 return 0.0
-            if temp_df["x"].nunique() <= 1 or temp_df["y"].nunique() <= 1:
+            if temp_df["x"].nunique() <= 1 or temp_df["y"].nunique() <= 1:  # noqa: PD101
                 return 0.0
             s_xy = pd.crosstab(temp_df["x"], temp_df["y"])
             s_y = s_xy.sum(axis=0)
@@ -383,7 +391,9 @@ class StatisticalAssociationImputer:
         """Print grouped and overall statistics for verbose diagnostics."""
         print("Stats by group (using binned grouping):")
         for group, stat in group_stats.items():
-            group_str = ", ".join(f"{col}: {val}" for col, val in zip(selected_cols, group))
+            group_str = ", ".join(
+                f"{col}: {val}" for col, val in zip(selected_cols, group, strict=False)
+            )
             print(f"{group_str} -> {stat}")
         print("Overall stat:", overall_stat)
 
@@ -434,7 +444,7 @@ class StatisticalAssociationImputer:
 
         to_impute = df_binned.loc[missing_mask, selected_cols].copy()
         joined = to_impute.merge(mapping_df, on=selected_cols, how="left")
-        fill_values = joined["__group_stat__"].fillna(impute_stats["overall"]).values
+        fill_values = joined["__group_stat__"].fillna(impute_stats["overall"]).to_numpy()
 
         df.loc[missing_mask, "imputed"] = fill_values
         df.loc[missing_mask, f"{feature_name}_imputed"] = True
@@ -461,7 +471,7 @@ class StatisticalAssociationImputer:
         ks_stat, ks_p = ks_2samp(original, imputed)
         conclusion = (
             "Distributions are significantly different (reject H0)"
-            if ks_p < 0.05
+            if ks_p < KS_SIGNIFICANCE_LEVEL
             else "Distributions are not significantly different (fail to reject H0)"
         )
         print(f"KS Statistic: {ks_stat:.4f}, p-value: {ks_p:.4f} - {conclusion}")
