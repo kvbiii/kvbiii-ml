@@ -14,7 +14,7 @@ class CountEncodingFeatureGenerator:
         fill_value: int = 0,
         batch_size: int = 20,
         chunk_size: int = 50000,
-    ):
+    ) -> None:
         """
         Initialize the CountEncodingFeatureGenerator.
 
@@ -31,7 +31,7 @@ class CountEncodingFeatureGenerator:
         self.count_maps_: dict[str, dict] = {}
         self._validate_init_params()
 
-    def _validate_init_params(self):
+    def _validate_init_params(self) -> None:
         """
         Validate the initialization parameters.
 
@@ -100,7 +100,7 @@ class CountEncodingFeatureGenerator:
             np.ndarray: Array of count-encoded values.
         """
         count_map = self.count_maps_[feature_name]
-        values = chunk[feature_name].values
+        values = chunk[feature_name].to_numpy()
 
         result = np.array(
             [count_map.get(val, self.fill_value) for val in values],

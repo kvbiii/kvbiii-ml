@@ -8,7 +8,7 @@ from sklearn.base import BaseEstimator, TransformerMixin
 class DtypesConverter(BaseEstimator, TransformerMixin):
     """Convert DataFrame columns to specified dtypes."""
 
-    def __init__(self, dtype_map: dict[str, Any] | None = None):
+    def __init__(self, dtype_map: dict[str, Any] | None = None) -> None:
         """
         Initialize the DtypesConverter.
 

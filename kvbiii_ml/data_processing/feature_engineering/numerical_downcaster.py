@@ -1,8 +1,8 @@
 import warnings
-from typing import Any
 
 import numpy as np
 import pandas as pd
+from numpy.typing import DTypeLike
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils.validation import check_is_fitted
 
@@ -10,6 +10,7 @@ FLOAT32_EXACT_INT_LIMIT = 2**24
 FLOAT_PRECISIONS = ("lossless", "float32")
 LOSSLESS_RTOL = 0.0
 INTEGER_DTYPES = (np.int8, np.int16, np.int32)
+DowncastDtype = DTypeLike | pd.api.extensions.ExtensionDtype
 
 
 class NumericalDowncaster(BaseEstimator, TransformerMixin):
@@ -29,7 +30,7 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
         float_downcast: bool = True,
         float_precision: str = "lossless",
         columns: list[str] | None = None,
-    ):
+    ) -> None:
         """
         Initialize the NumericalDowncaster.
 
@@ -105,7 +106,7 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
                     )
         return df
 
-    def _get_safe_dtype(self, series: pd.Series, target_dtype: Any) -> Any:
+    def _get_safe_dtype(self, series: pd.Series, target_dtype: DowncastDtype) -> DowncastDtype:
         """
         Adjust a learned dtype so the series being transformed loses no value.
 
@@ -115,10 +116,10 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
 
         Args:
             series (pd.Series): Column data being transformed.
-            target_dtype (Any): Dtype learned during fit for this column.
+            target_dtype (DowncastDtype): Dtype learned during fit for this column.
 
         Returns:
-            Any: Dtype safe to cast the series to.
+            DowncastDtype: Dtype safe to cast the series to.
         """
         if pd.api.types.is_integer_dtype(target_dtype) and series.isna().any():
             return self._nan_integer_dtype(series)
@@ -130,7 +131,7 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
             return series.dtype
         return target_dtype
 
-    def _get_optimal_dtype(self, series: pd.Series) -> Any:
+    def _get_optimal_dtype(self, series: pd.Series) -> DowncastDtype:
         """
         Determine optimal dtype for a numerical series with downcasting.
 
@@ -138,7 +139,7 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
             series (pd.Series): Series to analyze.
 
         Returns:
-            Any: Optimal dtype for the series.
+            DowncastDtype: Optimal dtype for the series.
         """
         dtype = series.dtype
 
@@ -148,7 +149,7 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
             return self._downcast_float(series)
         return dtype
 
-    def _downcast_integer(self, series: pd.Series) -> Any:
+    def _downcast_integer(self, series: pd.Series) -> DowncastDtype:
         """
         Downcast integer series to smallest possible signed integer type.
 
@@ -156,7 +157,7 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
             series (pd.Series): Integer series to downcast.
 
         Returns:
-            Any: Optimal signed integer dtype, or a float dtype when the (nullable)
+            DowncastDtype: Optimal signed integer dtype, or a float dtype when the (nullable)
                 series has missing values.
         """
         if series.isna().any():
@@ -172,7 +173,7 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
             np.int64,
         )
 
-    def _downcast_float(self, series: pd.Series) -> Any:
+    def _downcast_float(self, series: pd.Series) -> DowncastDtype:
         """
         Downcast a float series to float32 when allowed by ``float_precision``.
 
@@ -180,7 +181,7 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
             series (pd.Series): Float series to downcast.
 
         Returns:
-            Any: float32, or the original dtype when lossless mode would lose precision.
+            DowncastDtype: float32, or the original dtype when lossless mode would lose precision.
         """
         if self.float_precision == "float32" or self._is_float32_lossless(series):
             return np.float32
@@ -195,7 +196,7 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
         return bool(np.allclose(values, as_float32, rtol=LOSSLESS_RTOL, atol=0.0, equal_nan=True))
 
     @staticmethod
-    def _nan_integer_dtype(series: pd.Series) -> Any:
+    def _nan_integer_dtype(series: pd.Series) -> DowncastDtype:
         """Float dtype that holds an integer series with NaN exactly (float32 up to 2**24)."""
         abs_max = series.abs().max()
         if pd.isna(abs_max) or abs_max <= FLOAT32_EXACT_INT_LIMIT:

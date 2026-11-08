@@ -113,7 +113,7 @@ def test_targetencodingfeaturegenerator_validate_init_params_raises_error_for_in
     """
     features = ["category"]
 
-    with pytest.raises(ValueError, match="Unsupported aggregation method.*Supported methods are"):
+    with pytest.raises(ValueError, match=r"Unsupported aggregation method.*Supported methods are"):
         TargetEncodingFeatureGenerator(features_names=features, aggregation="invalid_method")
 
     # Test valid aggregations don't raise errors
@@ -421,9 +421,9 @@ def test_targetencodingfeaturegenerator_different_aggregations_produce_different
 
     # Results should be different between aggregation methods
     # (At least some values should differ)
-    mean_values = results["mean"]["TE_MEAN_category_a"].values
-    median_values = results["median"]["TE_MEDIAN_category_a"].values
-    nunique_values = results["nunique"]["TE_NUNIQUE_category_a"].values
+    mean_values = results["mean"]["TE_MEAN_category_a"].to_numpy()
+    median_values = results["median"]["TE_MEDIAN_category_a"].to_numpy()
+    nunique_values = results["nunique"]["TE_NUNIQUE_category_a"].to_numpy()
 
     # At least one pair should be different
     different_mean_median = not np.allclose(mean_values, median_values, equal_nan=True)

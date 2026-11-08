@@ -9,6 +9,9 @@ DEFAULT_FILL_VALUE = "Unknown"
 FILL_STRATEGIES = ("mode", "constant")
 
 
+MAX_UNKNOWN_PREVIEW = 5
+
+
 class CategoricalAligner(BaseEstimator, TransformerMixin):
     """Align categorical features between train and test sets using stored train categories."""
 
@@ -20,7 +23,7 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
         default_value: str = DEFAULT_FILL_VALUE,
         warn_on_unknown: bool = True,
         categorical_features: list[str] | None = None,
-    ):
+    ) -> None:
         """
         Initialize the CategoricalAligner.
 
@@ -116,7 +119,7 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
             df[feature] = self._fillna_as_str(df[feature], fill_value).astype("category")
             cats = df[feature].cat.categories.tolist()
             if fill_value not in cats:
-                cats = sorted(cats + [fill_value])
+                cats = sorted([*cats, fill_value])
             self.categories_[feature] = cats
         return self
 
@@ -143,8 +146,8 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
                 unknown_values = df.loc[unknown_mask, feature].unique()
                 n_unique_unknown = len(unknown_values)
                 pct_unknown = unknown_count / len(df) * 100
-                unknown_preview = list(unknown_values[:5])
-                suffix = "..." if n_unique_unknown > 5 else ""
+                unknown_preview = list(unknown_values[:MAX_UNKNOWN_PREVIEW])
+                suffix = "..." if n_unique_unknown > MAX_UNKNOWN_PREVIEW else ""
                 category_word = "y" if n_unique_unknown == 1 else "ies"
                 warnings.warn(
                     (

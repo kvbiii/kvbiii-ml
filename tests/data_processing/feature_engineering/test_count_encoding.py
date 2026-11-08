@@ -95,9 +95,8 @@ def test_countencoder_fit_computes_count_maps(categorical_data):
         value_counts = categorical_data[feature].value_counts(dropna=False)
 
         for category, count in encoder.count_maps_[feature].items():
-            if category != np.nan and pd.notna(category):
-                if count != value_counts[category]:
-                    raise AssertionError()
+            if pd.notna(category) and count != value_counts[category]:
+                raise AssertionError()
 
 
 def test_countencoder_transform_replaces_categories_with_counts(categorical_data):

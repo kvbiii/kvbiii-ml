@@ -164,7 +164,7 @@ def test_crossfeaturegenerator_fit_insufficient_columns_raises_error():
     """
     df = pd.DataFrame({"A": ["a", "b"]})
     generator = CrossFeatureGenerator(degree=2)
-    with pytest.raises(ValueError, match="Number of features .* must be >= degree"):
+    with pytest.raises(ValueError, match=r"Number of features .* must be >= degree"):
         generator.fit(df)
 
 
@@ -244,7 +244,7 @@ def test_crossfeaturegenerator_transform_categorical_combo_columns(mixed_datafra
         raise AssertionError()
     expected_codes = [
         generator.encoding_maps_["A_B"][f"{a}_{b}"]
-        for a, b in zip(mixed_dataframe["A"], mixed_dataframe["B"])
+        for a, b in zip(mixed_dataframe["A"], mixed_dataframe["B"], strict=True)
     ]
     if result["A_B"].tolist() != expected_codes:
         raise AssertionError()

@@ -5,6 +5,9 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+MIN_DEGREE = 2
+PAIR_SIZE = 2
+
 
 class CrossFeatureGenerator:
     """Generate cross-encoded features from feature combinations."""
@@ -16,7 +19,7 @@ class CrossFeatureGenerator:
         separator: str = "_",
         processing: dict[str, int] | None = None,
         **kwargs: int,
-    ):
+    ) -> None:
         """
         Initialize the CrossFeatureGenerator.
 
@@ -61,7 +64,7 @@ class CrossFeatureGenerator:
         """Return the number of rows processed per chunk."""
         return self.processing["chunk_size"]
 
-    def _validate_init_params(self):
+    def _validate_init_params(self) -> None:
         """
         Validate the parameters for cross feature generation.
 
@@ -72,7 +75,7 @@ class CrossFeatureGenerator:
             isinstance(name, str) for name in self.features_names
         ):
             raise ValueError("features_names must be a list of strings.")
-        if not isinstance(self.degree, int) or self.degree < 2:
+        if not isinstance(self.degree, int) or self.degree < MIN_DEGREE:
             raise ValueError("degree must be an integer >= 2.")
         if not isinstance(self.separator, str):
             raise ValueError("separator must be a string.")
@@ -112,7 +115,7 @@ class CrossFeatureGenerator:
         """
         arrays = [df[col].astype("string").fillna("<NA>").to_numpy(dtype=str) for col in columns]
 
-        if len(arrays) == 2:
+        if len(arrays) == PAIR_SIZE:
             return np.char.add(np.char.add(arrays[0], self.separator), arrays[1])
 
         result = arrays[0].copy()
@@ -266,7 +269,7 @@ class CrossFeatureGenerator:
             for combo in batch_combos:
                 combo_name = self.separator.join(combo)
                 result = self._transform_chunk(chunk, combo)
-                new_columns_dict[combo_name][start_idx:end_idx] = result.values
+                new_columns_dict[combo_name][start_idx:end_idx] = result.to_numpy()
 
             gc.collect()
 

@@ -11,7 +11,7 @@ class CategoricalCleaner(BaseEstimator, TransformerMixin):
     are replaced with NaN and the column is converted to pandas 'category' dtype.
     """
 
-    def __init__(self, feature_groups: dict[str, list[str]]):
+    def __init__(self, feature_groups: dict[str, list[str]]) -> None:
         """Initialize cleaner with placeholder mappings.
 
         Args:

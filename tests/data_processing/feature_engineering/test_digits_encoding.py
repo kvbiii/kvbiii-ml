@@ -138,7 +138,7 @@ def test_mismatched_auto_and_explicit_digits_raises() -> None:
         features_names=["num"], min_digits="auto", max_digits=4
     )
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="must either both be"):
         generator.fit(frame)
 
 

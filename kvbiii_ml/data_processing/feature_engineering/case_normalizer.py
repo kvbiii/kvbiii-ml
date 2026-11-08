@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils.validation import check_is_fitted
@@ -6,7 +8,7 @@ from sklearn.utils.validation import check_is_fitted
 class CaseNormalizer(BaseEstimator, TransformerMixin):
     """Normalize the case of object, string or category features."""
 
-    _NORMALIZATIONS = {"lower", "upper", "title", "capitalize", "casefold"}
+    _NORMALIZATIONS: ClassVar[set[str]] = {"lower", "upper", "title", "capitalize", "casefold"}
 
     def __init__(
         self,

@@ -261,7 +261,6 @@ if __name__ == "__main__":
     pipe = FeatureGenerationPipeline(
         features_names=["A", "B"],
         preprocessing_steps=steps,
-        # custom_features_generation_before_preprocessing=custom_feature_generation_before,
     )
 
     X_train_enc = pipe.fit_transform(X_train, y_train)

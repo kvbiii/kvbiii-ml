@@ -132,7 +132,7 @@ def test_dtypesconverter_transform_warns_instead_of_raising_on_incompatible_cast
     converter = DtypesConverter(dtype_map={"a": "int64"})
     converter.fit(df)
 
-    with pytest.warns(UserWarning) as record:
+    with pytest.warns(UserWarning, match="Failed to convert column") as record:
         transformed = converter.transform(df)
 
     messages = [str(warning.message) for warning in record]

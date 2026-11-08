@@ -6,6 +6,8 @@ import pandas as pd
 from sklearn.model_selection import BaseCrossValidator, KFold
 from tqdm import tqdm
 
+MIN_BINS = 2
+
 
 class TargetEncodingFeatureGenerator:
     """Generate target encoded features."""
@@ -15,7 +17,7 @@ class TargetEncodingFeatureGenerator:
         features_names: list[str],
         aggregation: str = "mean",
         config: dict[str, Any] | None = None,
-        **kwargs: Any,
+        **kwargs: object,
     ) -> None:
         """
         Initialize the TargetEncodingFeatureGenerator.
@@ -27,7 +29,7 @@ class TargetEncodingFeatureGenerator:
             features_names (list[str]): List of feature names to be target encoded.
             aggregation (str): "mean", "median" or "nunique". Defaults to "mean".
             config (dict[str, Any] | None): Runtime options, e.g. smooth or cv. Defaults to None.
-            **kwargs (Any): Config values as keyword arguments, overriding config.
+            **kwargs (object): Config values as keyword arguments, overriding config.
         """
         default_config: dict[str, Any] = {
             "smooth": 10,
@@ -59,7 +61,7 @@ class TargetEncodingFeatureGenerator:
         self._validate_init_params()
 
         if self.random_state is not None:
-            np.random.seed(self.random_state)
+            np.random.seed(self.random_state)  # noqa: NPY002
 
     @property
     def smooth(self) -> int:
@@ -122,7 +124,7 @@ class TargetEncodingFeatureGenerator:
             raise ValueError("smooth must be a non-negative integer.")
         if self.cv is not None and not isinstance(self.cv, BaseCrossValidator):
             raise ValueError("cv must be None or an instance of BaseCrossValidator.")
-        if not isinstance(self.n_bins, int) or self.n_bins < 2:
+        if not isinstance(self.n_bins, int) or self.n_bins < MIN_BINS:
             raise ValueError("n_bins must be an integer >= 2.")
         if not isinstance(self.chunk_size, int) or self.chunk_size < 1:
             raise ValueError("chunk_size must be a positive integer.")
@@ -130,7 +132,7 @@ class TargetEncodingFeatureGenerator:
             raise ValueError("batch_size must be a positive integer.")
         if not isinstance(self.is_continuous_target, bool):
             raise ValueError("is_continuous_target must be a boolean.")
-        if not isinstance(self.target_bins, int) or self.target_bins < 2:
+        if not isinstance(self.target_bins, int) or self.target_bins < MIN_BINS:
             raise ValueError("target_bins must be an integer >= 2.")
         if self.random_state is not None and not isinstance(self.random_state, int):
             raise ValueError("random_state must be None or an integer.")
@@ -272,7 +274,7 @@ class TargetEncodingFeatureGenerator:
             if self._is_float_feature(chunk, feature_name)
             else chunk[feature_name]
         )
-        return (feature_series.map(mapping).fillna(self.global_stat).astype("float32")).values
+        return (feature_series.map(mapping).fillna(self.global_stat).astype("float32")).to_numpy()
 
     def _fit_single_feature(
         self,
