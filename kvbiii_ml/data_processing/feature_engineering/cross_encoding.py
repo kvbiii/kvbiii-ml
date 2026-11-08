@@ -31,7 +31,7 @@ class CrossFeatureGenerator:
             **kwargs (int): Compatibility kwargs "batch_size" and "chunk_size".
 
         Raises:
-            ValueError: If unexpected keyword arguments are passed.
+            ValueError: If keyword arguments or options are unexpected or invalid.
         """
         processing = processing.copy() if processing is not None else {}
         if "batch_size" in kwargs:

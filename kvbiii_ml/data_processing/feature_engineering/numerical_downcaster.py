@@ -40,7 +40,7 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
             variables (list[str] | None): Columns to downcast. Defaults to all numeric columns.
             int_downcast (bool, optional): Whether to downcast integer types. Defaults to True.
             float_downcast (bool, optional): Whether to downcast float types. Defaults to True.
-            float_precision (str): "lossless" (exact only) or "float32". Defaults to "lossless".
+            float_precision (str): "lossless" (exact) or "float32" (lossy). Defaults to "lossless".
             columns (list[str] | None): Deprecated alias of variables. Defaults to None.
         """
         self.variables = variables
