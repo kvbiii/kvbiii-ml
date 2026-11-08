@@ -244,7 +244,7 @@ class TestFoldwiseSampler:
         # Configure mock
         mock_instance = Mock()
         mock_ros.return_value = mock_instance
-        mock_instance.fit_resample.return_value = (X.values, y.values)
+        mock_instance.fit_resample.return_value = (X.to_numpy(), y.to_numpy())
 
         sampler = FoldwiseSampler(strategy="random_over", sampler_params={"random_state": 42})
         sampler.fit_transform(X, y)

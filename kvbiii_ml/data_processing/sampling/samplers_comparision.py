@@ -6,7 +6,7 @@ from imblearn.under_sampling import RandomUnderSampler
 class FoldwiseSampler:
     """Apply a sampling strategy consistently across CV folds."""
 
-    def __init__(self, strategy="none", sampler_params=None) -> None:
+    def __init__(self, strategy: str = "none", sampler_params: dict | None = None) -> None:
         """
         Initialize the FoldwiseSampler with a specified strategy and parameters.
 
