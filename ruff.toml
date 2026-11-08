@@ -1,4 +1,4 @@
-line-length = 88
+line-length = 100
 target-version = "py311"
 cache-dir = ".cache/ruff"
 extend-exclude = ["*.ipynb", "*.md"]
@@ -7,7 +7,7 @@ extend-exclude = ["*.ipynb", "*.md"]
 preview = true
 explicit-preview-rules = true
 select = ["ALL"]
-extend-select = ["PLR0914"]
+extend-select = ["PLR0914", "DOC102", "DOC202", "DOC501", "DOC502"]
 ignore = [
     "COM812",
     "ISC001",
@@ -20,12 +20,10 @@ ignore = [
     "TRY003",
     "FBT001",
     "FBT002",
-    "FBT003",
     "T201",
     "PYI041",
     "EXE002",
     "CPY001",
-    "E501",
     "INP001",
     "ARG002",
     "PLR0917",
@@ -41,7 +39,7 @@ ignore = [
 ]
 
 [lint.per-file-ignores]
-"tests/**" = ["ANN", "NPY002", "PLR2004", "RSE102", "S101", "SLF001"]
+"tests/**" = ["ANN", "DOC501", "NPY002", "PLR2004", "RSE102", "S101", "SLF001"]
 
 [lint.pydocstyle]
 convention = "google"
