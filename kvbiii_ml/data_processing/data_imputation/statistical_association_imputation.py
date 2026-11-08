@@ -18,7 +18,7 @@ except ImportError:  # pragma: no cover
 
 
 class StatisticalAssociationImputer:
-    """Imputes missing values using association-ranked grouping statistics."""
+    """Impute missing values using association-ranked grouping statistics."""
 
     def __init__(
         self,
@@ -30,9 +30,7 @@ class StatisticalAssociationImputer:
         Initialize the imputer.
 
         Args:
-            metrics (list[str]):
-                Association metrics to use for ranking. Defaults to
-                ["cramers_v", "mutual_info", "theils_u"].
+            metrics (list[str] | None): Ranking metrics. Defaults to all three association metrics.
             top_n (int): Number of top-ranked columns to use for grouping. Defaults to 2.
             verbose (bool): Whether to print progress information. Defaults to False.
         """
@@ -48,9 +46,9 @@ class StatisticalAssociationImputer:
         """
         Fit the imputer and prepare group statistics for all features.
 
-        This learns bin edges for numeric columns, ranks features by association
-        per target feature, selects grouping columns, and stores per-feature
-        imputation statistics for later use in transform.
+        - Learn bin edges for numeric columns.
+        - Rank features by association with each target feature and select grouping columns.
+        - Store per-feature imputation statistics for transform.
 
         Args:
             df (pd.DataFrame): Training data used to learn binning and imputation patterns.
@@ -208,10 +206,8 @@ class StatisticalAssociationImputer:
 
         Args:
             df (pd.DataFrame): Input dataframe.
-            feature_name (str):
-                Feature evaluated as the target (excluded from numeric binning set).
-            fit_bins (bool):
-                Whether to compute new bins. If False, reuse stored bins. Defaults to True.
+            feature_name (str): Target feature, excluded from numeric binning.
+            fit_bins (bool): Compute new bins; if False, reuse stored bins. Defaults to True.
 
         Returns:
             pd.DataFrame: Dataframe with binned numeric features.
@@ -338,9 +334,7 @@ class StatisticalAssociationImputer:
         selected_cols: list[str],
     ) -> dict[str, object]:
         """
-        Compute group-wise and overall statistics for a feature.
-
-        Uses binned grouping columns for stability while computing stats on original values.
+        Compute group-wise and overall statistics for a feature, grouping on binned columns.
 
         Args:
             df (pd.DataFrame): Data containing the feature and grouping columns.
@@ -348,9 +342,7 @@ class StatisticalAssociationImputer:
             selected_cols (list[str]): Grouping columns chosen from rankings.
 
         Returns:
-            dict[str, object]:
-                Dictionary with keys "group" (mapping from grouped keys to stats)
-                and "overall" (overall fallback statistic).
+            dict[str, object]: "group" (stats per group key) and "overall" (fallback statistic).
         """
         is_categorical = feature_name in self.categorical_columns
         df_binned = self.bin_dataframe(df, feature_name, fit_bins=False)
@@ -388,7 +380,7 @@ class StatisticalAssociationImputer:
         group_stats: dict[tuple[object, ...], object],
         overall_stat: object,
     ) -> None:
-        """Prints grouped and overall statistics for verbose diagnostics."""
+        """Print grouped and overall statistics for verbose diagnostics."""
         print("Stats by group (using binned grouping):")
         for group, stat in group_stats.items():
             group_str = ", ".join(f"{col}: {val}" for col, val in zip(selected_cols, group))
@@ -412,9 +404,7 @@ class StatisticalAssociationImputer:
             selected_cols (list[str]): Grouping columns selected during fitting.
 
         Returns:
-            pd.DataFrame:
-                Dataframe with an additional "imputed" column before assignment
-                to the feature.
+            pd.DataFrame: Dataframe with an extra "imputed" column.
         """
         missing_mask = df[feature_name].isna()
         df["imputed"] = df[feature_name]
