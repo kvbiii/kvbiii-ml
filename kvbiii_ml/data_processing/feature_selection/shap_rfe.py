@@ -473,7 +473,7 @@ class ShapRecursiveFeatureElimination:
 
         except (FloatingPointError, OverflowError, TypeError, ValueError) as exc:
             if self.verbose:
-                print(f"⚠️ Vectorized processing failed, falling back to iterative method: {exc}")
+                print(f"⚠️ Vectorized processing failed, skipping fold: {exc}")
 
         finally:
             if "total" in locals():
@@ -549,10 +549,7 @@ class ShapRecursiveFeatureElimination:
                     continue
         except (FloatingPointError, OverflowError, TypeError, ValueError) as exc:
             if self.verbose:
-                print(f"⚠️ Vectorized 3D processing failed, falling back to iterative method: {exc}")
-            self._process_3d_shap_fallback(
-                vals, base, y_valid, current_features, fold_features_metric_monitor
-            )
+                print(f"⚠️ Vectorized 3D processing failed, skipping fold: {exc}")
 
         finally:
             if "total" in locals():

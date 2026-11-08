@@ -168,5 +168,29 @@ def test_select_features_weighted_score_logic():
     assert_selection_is_nonnull_list_with_metric(selected, best_metric)
 
 
+@pytest.mark.parametrize(
+    ("method_name", "shape"),
+    [("_process_2d_shap", (2, 3)), ("_process_3d_shap", (2, 3, 2))],
+)
+def test_process_shap_skips_fold_when_vectorized_step_fails(method_name, shape):
+    """Tests that a failing vectorized SHAP step skips the fold instead of calling a missing method.
+
+    Asserts:
+        - No exception propagates for 2D and 3D SHAP values
+        - No metric is recorded for the failed fold
+    """
+    selector = ShapRecursiveFeatureElimination(
+        estimator=LogisticRegression(max_iter=100, solver="liblinear"),
+        cross_validator=_build_cv(),
+        steps=2,
+        verbose=False,
+    )
+    features = ["a", "b", "c"]
+    monitor = {feature: [] for feature in features}
+    getattr(selector, method_name)(np.full(shape, "x"), 0.0, pd.Series([0, 1]), features, monitor)
+    if any(monitor.values()):
+        raise AssertionError()
+
+
 if __name__ == "__main__":
     print("Run this file with pytest to execute tests.")
