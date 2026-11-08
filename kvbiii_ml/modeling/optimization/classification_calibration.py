@@ -428,7 +428,7 @@ class ClassificationCalibrator:
                 facecolor=_PLOT_SURFACE,
                 gridspec_kw={"wspace": 0.35},
             )
-            y_bin = (y_true == self._classes[1]).astype(int)
+            y_bin = cast("np.ndarray", y_true == self._classes[1]).astype(int)
             for col, name in enumerate(method_names):
                 ax = axes[0, col]
                 hist_ax = self._draw_reliability_panel(
@@ -458,7 +458,7 @@ class ClassificationCalibrator:
                 probas = self._oof_probas_by_method[name]
                 for col, cls in enumerate(self._classes):
                     ax = axes[row, col]
-                    y_bin = (y_true == cls).astype(int)
+                    y_bin = cast("np.ndarray", y_true == cls).astype(int)
                     panel_title = f"Class {labels[col]}"
                     hist_ax = self._draw_reliability_panel(
                         ax, y_bin, probas[:, col], panel_title, name
@@ -584,7 +584,9 @@ class ClassificationCalibrator:
             },
         )
 
-        hist_ax = ax.inset_axes([0, -0.24, 1, 0.16], sharex=ax)
+        hist_ax = ax.inset_axes(
+            cast("tuple[float, float, float, float]", [0, -0.24, 1, 0.16]), sharex=ax
+        )
         bin_edges = np.linspace(0.0, 1.0, self.n_bins + 1)
         counts, _ = np.histogram(p, bins=bin_edges)
         hist_ax.bar(
@@ -981,7 +983,7 @@ if __name__ == "__main__":
         print(f"Best method: {cal_1.best_method_}")
         print(cal_1.calibration_scores_df_)
         print("Passing best_estimator_ to cross_validator.fit():")
-        _, valid_s, _ = cv_1.fit(cal_1.best_estimator_, x_bin, y_bin)
+        _, valid_s, _ = cv_1.fit(cast("Estimator", cal_1.best_estimator_), x_bin, y_bin)
         print(f"  Calibrated CV valid: {np.mean(valid_s):.4f} ± {np.std(valid_s):.4f}")
         cal_1.plot_calibration_curves()
 
@@ -1064,7 +1066,7 @@ if __name__ == "__main__":
         print(cal_3.calibration_scores_df_)
 
         start = time.perf_counter()
-        _, valid_s_3, _ = cv_3.fit(cal_3.best_estimator_, x_bin, y_bin)
+        _, valid_s_3, _ = cv_3.fit(cast("Estimator", cal_3.best_estimator_), x_bin, y_bin)
         print(f"  Time for CV fit with best_estimator_: {time.perf_counter() - start:.2f} seconds")
         print(f"  Calibrated CV valid: {np.mean(valid_s_3):.4f} ± {np.std(valid_s_3):.4f}")
         cal_3.plot_calibration_curves()
@@ -1089,7 +1091,7 @@ if __name__ == "__main__":
         print(f"  best_method_: {cal_4.best_method_}")
         print(cal_4.calibration_scores_df_)
         print("Passing best_estimator_ to cross_validator.fit():")
-        _, valid_s_mc, _ = cv_4.fit(cal_4.best_estimator_, x_mc, y_mc)
+        _, valid_s_mc, _ = cv_4.fit(cast("Estimator", cal_4.best_estimator_), x_mc, y_mc)
         print(f"  Calibrated CV valid: {np.mean(valid_s_mc):.4f} ± {np.std(valid_s_mc):.4f}")
         cal_4.plot_calibration_curves()
 

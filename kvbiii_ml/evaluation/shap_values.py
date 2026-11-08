@@ -1,8 +1,12 @@
 import gc
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import pandas as pd
 import shap
+
+if TYPE_CHECKING:
+    from kvbiii_ml.modeling.training.ensemble_model import EnsembleModel
 
 MAX_NESTED_ENSEMBLE_SIZE = 10
 
@@ -98,7 +102,7 @@ def _compute_ensemble_shap(
     Raises:
         ValueError: If no valid models found in ensemble.
     """
-    fitted_estimators = model.fitted_estimators_
+    fitted_estimators = cast("EnsembleModel", model).fitted_estimators_
     n_estimators = len(fitted_estimators)
 
     max_ensemble_size = 50

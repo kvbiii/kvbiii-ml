@@ -108,7 +108,7 @@ def predict_with_offset(
         positive = 1.0 / (1.0 + np.exp(-raw))
         if proba:
             return np.column_stack([1.0 - positive, positive])
-        return np.asarray(estimator.classes_)[(positive >= PROBABILITY_THRESHOLD).astype(int)]
+        return np.asarray(estimator.classes_)[(positive >= PROBABILITY_THRESHOLD).astype(int)]  # ty: ignore[unresolved-attribute]
     if any(token in _objective_name(estimator) for token in EXP_LINK_OBJECTIVES):
         return np.exp(raw)
     return raw
@@ -429,7 +429,7 @@ class BaseTrainer:
         y_train: pd.Series,
         X_valid: pd.DataFrame | None = None,
         y_valid: pd.Series | None = None,
-        sample_weight: pd.Series | None = None,
+        sample_weight: pd.Series | np.ndarray | None = None,
         verbose: bool | int | None = None,
         eval_on_train: bool = True,
         offset_train: np.ndarray | None = None,
@@ -480,7 +480,7 @@ class BaseTrainer:
             y_train (pd.Series): Training target.
             X_valid (pd.DataFrame | None): Validation features for eval_set. Defaults to None.
             y_valid (pd.Series | None): Validation target for eval_set. Defaults to None.
-            sample_weight (pd.Series | None): Optional per-sample weights. Defaults to None.
+            sample_weight (pd.Series | np.ndarray | None): Per-sample weights. Defaults to None.
             verbose (bool | int | None): Verbosity for non-boosting estimators. Defaults to None.
             eval_on_train (bool): Include the training split in eval_set. Defaults to True.
             offset_train (np.ndarray | None): Link-scale offset per training row. Defaults to None.
