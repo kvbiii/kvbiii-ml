@@ -1,14 +1,15 @@
 import copy
 import itertools
 import warnings
+from collections.abc import Sequence
 from typing import ClassVar, Literal, overload
 
 import numpy as np
 import optuna
 import pandas as pd
-from sklearn.base import BaseEstimator
 from sklearn.model_selection import KFold
 
+from kvbiii_ml._typing import Estimator
 from kvbiii_ml.modeling.training.base_trainer import (
     order_x_for_estimator,
     split_offset,
@@ -51,7 +52,7 @@ class EnsembleWeightTunerCV:
 
     def __init__(
         self,
-        estimators: list[BaseEstimator],
+        estimators: Sequence[Estimator],
         cross_validator: CrossValidationTrainer,
         n_trials: int = 50,
         seed: int = 17,
@@ -66,7 +67,7 @@ class EnsembleWeightTunerCV:
           the trainer passed in is never modified. Defaults to True.
 
         Args:
-            estimators (list[BaseEstimator]): Base estimators to blend.
+            estimators (Sequence[Estimator]): Base estimators to blend.
             cross_validator (CrossValidationTrainer): Cross-validation trainer to use.
             n_trials (int): Number of Optuna trials. Defaults to 50.
             seed (int): Random seed for the TPE sampler. Defaults to 17.
@@ -700,7 +701,7 @@ class EnsembleWeightTunerCV:
 
     def _summarize_oof(
         self,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         y_true: pd.Series,
         preds: pd.Series | pd.DataFrame,
         fold_boundaries: list[int],
@@ -713,7 +714,7 @@ class EnsembleWeightTunerCV:
         reproduced once per estimator.
 
         Args:
-            estimator (BaseEstimator): Estimator these OOF predictions belong to.
+            estimator (Estimator): Estimator these OOF predictions belong to.
             y_true (pd.Series): OOF targets with preserved fold order.
             preds (pd.Series | pd.DataFrame): This estimator's pooled OOF predictions.
             fold_boundaries (list[int]): Cumulative per-fold row counts for slicing.

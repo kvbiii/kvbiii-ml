@@ -733,7 +733,10 @@ def test_tuner_reorders_columns_per_estimator_like_the_trainer():
         verbose=False,
     )
     tuner = EnsembleWeightTunerCV(
-        [LinearRegression(), LinearRegression()], trainer, n_trials=2, verbose=False
+        [LinearRegression(), LinearRegression()],  # ty: ignore[invalid-argument-type]
+        trainer,
+        n_trials=2,
+        verbose=False,
     )
     tuner.tune(X, y_reg)
     if tuner.best_score_ is None or tuner.best_score_ > 1e-6:

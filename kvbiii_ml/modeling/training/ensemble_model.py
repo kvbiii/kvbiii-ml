@@ -10,6 +10,7 @@ from sklearn.metrics import accuracy_score, r2_score
 from sklearn.model_selection import BaseCrossValidator, KFold
 from sklearn.utils import ClassifierTags, RegressorTags, Tags
 
+from kvbiii_ml._typing import Estimator
 from kvbiii_ml.modeling.training.base_trainer import (
     TRAIN_VALID_PAIR,
     BaseTrainer,
@@ -32,7 +33,7 @@ class EnsembleModel(BaseEstimator):
         estimators: list,
         problem_type: str,
         weights: np.ndarray | None = None,
-        meta_learner: BaseEstimator | None = None,
+        meta_learner: Estimator | None = None,
         n_jobs: int = 1,
         cv: BaseCrossValidator | None = None,
         on_estimator_error: str = "raise",
@@ -66,7 +67,7 @@ class EnsembleModel(BaseEstimator):
             estimators (list): Base estimators to include in the ensemble.
             problem_type (str): Problem type, either "classification" or "regression".
             weights (np.ndarray | None): Estimator weights (normalised); None means equal.
-            meta_learner (BaseEstimator | None): Stacking meta-learner; None means blending.
+            meta_learner (Estimator | None): Stacking meta-learner; None means blending.
             n_jobs (int): Base estimators fitted concurrently, in threads.
             cv (BaseCrossValidator | None): Splitter for out-of-fold stacking meta-features.
             on_estimator_error (str): "raise" or "skip" a base estimator that fails in predict.
@@ -98,8 +99,8 @@ class EnsembleModel(BaseEstimator):
         self._weights_normalized = self._validate_and_normalize_weights(weights)
         self.weights = self._weights_normalized
         self.classes_: np.ndarray | None = None
-        self.fitted_estimators_: list[BaseEstimator] = []
-        self.fitted_meta_learner_: BaseEstimator | None = None
+        self.fitted_estimators_: list[Estimator] = []
+        self.fitted_meta_learner_: Estimator | None = None
 
     def __sklearn_tags__(self) -> Tags:
         """Tag the ensemble as a classifier or regressor according to problem_type."""
@@ -127,15 +128,15 @@ class EnsembleModel(BaseEstimator):
             }
         )
 
-    def _safe_clone_estimator(self, estimator: BaseEstimator) -> BaseEstimator:
+    def _safe_clone_estimator(self, estimator: Estimator) -> Estimator:
         """
         Clone estimator with fallback for non-sklearn-clone-compatible models.
 
         Args:
-            estimator (BaseEstimator): Estimator to clone.
+            estimator (Estimator): Estimator to clone.
 
         Returns:
-            BaseEstimator: Cloned estimator if possible, otherwise the original.
+            Estimator: Cloned estimator if possible, otherwise the original.
         """
         try:
             return clone(estimator)
@@ -231,10 +232,10 @@ class EnsembleModel(BaseEstimator):
         y_valid: pd.Series | None,
         sample_weight: pd.Series | np.ndarray | None,
         verbose: int | None,
-    ) -> list[BaseEstimator]:
+    ) -> list[Estimator]:
         """Clone, configure and fit every base estimator, in `estimators` order."""
 
-        def fit_one(base_estimator: BaseEstimator) -> BaseEstimator:
+        def fit_one(base_estimator: Estimator) -> Estimator:
             """Clone, configure and fit one base estimator."""
             x_fit, offset_fit = split_offset(X_train, self.offset_column)
             x_eval, offset_eval = (
@@ -313,7 +314,7 @@ class EnsembleModel(BaseEstimator):
         """Generate meta-features from the fitted base estimators' predictions."""
         return self._meta_features(self.fitted_estimators_, X)
 
-    def _meta_features(self, estimators: list[BaseEstimator], X: pd.DataFrame) -> np.ndarray:
+    def _meta_features(self, estimators: list[Estimator], X: pd.DataFrame) -> np.ndarray:
         """Stack class probabilities (classification) or predictions (regression) of estimators."""
         meta_features = []
         for estimator in estimators:
@@ -326,9 +327,9 @@ class EnsembleModel(BaseEstimator):
 
     def _set_categorical_params_for_estimator(
         self,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         X_train: pd.DataFrame,
-    ) -> BaseEstimator:
+    ) -> Estimator:
         """Assign or sanitise categorical feature parameters for supported estimators.
 
         For CatBoost: filters any pre-configured ``cat_features`` to exclude columns
@@ -339,11 +340,11 @@ class EnsembleModel(BaseEstimator):
         For HistGradientBoosting: auto-detects ``category``-dtype columns.
 
         Args:
-            estimator (BaseEstimator): Estimator to configure.
+            estimator (Estimator): Estimator to configure.
             X_train (pd.DataFrame): Training features the estimator will be fitted on.
 
         Returns:
-            BaseEstimator: Estimator with categorical parameters set when applicable.
+            Estimator: Estimator with categorical parameters set when applicable.
         """
         name = estimator.__class__.__name__
 
@@ -430,7 +431,7 @@ class EnsembleModel(BaseEstimator):
     def _collect_predictions(
         self,
         X: pd.DataFrame,
-        predict_fn: Callable[[BaseEstimator, pd.DataFrame], np.ndarray],
+        predict_fn: Callable[[Estimator, pd.DataFrame], np.ndarray],
     ) -> tuple[np.ndarray, np.ndarray]:
         """Run predict_fn on every base estimator, honouring ``on_estimator_error``.
 
@@ -440,7 +441,7 @@ class EnsembleModel(BaseEstimator):
 
         Args:
             X (pd.DataFrame): Features to score.
-            predict_fn (Callable[[BaseEstimator, pd.DataFrame], np.ndarray]): Prediction callable.
+            predict_fn (Callable[[Estimator, pd.DataFrame], np.ndarray]): Prediction callable.
 
         Returns:
             tuple[np.ndarray, np.ndarray]: Stacked predictions of the estimators that
@@ -570,7 +571,7 @@ class EnsembleModel(BaseEstimator):
         return float(metric(y, self.predict(X), sample_weight=sample_weight))
 
     def _estimator_output(
-        self, estimator: BaseEstimator, X: pd.DataFrame, proba: bool = False
+        self, estimator: Estimator, X: pd.DataFrame, proba: bool = False
     ) -> np.ndarray:
         """Predict (or predict_proba) one base estimator on X, applying the offset column."""
         X, offset = split_offset(X, self.offset_column)
@@ -579,12 +580,12 @@ class EnsembleModel(BaseEstimator):
             return predict_with_offset(estimator, x_ordered, offset, proba=proba)
         return estimator.predict_proba(x_ordered) if proba else estimator.predict(x_ordered)
 
-    def _order_x_for_estimator(self, X: pd.DataFrame, estimator: BaseEstimator) -> pd.DataFrame:
+    def _order_x_for_estimator(self, X: pd.DataFrame, estimator: Estimator) -> pd.DataFrame:
         """Reorder columns to the estimator's feature order, raising if any is missing.
 
         Args:
             X (pd.DataFrame): Input features.
-            estimator (BaseEstimator): Trained estimator.
+            estimator (Estimator): Trained estimator.
 
         Returns:
             pd.DataFrame: Reordered features (see ``order_x_for_estimator``).

@@ -4,8 +4,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.stats import gaussian_kde
-from sklearn.base import BaseEstimator
 
+from kvbiii_ml._typing import Estimator
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 from kvbiii_ml.modeling.training.oof_model import _collect_oof_probas
 
@@ -114,7 +114,7 @@ class PseudoLabelGenerator:
 
     def fit(
         self,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         X_train: pd.DataFrame,
         y_train: pd.Series,
         x_unlabeled: pd.DataFrame,
@@ -122,7 +122,7 @@ class PseudoLabelGenerator:
         """Fit the model via CV, compute thresholds, and generate pseudo labels.
 
         Args:
-            estimator (BaseEstimator): Unfitted estimator to train.
+            estimator (Estimator): Unfitted estimator to train.
             X_train (pd.DataFrame): Labeled training features.
             y_train (pd.Series): Labeled training target.
             x_unlabeled (pd.DataFrame): Unlabeled features to pseudo-label.
@@ -613,7 +613,7 @@ if __name__ == "__main__":
 
     def _run_scenario(
         label: str,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         X_train: pd.DataFrame,
         y_train: pd.Series,
         x_unlabeled: pd.DataFrame,

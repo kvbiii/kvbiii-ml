@@ -3,8 +3,8 @@ import gc
 import numpy as np
 import pandas as pd
 import shap
-from sklearn.base import BaseEstimator
 
+from kvbiii_ml._typing import Estimator
 from kvbiii_ml.evaluation.shap_values import compute_shap_values
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
@@ -24,7 +24,7 @@ class ShapRecursiveFeatureElimination:
 
     def __init__(
         self,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         cross_validator: CrossValidationTrainer,
         steps: int = 5,
         alpha: float = 0.95,
@@ -35,7 +35,7 @@ class ShapRecursiveFeatureElimination:
         """Initialize the SHAP-RFE selector.
 
         Args:
-            estimator (BaseEstimator): Estimator to fit within each fold.
+            estimator (Estimator): Estimator to fit within each fold.
             cross_validator (CrossValidationTrainer): Cross-validation trainer instance.
             steps (int, optional): Number of elimination iterations. Defaults to 5.
             alpha (float, optional): Weight for the final selection score mix. Defaults to 0.95.

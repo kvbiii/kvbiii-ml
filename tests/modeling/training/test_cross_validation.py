@@ -683,7 +683,7 @@ def test_crossvalidationtrainer_early_stopping_holdout_keeps_validation_fold_out
         verbose=False,
         early_stopping_holdout=0.25,
     )
-    trainer.fit(_EvalSetRecordingRegressor(), X, y)
+    trainer.fit(_EvalSetRecordingRegressor(), X, y)  # ty: ignore[invalid-argument-type]
     for (train_idx, valid_idx), est in zip(splits, trainer.fitted_estimators_, strict=False):
         train_index = list(X.index[train_idx])
         n_holdout = round(len(train_index) * 0.25)
@@ -697,7 +697,7 @@ def test_crossvalidationtrainer_early_stopping_holdout_keeps_validation_fold_out
     default = CrossValidationTrainer(
         problem_type="regression", metric_name="RMSE", cv=cv, verbose=False
     )
-    default.fit(_EvalSetRecordingRegressor(), X, y)
+    default.fit(_EvalSetRecordingRegressor(), X, y)  # ty: ignore[invalid-argument-type]
     if default.fitted_estimators_[0].eval_index_ != list(X.index[splits[0][1]]):
         raise AssertionError()
 

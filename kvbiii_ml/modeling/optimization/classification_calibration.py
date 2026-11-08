@@ -10,11 +10,12 @@ import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from pandas.io.formats.style import Styler
-from sklearn.base import BaseEstimator, clone
+from sklearn.base import clone
 from sklearn.calibration import calibration_curve
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 
+from kvbiii_ml._typing import Estimator
 from kvbiii_ml.evaluation.generate_reports import _apply_fancy_styling
 from kvbiii_ml.evaluation.metrics import (
     METRICS,
@@ -243,7 +244,7 @@ class ClassificationCalibrator:
 
     def __init__(
         self,
-        estimator: BaseEstimator,
+        estimator: Estimator,
         cross_validator: CrossValidationTrainer,
         methods: Iterable[str] | None = None,
         n_bins: int = _DEFAULT_N_BINS,
@@ -267,7 +268,7 @@ class ClassificationCalibrator:
           out to fit its calibrator. Defaults to 0.2.
 
         Args:
-            estimator (BaseEstimator): Unfitted estimator or EnsembleModel to calibrate.
+            estimator (Estimator): Unfitted estimator or EnsembleModel to calibrate.
             cross_validator (CrossValidationTrainer): Configured CV trainer.
             methods (Iterable[str] | None): "isotonic" and/or "sigmoid"; None means both.
             n_bins (int): Number of bins for ECE computation and calibration curves. Defaults to 10.
@@ -303,12 +304,12 @@ class ClassificationCalibrator:
         self.calibration_scores_df_: pd.DataFrame = pd.DataFrame()
         self.best_method_: str = ""
         self.best_calibrator_: IsotonicRegression | LogisticRegression | list | None = None
-        self.best_estimator_: CalibratedModel | BaseEstimator | None = None
+        self.best_estimator_: CalibratedModel | Estimator | None = None
 
         self._oof_probas_by_method: dict[str, np.ndarray] = {}
         self._y_oof: np.ndarray | None = None
         self._classes: np.ndarray = None  # ty: ignore[invalid-assignment]
-        self._fitted_full_estimator: BaseEstimator | None = None
+        self._fitted_full_estimator: Estimator | None = None
         self._fitted_full_pipeline = None
 
     def fit(
