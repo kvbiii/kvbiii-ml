@@ -716,9 +716,8 @@ def test_randomsearchcv_get_param_samples_expected_types(
         low, high = param_value
         if not low <= value <= high:
             raise AssertionError()
-    else:
-        if value not in param_value:
-            raise AssertionError()
+    elif value not in param_value:
+        raise AssertionError()
 
 
 def test_randomsearchcv_get_param_returns_constant_without_sampling(real_optuna_trial):

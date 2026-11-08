@@ -150,7 +150,7 @@ def regression_results(
 
     df = pd.DataFrame(metrics, index=["Train", "Test"])
 
-    format_dict = {col: "{:.4f}" for col in df.columns}
+    format_dict = dict.fromkeys(df.columns, "{:.4f}")
     format_dict["MAPE"] = "{:.2%}"
 
     styled_df = df.style.format(format_dict)
@@ -317,7 +317,7 @@ def _build_overall_table(
     ]
 
     df = pd.DataFrame(metrics, index=["Train", "Test"])
-    styled_df = df.style.format({col: "{:.4f}" for col in df.columns})
+    styled_df = df.style.format(dict.fromkeys(df.columns, "{:.4f}"))
 
     return _apply_fancy_styling(styled_df, caption)
 
@@ -359,8 +359,8 @@ def _build_per_class_table(
     metric_cols = [col for col in per_class_df.columns if col[1] != "Support"]
     support_cols = [col for col in per_class_df.columns if col[1] == "Support"]
 
-    format_dict: dict[tuple[str, str], str] = {col: "{:.4f}" for col in metric_cols}
-    format_dict.update({col: "{:.0f}" for col in support_cols})
+    format_dict: dict[tuple[str, str], str] = dict.fromkeys(metric_cols, "{:.4f}")
+    format_dict.update(dict.fromkeys(support_cols, "{:.0f}"))
 
     per_class_styled = per_class_df.style.format(format_dict)
     return _apply_fancy_styling(per_class_styled, caption)

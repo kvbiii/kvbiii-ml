@@ -312,7 +312,7 @@ class ClassificationCalibrator:
         X: pd.DataFrame,
         y: pd.Series,
         eval_set: list[tuple[pd.DataFrame, pd.Series]] | None = None,
-    ) -> "ClassificationCalibrator":
+    ) -> ClassificationCalibrator:
         """Run CV calibration, evaluate methods, and store the best strategy.
 
         Args:
@@ -884,8 +884,8 @@ if __name__ == "__main__":
 
     import numpy as np
     import pandas as pd
-    from lightgbm import LGBMClassifier
     from catboost import CatBoostClassifier
+    from lightgbm import LGBMClassifier
     from sklearn.datasets import make_classification
     from sklearn.model_selection import StratifiedKFold, train_test_split
     from sklearn.pipeline import Pipeline

@@ -1,6 +1,6 @@
 import copy
 import inspect
-from typing import Callable
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
@@ -130,7 +130,7 @@ class FeatureGenerationPipeline:
 
         for step in self.preprocessing_steps:
             if hasattr(step, "features_names"):
-                fn = getattr(step, "features_names")
+                fn = step.features_names
                 wants_dynamic = (isinstance(fn, str) and fn == "__NEW__") or (
                     isinstance(fn, list) and len(fn) == 0
                 )
@@ -208,6 +208,7 @@ class FeatureGenerationPipeline:
 
 if __name__ == "__main__":
     from sklearn.model_selection import KFold
+
     from kvbiii_ml.data_processing.feature_engineering.count_encoding import (
         CountEncodingFeatureGenerator,
     )

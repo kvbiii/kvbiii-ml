@@ -96,9 +96,8 @@ def test_decisiontreediscretiserwithoriginal_transform_respects_bin_output(
     derived = result["age_PREPROCESS_DT_DISC"]
     if derived.isna().any():
         raise AssertionError(f"Derived column contains NaN for bin_output={bin_output}.")
-    if bin_output == "bin_number":
-        if not (derived >= 0).all():
-            raise AssertionError("bin_number output should only contain non-negative codes.")
+    if bin_output == "bin_number" and not (derived >= 0).all():
+        raise AssertionError("bin_number output should only contain non-negative codes.")
 
 
 if __name__ == "__main__":

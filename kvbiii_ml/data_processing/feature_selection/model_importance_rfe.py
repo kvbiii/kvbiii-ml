@@ -118,7 +118,7 @@ class ModelImportanceRecursiveFeatureElimination:
         if set(active_cats) == set(original_cats):
             return estimator
         updated = deepcopy(estimator)
-        updated.set_params(cat_features=active_cats if active_cats else None)
+        updated.set_params(cat_features=active_cats or None)
         return updated
 
     def run(self, X: pd.DataFrame, y: pd.Series | np.ndarray) -> dict[str, list | pd.DataFrame]:
@@ -483,7 +483,7 @@ class ModelImportanceRecursiveFeatureElimination:
         selected = set(history[history["step"] >= best_row["step"]]["removed_feature_name"])
         selected.update(self.protected_features)
         gc.collect()
-        return list(sorted(selected)), best_row["metric_value"]
+        return sorted(selected), best_row["metric_value"]
 
 
 if __name__ == "__main__":

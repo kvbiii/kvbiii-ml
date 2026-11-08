@@ -355,7 +355,7 @@ class EnsembleModel(BaseEstimator):
                     if c in X_train.columns and not pd.api.types.is_numeric_dtype(X_train[c])
                 ]
                 if set(active_cats) != set(existing_cats):
-                    estimator.set_params(cat_features=active_cats if active_cats else None)
+                    estimator.set_params(cat_features=active_cats or None)
             else:
                 auto_cats = X_train.select_dtypes(include="category").columns.tolist()
                 if auto_cats:
@@ -500,16 +500,15 @@ class EnsembleModel(BaseEstimator):
                     "ci_95_lower": pred,
                     "ci_95_upper": pred,
                 }
-            else:
-                proba = self.predict_proba(X)
-                pred_class = np.argmax(proba, axis=1)
-                pred_confidence = proba[np.arange(len(pred_class)), pred_class]
-                return {
-                    "prediction": pred_class,
-                    "confidence": pred_confidence,
-                    "disagreement": np.zeros_like(pred_confidence),
-                    "proba": proba,
-                }
+            proba = self.predict_proba(X)
+            pred_class = np.argmax(proba, axis=1)
+            pred_confidence = proba[np.arange(len(pred_class)), pred_class]
+            return {
+                "prediction": pred_class,
+                "confidence": pred_confidence,
+                "disagreement": np.zeros_like(pred_confidence),
+                "proba": proba,
+            }
 
         predictions = []
         for estimator in self.fitted_estimators_:
@@ -540,18 +539,17 @@ class EnsembleModel(BaseEstimator):
                 "ci_95_upper": ci_upper,
             }
 
-        else:
-            mean_proba = np.average(predictions, axis=0, weights=self._weights_normalized)
-            pred_class = np.argmax(mean_proba, axis=1)
-            pred_confidence = mean_proba[np.arange(len(pred_class)), pred_class]
-            disagreement = predictions[:, np.arange(len(pred_class)), pred_class].std(axis=0)
+        mean_proba = np.average(predictions, axis=0, weights=self._weights_normalized)
+        pred_class = np.argmax(mean_proba, axis=1)
+        pred_confidence = mean_proba[np.arange(len(pred_class)), pred_class]
+        disagreement = predictions[:, np.arange(len(pred_class)), pred_class].std(axis=0)
 
-            return {
-                "prediction": pred_class,
-                "confidence": pred_confidence,
-                "disagreement": disagreement,
-                "proba": mean_proba,
-            }
+        return {
+            "prediction": pred_class,
+            "confidence": pred_confidence,
+            "disagreement": disagreement,
+            "proba": mean_proba,
+        }
 
     def score(self, X: pd.DataFrame, y: pd.Series, sample_weight: pd.Series | None = None) -> float:
         """Return accuracy for classification or R^2 for regression.

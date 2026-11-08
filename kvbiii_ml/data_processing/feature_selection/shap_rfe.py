@@ -429,13 +429,12 @@ class ShapRecursiveFeatureElimination:
                     )
                 if self.metric_type == "probs":
                     final_pred_matrix = pred_prob_matrix
+                elif pred_prob_matrix.ndim == 2 and pred_prob_matrix.shape[1] == len(
+                    current_features
+                ):
+                    final_pred_matrix = (pred_prob_matrix >= 0.5).astype(int)
                 else:
-                    if pred_prob_matrix.ndim == 2 and pred_prob_matrix.shape[1] == len(
-                        current_features
-                    ):
-                        final_pred_matrix = (pred_prob_matrix >= 0.5).astype(int)
-                    else:
-                        final_pred_matrix = np.argmax(pred_prob_matrix, axis=-1).astype(int)
+                    final_pred_matrix = np.argmax(pred_prob_matrix, axis=-1).astype(int)
             else:
                 final_pred_matrix = pred_matrix
             for feat_idx, feature in enumerate(current_features):
@@ -480,11 +479,10 @@ class ShapRecursiveFeatureElimination:
 
             if scalar_base:
                 pred_matrix = base_arr.item() + reduced_vals_matrix
+            elif base_arr.ndim == 1 and reduced_vals_matrix.ndim == 3:
+                pred_matrix = base_arr[:, np.newaxis, np.newaxis] + reduced_vals_matrix
             else:
-                if base_arr.ndim == 1 and reduced_vals_matrix.ndim == 3:
-                    pred_matrix = base_arr[:, np.newaxis, np.newaxis] + reduced_vals_matrix
-                else:
-                    pred_matrix = base_arr[:, np.newaxis, :] + reduced_vals_matrix
+                pred_matrix = base_arr[:, np.newaxis, :] + reduced_vals_matrix
             if self.problem_type == "classification":
                 pred_prob_matrix = 1 / (1 + np.exp(-np.clip(pred_matrix, -500, 500)))
                 if pred_prob_matrix.ndim == 3 and y_valid.ndim == 1:
@@ -494,16 +492,14 @@ class ShapRecursiveFeatureElimination:
                         pred_prob_matrix = pred_prob_matrix[:, :, 0]
                 if self.metric_type == "probs":
                     final_pred_matrix = pred_prob_matrix
+                elif pred_prob_matrix.ndim == 3:
+                    final_pred_matrix = np.argmax(pred_prob_matrix, axis=-1).astype(int)
                 else:
-                    if pred_prob_matrix.ndim == 3:
-                        final_pred_matrix = np.argmax(pred_prob_matrix, axis=-1).astype(int)
-                    else:
-                        final_pred_matrix = (pred_prob_matrix >= 0.5).astype(int)
+                    final_pred_matrix = (pred_prob_matrix >= 0.5).astype(int)
+            elif pred_matrix.ndim == 3:
+                final_pred_matrix = pred_matrix[:, :, 0]
             else:
-                if pred_matrix.ndim == 3:
-                    final_pred_matrix = pred_matrix[:, :, 0]
-                else:
-                    final_pred_matrix = pred_matrix
+                final_pred_matrix = pred_matrix
             n = len(y_valid)
             for feat_idx, feature in enumerate(current_features):
                 try:
@@ -615,7 +611,7 @@ class ShapRecursiveFeatureElimination:
         selected = set(history[history["step"] >= best_row["step"]]["removed_feature_name"])
         selected.update(self.protected_features)
         gc.collect()
-        return list(sorted(selected)), best_row["metric_value"]
+        return sorted(selected), best_row["metric_value"]
 
 
 if __name__ == "__main__":

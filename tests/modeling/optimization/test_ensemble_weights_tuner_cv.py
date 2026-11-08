@@ -1,8 +1,8 @@
 from unittest.mock import Mock
 
 import numpy as np
-import pandas as pd
 import optuna
+import pandas as pd
 import pytest
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import roc_auc_score

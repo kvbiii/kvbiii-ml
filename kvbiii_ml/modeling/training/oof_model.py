@@ -61,9 +61,11 @@ def _set_n_iterations(estimator: BaseEstimator, n: int) -> None:
     class_name = type(estimator).__name__
     if class_name.startswith(CATBOOST_PREFIX):
         estimator.set_params(iterations=n)
-    elif class_name.startswith(LGBM_PREFIX) or class_name.startswith(XGB_PREFIX):
-        estimator.set_params(n_estimators=n)
-    elif hasattr(estimator, "n_estimators"):
+    elif (
+        class_name.startswith(LGBM_PREFIX)
+        or class_name.startswith(XGB_PREFIX)
+        or hasattr(estimator, "n_estimators")
+    ):
         estimator.set_params(n_estimators=n)
 
 
@@ -289,7 +291,7 @@ class OOFModel:
         y: pd.Series,
         X_test: pd.DataFrame | None = None,
         eval_set: list[tuple[pd.DataFrame, pd.Series]] | None = None,
-    ) -> "OOFModel":
+    ) -> OOFModel:
         """Fit estimator on each fold and optionally calibrate probabilities.
 
         When calibrate=True, collects OOF probabilities from the inner CV folds, fits
@@ -423,10 +425,10 @@ class OOFModel:
 
 
 if __name__ == "__main__":
+    from lightgbm import LGBMClassifier
     from sklearn.datasets import make_classification
     from sklearn.linear_model import LogisticRegression as LR
     from sklearn.model_selection import KFold
-    from lightgbm import LGBMClassifier
 
     def _run_demo() -> None:
         """Run OOFModel with and without calibration on a synthetic dataset."""

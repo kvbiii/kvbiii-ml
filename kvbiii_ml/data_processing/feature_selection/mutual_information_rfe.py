@@ -289,7 +289,7 @@ class MutualInformationRecursiveFeatureElimination:
         selected = set(history[history["step"] >= best_row["step"]]["removed_feature_name"])
         selected.update(self.protected_features)
         gc.collect()
-        return list(sorted(selected)), best_row["metric_value"]
+        return sorted(selected), best_row["metric_value"]
 
 
 if __name__ == "__main__":

@@ -5,8 +5,8 @@ import pandas as pd
 from sklearn.preprocessing import TargetEncoder
 
 from kvbiii_ml.data_processing.preprocessing.expansion_base import (
-    _WithOriginalSubsetBase,
     _cast_numeric_variables_to_object,
+    _WithOriginalSubsetBase,
 )
 
 

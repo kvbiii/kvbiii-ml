@@ -1686,7 +1686,7 @@ class RandomSearchCV:
         self._warned_categoricals.add(name)
         print(
             f"⚠️  '{name}' named {len(missing)} column(s) the preprocessing pipeline does not "
-            f"produce ({missing[:5]}); using {kept if kept else 'no'} categorical column(s) instead."
+            f"produce ({missing[:5]}); using {kept or 'no'} categorical column(s) instead."
         )
 
 

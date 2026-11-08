@@ -174,7 +174,6 @@ def test_optimize_memory_verbose_output(sample_mixed_dataframe, capsys):
         raise AssertionError()
 
     # Date feature generation and other advanced transformations not implemented; skip related assertions
-    pass
 
 
 def test_encode_target_feature_raises_error_for_missing_target():

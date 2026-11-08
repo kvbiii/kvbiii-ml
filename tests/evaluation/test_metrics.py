@@ -300,9 +300,8 @@ def test_regression_metrics_handle_continuous_targets(test_settings):
             raise AssertionError()
 
         # Error metrics should be non-negative
-        if metric_name in ["MAE", "MSE", "RMSE"]:
-            if not score >= 0.0:
-                raise AssertionError(f"{metric_name} should be non-negative")
+        if metric_name in ["MAE", "MSE", "RMSE"] and not score >= 0.0:
+            raise AssertionError(f"{metric_name} should be non-negative")
 
 
 def test_classification_metrics_handle_binary_targets(sample_predictions):

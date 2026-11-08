@@ -261,9 +261,8 @@ def display_classification_errors(errors_by_class: dict, id2label: dict[int, str
     def _style(df: pd.DataFrame, title: str):
         fmt: dict[str, str] = {}
         for col in df.columns:
-            if df[col].dtype.kind in "fc":
-                if "Probability" in col:
-                    fmt[col] = "{:.4f}"
+            if df[col].dtype.kind in "fc" and "Probability" in col:
+                fmt[col] = "{:.4f}"
         if df.empty:
             empty_df = pd.DataFrame({"No errors found": [""]})
             styler = empty_df.style.set_caption(title)

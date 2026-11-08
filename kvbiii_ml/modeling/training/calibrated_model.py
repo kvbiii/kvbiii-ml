@@ -89,7 +89,7 @@ class CalibratedModel:
         X: pd.DataFrame,
         y: pd.Series,
         eval_set: list[tuple[pd.DataFrame, pd.Series]] | None = None,
-    ) -> "CalibratedModel":
+    ) -> CalibratedModel:
         """Fit the calibrator on a hold-out split and refit the base estimator fully.
 
         Args:
