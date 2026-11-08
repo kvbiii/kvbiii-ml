@@ -84,7 +84,7 @@ def _disable_early_stopping(estimator: Estimator) -> Estimator:
         Estimator: Same estimator with early-stopping disabled.
     """
     if hasattr(estimator, "_estimators_list"):
-        for sub in estimator._estimators_list:  # noqa: SLF001
+        for sub in estimator._estimators_list:  # noqa: SLF001  # ty: ignore[not-iterable]
             _disable_early_stopping(sub)
         return estimator
     params = estimator.get_params() if hasattr(estimator, "get_params") else {}

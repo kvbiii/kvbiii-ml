@@ -2,6 +2,7 @@ import logging
 import warnings
 from copy import deepcopy
 from inspect import Signature, signature
+from typing import overload
 
 import numpy as np
 import pandas as pd
@@ -626,6 +627,14 @@ class BaseTrainer:
 
         return y_train_pred, y_valid_pred, y_test_pred, fitted_estimator
 
+    @overload
+    @staticmethod
+    def predict(estimator: Estimator, X: pd.DataFrame) -> np.ndarray: ...
+
+    @overload
+    @staticmethod
+    def predict(estimator: Estimator, X: None) -> None: ...
+
     @staticmethod
     def predict(
         estimator: Estimator,
@@ -643,6 +652,14 @@ class BaseTrainer:
         if X is None:
             return None
         return estimator.predict(X)
+
+    @overload
+    @staticmethod
+    def predict_proba(estimator: Estimator, X: pd.DataFrame) -> np.ndarray: ...
+
+    @overload
+    @staticmethod
+    def predict_proba(estimator: Estimator, X: None) -> None: ...
 
     @staticmethod
     def predict_proba(

@@ -36,9 +36,9 @@ class DataTransformer:
             df = downcaster.fit_transform(df)
             if verbose:
                 num_end_mem = df.memory_usage(deep=True).sum() / 1024**2
-                reduction = 100 * (num_start_mem - num_end_mem) / num_start_mem
+                reduction = 100 * (num_start_mem - num_end_mem) / num_start_mem  # ty: ignore[possibly-unresolved-reference]
                 print(
-                    f"Numerical dtypes reduced: {num_start_mem:.2f} MB "
+                    f"Numerical dtypes reduced: {num_start_mem:.2f} MB "  # ty: ignore[possibly-unresolved-reference]
                     f"→ {num_end_mem:.2f} MB ({reduction:.1f}% reduction)"
                 )
 
@@ -49,9 +49,9 @@ class DataTransformer:
             df = aligner.fit_transform(df)
             if verbose:
                 cat_end_mem = df.memory_usage(deep=True).sum() / 1024**2
-                reduction = 100 * (cat_start_mem - cat_end_mem) / cat_start_mem
+                reduction = 100 * (cat_start_mem - cat_end_mem) / cat_start_mem  # ty: ignore[possibly-unresolved-reference]
                 print(
-                    f"Categorical dtypes converted: {cat_start_mem:.2f} MB "
+                    f"Categorical dtypes converted: {cat_start_mem:.2f} MB "  # ty: ignore[possibly-unresolved-reference]
                     f"→ {cat_end_mem:.2f} MB ({reduction:.1f}% reduction)"
                 )
 

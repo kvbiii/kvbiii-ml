@@ -104,7 +104,7 @@ class TargetEncoderWithOriginal(_WithOriginalSubsetBase):
         """
         return _cast_numeric_variables_to_object(X, self.variables_)
 
-    def fit_transform(self, X: pd.DataFrame, y: object = None) -> pd.DataFrame:
+    def fit_transform(self, X: pd.DataFrame, y: object = None) -> pd.DataFrame:  # ty: ignore[invalid-method-override]
         """Fit using cross-fitted target statistics and transform in one pass.
 
         Overrides the inherited fit().transform() so the training set is

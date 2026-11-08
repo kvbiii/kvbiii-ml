@@ -1,4 +1,5 @@
 import itertools
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -9,7 +10,10 @@ multivariate_plots = MultivariatePlots()
 
 def _get_joint_distribution(df: pd.DataFrame, col_impute: str, col_by: str) -> pd.DataFrame:
     """Build the contingency table used by the imputation routine."""
-    return df.groupby([col_impute, col_by], observed=False)[col_by].size().unstack().fillna(0)  # noqa: PD010
+    return cast(
+        "pd.DataFrame",
+        df.groupby([col_impute, col_by], observed=False)[col_by].size().unstack(),  # noqa: PD010
+    ).fillna(0)
 
 
 def _get_mapping(
