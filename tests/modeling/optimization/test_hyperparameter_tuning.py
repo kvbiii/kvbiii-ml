@@ -603,7 +603,7 @@ def test_randomsearchcv_guard_accepts_a_consistent_gain_across_uneven_folds(
     tuner.metric_direction = "minimize"
     baseline_folds = [0.52, 0.58, 0.65]
     tuner._evaluate_config = lambda *_args, **_kwargs: (baseline_folds, [])
-    tuner._penalized_score = lambda _scores: 0.583
+    tuner._penalized_score = lambda _scores: 0.583  # ty: ignore[invalid-assignment]
     searched = _frozen_trial(0.559, [0.50, 0.555, 0.622], [100, 120, 140])
     plan = Mock(train_rows=100.0, refit_rows=150)
 
@@ -1382,7 +1382,7 @@ def test_randomsearchcv_tie_break_never_hands_the_win_back_to_the_baseline(
     """
     tuner = _tuner_with_grid(hyperparam_cv_trainer, {"C": ("float", [0.01, 1.0])})
     tuner.metric_direction = "maximize"
-    tuner._penalized_score = lambda _scores: 0.895
+    tuner._penalized_score = lambda _scores: 0.895  # ty: ignore[invalid-assignment]
     tuner._evaluate_config = lambda *_args, **_kwargs: ([0.89, 0.895, 0.90], [])
     best = _frozen_trial(0.905, [0.90, 0.905, 0.91], [900, 950, 1000])
     cheap = _frozen_trial(0.903, [0.88, 0.905, 0.93], [90, 95, 100])

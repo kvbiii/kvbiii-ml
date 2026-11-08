@@ -156,7 +156,7 @@ class MutualInformationFiltering:
         if discrete_features_mask is None:
             self.mi_kwargs.pop("discrete_features", None)
         else:
-            self.mi_kwargs["discrete_features"] = discrete_features_mask
+            self.mi_kwargs["discrete_features"] = discrete_features_mask  # ty: ignore[invalid-assignment]
 
         return x_prepared, y
 

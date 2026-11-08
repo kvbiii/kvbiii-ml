@@ -194,7 +194,7 @@ def test_objective_prunes_degenerate_weights():
     """The objective must prune trials whose sampled weights cancel out."""
     dummy_cv = _build_dummy_cv("MSE", "regression")
     tuner = EnsembleWeightTunerCV([], dummy_cv, n_trials=1, allow_negative_weights=True)
-    tuner.estimators = [object(), object()]
+    tuner.estimators = [object(), object()]  # ty: ignore[invalid-assignment]
 
     mock_trial = Mock()
     mock_trial.suggest_float.side_effect = [0.5, -0.5]
