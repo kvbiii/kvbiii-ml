@@ -49,20 +49,11 @@ class DigitsEncodingFeatureGenerator(BaseEstimator, TransformerMixin):
         Initialize the DigitsEncodingFeatureGenerator.
 
         Args:
-            features_names (list[str] | None, optional): Feature names to extract
-                digits from. If None, all numeric columns are used. Defaults to None.
+            features_names (list[str] | None): Digit source columns. Defaults to numeric columns.
             fill_value (int, optional): Value used for NaN entries. Defaults to -1.
-            dtype (str, optional): Output dtype for the generated digit columns.
-                Defaults to "int8".
-            min_digits (int | Literal["auto"], optional): Minimum number of digit
-                positions to extract per feature, or ``"auto"`` to derive it from
-                the fitted data with no forced minimum. Must be ``"auto"`` iff
-                ``max_digits`` is too. Defaults to ``"auto"``.
-            max_digits (int | Literal["auto"], optional): Maximum number of digit
-                positions to extract per feature, or ``"auto"`` to derive it from
-                the fitted data, capping decimal places at
-                ``MAX_AUTO_DECIMAL_DIGITS``. Must be ``"auto"`` iff ``min_digits``
-                is too. Defaults to ``"auto"``.
+            dtype (str, optional): Output dtype for the generated digit columns. Defaults to "int8".
+            min_digits (int | Literal["auto"]): Minimum digits, or "auto" iff max_digits is "auto".
+            max_digits (int | Literal["auto"]): Maximum digits, or "auto" iff min_digits is "auto".
         """
         self.features_names = features_names
         self.fill_value = fill_value
@@ -123,8 +114,7 @@ class DigitsEncodingFeatureGenerator(BaseEstimator, TransformerMixin):
         Get output feature names: original columns plus generated digit columns.
 
         Args:
-            input_features (list[str] | None, optional): Unused, kept for sklearn
-                API compatibility. Defaults to None.
+            input_features (list[str] | None): Unused, kept for sklearn API compatibility.
 
         Returns:
             np.ndarray: Output feature names in the order produced by ``transform``.

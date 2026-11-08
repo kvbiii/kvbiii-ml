@@ -7,9 +7,7 @@ import pandas as pd
 
 
 class FeatureGenerationPipeline:
-    """
-    Class for managing a feature generation pipeline.
-    """
+    """Manage a feature generation pipeline."""
 
     def __init__(
         self,
@@ -29,11 +27,12 @@ class FeatureGenerationPipeline:
         Args:
             features_names (list[str]): List of feature names to be processed.
             preprocessing_steps (list): List of preprocessing steps to apply.
-            custom_features_generation_before_preprocessing (callable, optional): Function to add custom features before preprocessing.
-                Should accept a pd.DataFrame and return a pd.DataFrame.
-            custom_features_generation_after_preprocessing (callable, optional): Function to add custom features after preprocessing.
-                Should accept a pd.DataFrame and return a pd.DataFrame.
-            final_features (list[str], optional): List of final feature names to retain after processing.
+            custom_features_generation_before_preprocessing (callable): df -> df, applied first.
+            custom_features_generation_after_preprocessing (callable): df -> df, applied last.
+            final_features (list[str] | None): Features to keep after processing. Defaults to None.
+
+        Raises:
+            ValueError: If a custom generation function is not callable.
         """
         self.features_names = features_names if features_names is not None else []
         self.preprocessing_steps = preprocessing_steps if preprocessing_steps is not None else []
@@ -121,6 +120,9 @@ class FeatureGenerationPipeline:
 
         Returns:
             FeatureGenerationPipeline: Fitted instance.
+
+        Raises:
+            ValueError: If a preprocessing step has no fit method.
         """
         X = self.custom_features_generation_before_preprocessing(copy.deepcopy(X))
 

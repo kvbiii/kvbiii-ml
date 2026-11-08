@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 
 class CrossFeatureGenerator:
-    """Class for generating cross-encoded features from feature combinations."""
+    """Generate cross-encoded features from feature combinations."""
 
     def __init__(
         self,
@@ -21,15 +21,14 @@ class CrossFeatureGenerator:
         Initialize the CrossFeatureGenerator.
 
         Args:
-            features_names (list[str] | None, optional): List of feature names to
-                create combinations from. If None, all columns will be used.
-                Defaults to None.
+            features_names (list[str] | None): Columns to combine. Defaults to all columns.
             degree (int, optional): Degree of combinations to generate. Defaults to 2.
-            separator (str, optional): Separator for combining feature values.
-                Defaults to '_':
-            processing (dict[str, int] | None, optional): Processing configuration
-                with optional keys "batch_size" and "chunk_size".
+            separator (str, optional): Separator for combining feature values. Defaults to "_".
+            processing (dict[str, int] | None): Optional keys "batch_size" and "chunk_size".
             **kwargs (int): Compatibility kwargs "batch_size" and "chunk_size".
+
+        Raises:
+            ValueError: If unexpected keyword arguments are passed.
         """
         processing = processing.copy() if processing is not None else {}
         if "batch_size" in kwargs:
@@ -54,12 +53,12 @@ class CrossFeatureGenerator:
 
     @property
     def batch_size(self) -> int:
-        """Returns the number of combinations processed per batch."""
+        """Return the number of combinations processed per batch."""
         return self.processing["batch_size"]
 
     @property
     def chunk_size(self) -> int:
-        """Returns the number of rows processed per chunk."""
+        """Return the number of rows processed per chunk."""
         return self.processing["chunk_size"]
 
     def _validate_init_params(self):
@@ -257,7 +256,7 @@ class CrossFeatureGenerator:
         batch_combos: list[tuple[str, ...]],
         batch_context: tuple[int, int, dict[str, np.ndarray]],
     ) -> None:
-        """Transforms one combination batch and writes encoded columns in-place."""
+        """Transform one combination batch and write encoded columns in place."""
         n_chunks, n_rows, new_columns_dict = batch_context
         for chunk_idx in range(n_chunks):
             start_idx = chunk_idx * self.chunk_size

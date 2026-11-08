@@ -466,8 +466,9 @@ def test_targetencodingfeaturegenerator_handles_missing_feature_names(
 def test_targetencodingfeaturegenerator_transform_uses_cached_cv_encodings_for_same_index(
     target_encoding_data,
 ):
-    """Tests transform returns the cached CV-computed encodings when called with the exact
-    same DataFrame index used during fit, instead of recomputing via group_stats_.
+    """Test transform returns the cached CV-computed encodings for the fit-time index.
+
+    The encodings are not recomputed via group_stats_.
 
     Args:
         target_encoding_data (tuple): Feature data and target for encoding
@@ -499,8 +500,9 @@ def test_targetencodingfeaturegenerator_transform_uses_cached_cv_encodings_for_s
 
 
 def test_targetencodingfeaturegenerator_handles_continuous_target_with_float_feature():
-    """Tests fit and transform succeed with a continuous target and a float feature,
-    exercising the target-binning and float-feature-binning code paths.
+    """Test fit and transform succeed with a continuous target and a float feature.
+
+    Exercises the target-binning and float-feature-binning code paths.
 
     Asserts:
         - Fit and transform run without errors for is_continuous_target=True

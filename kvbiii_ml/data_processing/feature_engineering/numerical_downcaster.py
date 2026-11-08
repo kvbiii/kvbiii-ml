@@ -33,19 +33,14 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
         """
         Initialize the NumericalDowncaster.
 
+        ``variables`` lets ``build_restricted_pipeline`` narrow the downcast columns.
+
         Args:
-            variables (list[str] | None, optional): Column names to downcast. If None,
-                all numeric columns are downcast. Named ``variables`` so
-                ``build_restricted_pipeline`` can narrow it. Defaults to None.
+            variables (list[str] | None): Columns to downcast. Defaults to all numeric columns.
             int_downcast (bool, optional): Whether to downcast integer types. Defaults to True.
             float_downcast (bool, optional): Whether to downcast float types. Defaults to True.
-            float_precision (str, optional): ``"lossless"`` downcasts a float column to
-                float32 only when ``np.allclose(s, s.astype(np.float32), rtol=0, atol=0,
-                equal_nan=True)`` holds, i.e. no value changes, otherwise it stays as is
-                (checked again on every transformed frame). ``"float32"`` always
-                downcasts, accepting ~7 significant digits. Defaults to "lossless".
-            columns (list[str] | None, optional): Deprecated alias of ``variables``,
-                used only when ``variables`` is None. Defaults to None.
+            float_precision (str): "lossless" (exact only) or "float32". Defaults to "lossless".
+            columns (list[str] | None): Deprecated alias of variables. Defaults to None.
         """
         self.variables = variables
         self.int_downcast = int_downcast
@@ -87,16 +82,13 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Transform data by downcasting numerical columns to smaller dtypes.
+        Downcast numerical columns to smaller dtypes, raising NotFittedError before fit.
 
         Args:
             df (pd.DataFrame): Data to transform.
 
         Returns:
             pd.DataFrame: Transformed data with downcasted dtypes.
-
-        Raises:
-            NotFittedError: If called before fit.
         """
         check_is_fitted(self, "dtype_map_")
         df = df.copy()

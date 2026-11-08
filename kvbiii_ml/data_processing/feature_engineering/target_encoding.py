@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 
 class TargetEncodingFeatureGenerator:
-    """Class for generating target encoded features."""
+    """Generate target encoded features."""
 
     def __init__(
         self,
@@ -20,15 +20,14 @@ class TargetEncodingFeatureGenerator:
         """
         Initialize the TargetEncodingFeatureGenerator.
 
+        Config keys: smooth, cv, n_bins, chunk_size, batch_size, is_continuous_target,
+        target_bins, random_state.
+
         Args:
             features_names (list[str]): List of feature names to be target encoded.
-            aggregation (str, optional): Aggregation method ('mean', 'median',
-                'nunique'). Defaults to "mean".
-            config (dict[str, Any] | None, optional): Runtime configuration values.
-                Supported keys: smooth, cv, n_bins, chunk_size, batch_size,
-                is_continuous_target, target_bins, random_state.
-            **kwargs (Any): Backward-compatible config values passed directly as
-                keyword arguments. These override values from config.
+            aggregation (str): "mean", "median" or "nunique". Defaults to "mean".
+            config (dict[str, Any] | None): Runtime options, e.g. smooth or cv. Defaults to None.
+            **kwargs (Any): Config values as keyword arguments, overriding config.
         """
         default_config: dict[str, Any] = {
             "smooth": 10,

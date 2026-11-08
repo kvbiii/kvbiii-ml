@@ -1,4 +1,4 @@
-"""Tests for CrossFeatureGenerator in kvbiii_ml.data_processing.feature_engineering.cross_encoding."""
+"""Tests for CrossFeatureGenerator in feature_engineering.cross_encoding."""
 
 import numpy as np
 import pandas as pd

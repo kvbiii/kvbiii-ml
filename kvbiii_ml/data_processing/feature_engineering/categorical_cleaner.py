@@ -15,8 +15,7 @@ class CategoricalCleaner(BaseEstimator, TransformerMixin):
         """Initialize cleaner with placeholder mappings.
 
         Args:
-            feature_groups (dict[str, list[str]]): Mapping of placeholder value to list of
-                column names where that value should be treated as missing.
+            feature_groups (dict[str, list[str]]): Placeholder value to columns where it is missing.
         """
         self.feature_groups = feature_groups
         self.input_features_: pd.Index = pd.Index([])

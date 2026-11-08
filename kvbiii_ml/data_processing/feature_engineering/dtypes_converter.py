@@ -6,18 +6,14 @@ from sklearn.base import BaseEstimator, TransformerMixin
 
 
 class DtypesConverter(BaseEstimator, TransformerMixin):
-    """
-    Transformer to convert DataFrame columns to specified dtypes.
-    """
+    """Convert DataFrame columns to specified dtypes."""
 
     def __init__(self, dtype_map: dict[str, Any] | None = None):
         """
         Initialize the DtypesConverter.
 
         Args:
-            dtype_map (dict[str, Any] | None, optional):
-                Dictionary mapping column names to target dtypes. If None,
-                dtypes are learned during fit. Defaults to None.
+            dtype_map (dict[str, Any] | None): Column to dtype mapping. None learns dtypes at fit.
         """
         self.dtype_map = dtype_map
         self.dtype_map_ = None
