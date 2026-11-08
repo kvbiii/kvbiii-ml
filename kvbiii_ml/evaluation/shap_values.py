@@ -5,6 +5,8 @@ import pandas as pd
 import shap
 from sklearn.base import BaseEstimator
 
+MAX_NESTED_ENSEMBLE_SIZE = 10
+
 
 def compute_shap_values(
     model: object,
@@ -116,7 +118,7 @@ def _compute_ensemble_shap(
             try:
                 nested_estimators = getattr(estimator, "fitted_estimators_", None)
                 if nested_estimators:
-                    if len(nested_estimators) > 10:
+                    if len(nested_estimators) > MAX_NESTED_ENSEMBLE_SIZE:
                         continue
                     shap_val = _compute_ensemble_shap(estimator, X, feature_names)
                 else:
@@ -145,8 +147,8 @@ def _compute_ensemble_shap(
         shap_values_weighted = np.zeros_like(first_shap.values, dtype=np.float64)
         base_values_weighted = np.zeros_like(first_shap.base_values, dtype=np.float64)
 
-        for weight, shap_val in zip(valid_weights, shap_values_list):
-            shap_values_weighted += weight * shap_val.values
+        for weight, shap_val in zip(valid_weights, shap_values_list, strict=False):
+            shap_values_weighted += weight * shap_val.values  # noqa: PD011
             base_values_weighted += weight * shap_val.base_values
 
         return shap.Explanation(

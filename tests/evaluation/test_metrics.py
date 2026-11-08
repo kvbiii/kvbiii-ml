@@ -237,7 +237,7 @@ def test_list_available_metrics_returns_complete_metric_list():
         raise AssertionError()
 
     # Verify all METRICS keys are included
-    for metric_name in METRICS.keys():
+    for metric_name in METRICS:
         if metric_name not in available_metrics:
             raise AssertionError()
 

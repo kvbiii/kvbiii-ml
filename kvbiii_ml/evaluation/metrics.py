@@ -22,6 +22,8 @@ from sklearn.metrics import (
 
 MetricFunction = Callable[..., float]
 TWEEDIE_POWER = 1.5
+PROBA_MATRIX_NDIM = 2
+BINARY_N_CLASSES = 2
 
 
 def _root_mean_squared_percentage_error(
@@ -58,8 +60,8 @@ def _brier_score(y_true: np.ndarray, y_prob: np.ndarray) -> float:
     """
     y_prob_arr = np.asarray(y_prob)
     y_true_arr = np.asarray(y_true)
-    if y_prob_arr.ndim == 2:
-        if y_prob_arr.shape[1] == 2:
+    if y_prob_arr.ndim == PROBA_MATRIX_NDIM:
+        if y_prob_arr.shape[1] == BINARY_N_CLASSES:
             return float(brier_score_loss(y_true_arr, y_prob_arr[:, 1]))
         classes = np.unique(y_true_arr)
         return float(
@@ -94,7 +96,11 @@ METRICS_NAMES: dict[str, MetricFunction] = {
         y_true,
         (
             y_score[:, 1]
-            if (hasattr(y_score, "ndim") and y_score.ndim == 2 and y_score.shape[1] == 2)
+            if (
+                hasattr(y_score, "ndim")
+                and y_score.ndim == PROBA_MATRIX_NDIM
+                and y_score.shape[1] == BINARY_N_CLASSES
+            )
             else y_score
         ),
     ),

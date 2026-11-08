@@ -14,7 +14,7 @@ def _valid_metric_config() -> dict:
     """
     return {
         "name": "custom_sum",
-        "function": lambda y_true, y_pred: float(np.sum(y_pred)),
+        "function": lambda _y_true, y_pred: float(np.sum(y_pred)),
         "metric_type": "preds",
         "direction": "maximize",
     }
@@ -133,7 +133,7 @@ def test_custom_metrics_handler_extract_metric_details_injects_kwargs():
           the output relative to calling the raw function with defaults.
     """
 
-    def metric_fn(y_true, y_pred, multiplier=1.0):
+    def metric_fn(_y_true, y_pred, multiplier=1.0):
         """Sums predictions scaled by a multiplier."""
         return float(np.sum(y_pred) * multiplier)
 

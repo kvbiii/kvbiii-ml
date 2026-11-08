@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from pandas.io.formats.style import Styler
 
 try:  # optional notebook dependency
     from IPython.display import display
@@ -51,7 +52,7 @@ def get_top_regression_under_over_errors(
     # Overestimated -> positive pct_error (prediction > true)
     overestimated = pct_error[pct_error > 0].sort_values(ascending=False).head(top_n)
 
-    def _build(df_index):
+    def _build(df_index: pd.Index) -> pd.DataFrame:
         df = pd.DataFrame(
             {
                 "True Value": y_true.loc[df_index],
@@ -82,7 +83,7 @@ def display_regression_under_over_errors(
         overestimated_df (pd.DataFrame): Second result of get_top_regression_under_over_errors.
     """
 
-    def _style(df: pd.DataFrame, title: str):
+    def _style(df: pd.DataFrame, title: str) -> Styler:
         fmt: dict[str, str] = {}
         for col in df.columns:
             if df[col].dtype.kind in "fc":
@@ -254,7 +255,7 @@ def display_classification_errors(errors_by_class: dict, id2label: dict[int, str
         id2label (dict[int, str]): Mapping from class index to class name.
     """
 
-    def _style(df: pd.DataFrame, title: str):
+    def _style(df: pd.DataFrame, title: str) -> Styler:
         fmt: dict[str, str] = {}
         for col in df.columns:
             if df[col].dtype.kind in "fc" and "Probability" in col:
@@ -330,7 +331,7 @@ if __name__ == "__main__":
     prob_pos = 1 / (1 + np.exp(-raw_scores))
     errors_by_class = {}
     id2label = {0: "Negative", 1: "Positive"}
-    for class_id, class_name in id2label.items():
+    for class_id in id2label:
         df = get_top_classification_errors(
             y_true_cls, prob_pos, class_id=class_id, id2label=id2label, top_n=10
         )

@@ -19,6 +19,8 @@ from sklearn.metrics import (
     root_mean_squared_error,
 )
 
+BINARY_N_CLASSES = 2
+
 
 def _apply_fancy_styling(
     styled_df: Styler,
@@ -211,7 +213,7 @@ def _safe_roc_auc(
     try:
         return (
             roc_auc_score(y_true, y_proba[:, 1] if y_proba.ndim > 1 else y_proba)
-            if len(np.unique(y_true)) == 2
+            if len(np.unique(y_true)) == BINARY_N_CLASSES
             else roc_auc_score(y_true, y_proba, multi_class="ovr", average=average)
         )
     except (ValueError, IndexError):
