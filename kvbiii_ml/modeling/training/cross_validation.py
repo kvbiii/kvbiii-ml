@@ -108,7 +108,7 @@ class CrossValidationTrainer(BaseTrainer):
         Args:
             problem_type (str): Problem type, either "classification" or "regression".
             metric_name (str | None): Name from METRICS, or None with a custom metric.
-            cv (BaseCrossValidator | None): Splitter. Defaults to shuffled 5-fold KFold.
+            cv (BaseCrossValidator | None): Splitter; None means shuffled 5-fold KFold.
             preprocessing_pipeline (Pipeline | None): Per-fold pipeline fit on the training split.
             verbose (bool | int): Verbosity flag (1 maps to True for estimators). Defaults to True.
             custom_metric (dict[str, Any] | None): Custom metric config (see CustomMetricsHandler).
