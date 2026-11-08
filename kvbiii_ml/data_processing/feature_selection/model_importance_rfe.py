@@ -46,7 +46,7 @@ class ModelImportanceRecursiveFeatureElimination:
             steps (int, optional): Number of elimination iterations. Defaults to 5.
             alpha (float, optional): Weight for the final selection score mix. Defaults to 0.95.
             verbose (bool, optional): Whether to print progress messages. Defaults to True.
-            protected_features (list[str] | None): Processed names never removed. Defaults to None.
+            protected_features (list[str] | None): Processed names to keep; checked after baseline.
             random_state (int | None, optional): Random state for reproducibility. Defaults to 17.
         """
         self.estimator = estimator

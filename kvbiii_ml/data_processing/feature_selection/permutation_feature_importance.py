@@ -90,7 +90,7 @@ class PermutationRecursiveFeatureElimination:
             alpha (float): Metric vs feature-count weight in final selection. Defaults to 0.95.
             n_repeats (int): Permutation repeats per feature per fold. Defaults to 5.
             verbose (bool): Print emoji-styled step-by-step progress. Defaults to True.
-            protected_features (list[str] | None): Processed names never removed. Defaults to None.
+            protected_features (list[str] | None): Processed names to keep; checked after baseline.
             random_state (int): Random seed for reproducibility. Defaults to 17.
             n_jobs (int): Parallel jobs for permutation importance. Defaults to -1.
         """
