@@ -3,7 +3,7 @@ import warnings
 from collections import Counter
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast, overload
 
 import numpy as np
 import optuna
@@ -12,7 +12,7 @@ from sklearn.base import clone
 from sklearn.model_selection import BaseCrossValidator, KFold, StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 
-from kvbiii_ml._typing import Estimator
+from kvbiii_ml._typing import Direction, Estimator
 from kvbiii_ml.modeling.training.base_trainer import BaseTrainer, to_metric_proba
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 from kvbiii_ml.modeling.training.oof_model import _get_n_iterations
@@ -172,7 +172,7 @@ class _OrderedTrialLogger:
             print(f"{icon} {prefix} {trial.state.name.lower()} ({duration:.2f}s)")
             return
         improved = self._best is None or (
-            trial.value > self._best.value if self.maximize else trial.value < self._best.value
+            trial.value > self._best.value if self.maximize else trial.value < self._best.value  # ty: ignore[unsupported-operator]
         )
         if improved:
             self._best = trial
@@ -369,7 +369,7 @@ class RandomSearchCV:
             constant_liar=self.n_parallel_trials > 1,
         )
         return optuna.create_study(
-            direction=self.metric_direction,
+            direction=cast("Direction", self.metric_direction),
             sampler=sampler,
             pruner=pruner if pruner is not None else optuna.pruners.NopPruner(),
             study_name="Optuna tuning",
@@ -746,6 +746,14 @@ class RandomSearchCV:
         """Drop duplicate configurations while preserving their order."""
         return list({tuple(sorted(c.items())): c for c in candidates}.values())
 
+    @overload
+    @staticmethod
+    def _downcast(frame: pd.DataFrame) -> pd.DataFrame: ...
+
+    @overload
+    @staticmethod
+    def _downcast(frame: None) -> None: ...
+
     @staticmethod
     def _downcast(frame: pd.DataFrame | None) -> pd.DataFrame | None:
         """Narrow float64 columns to float32 to halve cached fold memory."""
@@ -869,7 +877,7 @@ class RandomSearchCV:
         )
 
     @staticmethod
-    def _format_bounds(values: list[object]) -> str:
+    def _format_bounds(values: list[Any]) -> str:
         """Render grid bounds or choices compactly for logging."""
         try:
             return "[" + ", ".join(f"{float(v):g}" for v in values) + "]"
@@ -941,7 +949,8 @@ class RandomSearchCV:
             )
         if self.saturated_params_:
             pressed = ", ".join(
-                f"{name} ({side} bound {float(self.params_grid[name][1][side == 'high']):g})"
+                f"{name} ({side} bound "
+                f"{float(cast('float', self.params_grid[name][1][side == 'high'])):g})"
                 for name, side in self.saturated_params_.items()
             )
             print(f"⚠️  The best configs pressed against grid bounds: {pressed}. Widen and re-run.")
@@ -975,7 +984,7 @@ class RandomSearchCV:
             print("⚠️  Grid bounds the elite configs pressed against (expanded by one step):")
             for name, side in self.saturated_params_.items():
                 bound = self.params_grid[name][1][0 if side == "low" else 1]
-                print(f"    {name}: {side.upper()} bound {float(bound):g}")
+                print(f"    {name}: {side.upper()} bound {float(cast('float', bound)):g}")
 
     def _log_start(self, use_holdout: bool) -> None:
         """Print a search-start summary when verbose mode is enabled."""
@@ -1036,8 +1045,8 @@ class RandomSearchCV:
         high: float,
         floor: float,
         ceiling: float,
-        original: tuple[str, list[object], dict[str, Any]],
-    ) -> tuple[str, list[object], dict[str, Any]]:
+        original: tuple[str, list[Any], dict[str, Any]],
+    ) -> tuple[str, list[Any], dict[str, Any]]:
         """Round a narrowed range onto the integer lattice of the caller's grid entry.
 
         Args:
@@ -1045,10 +1054,10 @@ class RandomSearchCV:
             high (float): Narrowed upper bound before rounding.
             floor (float): Lowest value the bound may take.
             ceiling (float): Highest value the bound may take.
-            original (tuple[str, list[object], dict[str, Any]]): Entry to fall back to.
+            original (tuple[str, list[Any], dict[str, Any]]): Entry to fall back to.
 
         Returns:
-            tuple[str, list[object], dict[str, Any]]: Narrowed entry, or the original
+            tuple[str, list[Any], dict[str, Any]]: Narrowed entry, or the original
                 when no valid integer range survives.
         """
         param_type, values, options = original
@@ -1473,7 +1482,7 @@ class RandomSearchCV:
             trial
             for trial in self._completed_trials(study)
             if self._beats(
-                trial.value,
+                cast("float", trial.value),
                 self.baseline_score_,
                 self._required_margin(self._fold_scores(trial), baseline_folds),
             )
@@ -1489,7 +1498,7 @@ class RandomSearchCV:
             chosen = self._select_confirm_trial(eligible)
             winner = _Candidate(
                 dict(chosen.user_attrs.get("params", chosen.params)),
-                float(chosen.value),
+                float(cast("float", chosen.value)),
                 list(chosen.user_attrs.get("best_iterations", [])),
                 TUNED_LABEL,
             )
@@ -1518,8 +1527,8 @@ class RandomSearchCV:
             trial
             for trial in trials
             if not self._beats(
-                best.value,
-                trial.value,
+                cast("float", best.value),
+                cast("float", trial.value),
                 self._required_margin(best_folds, self._fold_scores(trial)),
             )
         ]
@@ -1558,7 +1567,7 @@ class RandomSearchCV:
     @staticmethod
     def _snap_to_space(
         param_type: str,
-        values: list[object],
+        values: list[Any],
         options: dict[str, Any],
         value: Any,  # noqa: ANN401
     ) -> Any:  # noqa: ANN401
@@ -1570,7 +1579,7 @@ class RandomSearchCV:
 
         Args:
             param_type (str): One of "int", "float", or "categorical".
-            values (list[object]): Bounds or choices from the grid.
+            values (list[Any]): Bounds or choices from the grid.
             options (dict[str, Any]): Extra options such as step or log.
             value (Any): Value to snap.
 
@@ -1667,8 +1676,8 @@ class RandomSearchCV:
     @staticmethod
     def _unpack_spec(
         param_values: GridEntry,
-    ) -> tuple[str, list[object], dict[str, Any]]:
-        """Split a grid entry into its type, values, and keyword options."""
+    ) -> tuple[str, list[Any], dict[str, Any]]:
+        """Split a grid entry into its type, values (any estimator parameter), and options."""
         options = param_values[2] if len(param_values) == GRID_ENTRY_WITH_OPTIONS else {}
         return param_values[0], param_values[1], options
 
@@ -1752,7 +1761,7 @@ if __name__ == "__main__":
             n_jobs=1,
             random_state=RANDOM_STATE,
         )
-        params_grid = {
+        params_grid: ParamsGrid = {
             "verbose": ("constant", [-1]),
             "num_leaves": ("int", [16, 128]),
             "learning_rate": ("float", [0.01, 0.3], {"log": True}),

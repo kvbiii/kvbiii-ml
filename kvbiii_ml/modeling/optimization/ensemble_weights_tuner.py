@@ -2,14 +2,14 @@ import copy
 import itertools
 import warnings
 from collections.abc import Sequence
-from typing import ClassVar, Literal, overload
+from typing import ClassVar, Literal, cast, overload
 
 import numpy as np
 import optuna
 import pandas as pd
 from sklearn.model_selection import KFold
 
-from kvbiii_ml._typing import Estimator
+from kvbiii_ml._typing import Direction, Estimator
 from kvbiii_ml.modeling.training.base_trainer import (
     order_x_for_estimator,
     split_offset,
@@ -302,7 +302,7 @@ class EnsembleWeightTunerCV:
         """
         sampler = optuna.samplers.TPESampler(seed=self.seed, n_startup_trials=25, multivariate=True)
         return optuna.create_study(
-            direction=self.metric_direction,
+            direction=cast("Direction", self.metric_direction),
             sampler=sampler,
             pruner=optuna.pruners.NopPruner(),
             study_name="Ensemble weight tuning",

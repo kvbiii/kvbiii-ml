@@ -1,6 +1,6 @@
 # ruff: noqa: ANN401
 from collections.abc import Callable
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 
 class Estimator(Protocol):
@@ -24,3 +24,5 @@ class Estimator(Protocol):
 
 
 StylerFormat = dict[Any, str | Callable[..., Any] | None]
+
+Direction = Literal["maximize", "minimize"]

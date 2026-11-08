@@ -1,12 +1,12 @@
 import itertools
 import warnings
-from typing import ClassVar
+from typing import ClassVar, cast
 
 import numpy as np
 import optuna
 import pandas as pd
 
-from kvbiii_ml._typing import Estimator
+from kvbiii_ml._typing import Direction, Estimator
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
 warnings.filterwarnings(
@@ -209,7 +209,7 @@ class CutoffTunerCV:
         """
         sampler = optuna.samplers.TPESampler(seed=self.seed, n_startup_trials=25, multivariate=True)
         return optuna.create_study(
-            direction=self.metric_direction,
+            direction=cast("Direction", self.metric_direction),
             sampler=sampler,
             pruner=optuna.pruners.NopPruner(),
             study_name="Cutoff tuning",
