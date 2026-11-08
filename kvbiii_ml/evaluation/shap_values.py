@@ -11,19 +11,15 @@ def compute_shap_values(
     X: pd.DataFrame,
     feature_names: list[str] | None = None,
 ) -> shap.Explanation:
-    """Computes SHAP values for a model or ensemble with optimized performance.
+    """Compute SHAP values for a model or ensemble, raising ValueError for HistGradientBoosting.
 
     Args:
         model (object): Trained model or ensemble of models.
         X (pd.DataFrame): Input data for which to compute SHAP values.
-        feature_names (list[str], optional): Names of the features in X.
-            If None, uses X.columns. Defaults to None.
+        feature_names (list[str] | None): Names of the features in X. Defaults to X.columns.
 
     Returns:
         shap.Explanation: SHAP explanation object with values for X.
-
-    Raises:
-        ValueError: If HistGradientBoosting models are detected (not supported).
     """
     feature_names = feature_names or list(X.columns)
     fitted_estimators = getattr(model, "fitted_estimators_", None)
@@ -36,7 +32,7 @@ def compute_shap_values(
 
 
 def _compute_single_model_shap(model: object, X: pd.DataFrame) -> shap.Explanation:
-    """Computes SHAP values for a single model.
+    """Compute SHAP values for a single model.
 
     Args:
         model (object): Trained model to compute SHAP values for.
@@ -74,8 +70,7 @@ def _order_x_for_estimator(X: pd.DataFrame, estimator: BaseEstimator) -> pd.Data
         estimator (BaseEstimator): Trained estimator.
 
     Returns:
-        pd.DataFrame: Reordered features if the estimator exposes feature
-        names; otherwise returns X unchanged.
+        pd.DataFrame: X in the estimator's feature order, or unchanged if it exposes no names.
     """
     feature_names_in = getattr(estimator, "feature_names_in_", None)
     feature_names = (
@@ -89,7 +84,7 @@ def _order_x_for_estimator(X: pd.DataFrame, estimator: BaseEstimator) -> pd.Data
 def _compute_ensemble_shap(
     model: object, X: pd.DataFrame, feature_names: list[str]
 ) -> shap.Explanation:
-    """Computes weighted SHAP values for ensemble models.
+    """Compute weighted SHAP values for ensemble models.
 
     Args:
         model (object): Ensemble model with estimators and weights attributes.

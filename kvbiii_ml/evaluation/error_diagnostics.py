@@ -21,10 +21,8 @@ def get_top_regression_under_over_errors(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Compute top under- and over-estimated observations.
 
-    Percentage error is (pred - true) / true * 100. Very small or zero true
-    values are protected by ``epsilon`` to avoid division by zero. When
-    ``log`` is True, y_true and y_pred are treated as log-scaled values and
-    additional exponentiated columns are included.
+    - Percentage error is (pred - true) / true * 100, with zero true values replaced by ``epsilon``.
+    - When ``log`` is True, inputs are log-scaled and exponentiated columns are added.
 
     Args:
         y_true (pd.Series): True target values (index-aligned).
@@ -35,6 +33,9 @@ def get_top_regression_under_over_errors(
 
     Returns:
         tuple[pd.DataFrame, pd.DataFrame]: (underestimated_df, overestimated_df) DataFrames.
+
+    Raises:
+        TypeError: If y_true is not a pandas Series.
     """
     if not isinstance(y_true, pd.Series):
         raise TypeError("y_true must be a pandas Series aligned to predictions.")
@@ -74,14 +75,11 @@ def get_top_regression_under_over_errors(
 def display_regression_under_over_errors(
     underestimated_df: pd.DataFrame, overestimated_df: pd.DataFrame
 ) -> None:
-    """Display styled tables of under- and over-estimated observations.
+    """Display styled tables of under- and over-estimated observations (best in notebooks).
 
     Args:
-        underestimated_df (pd.DataFrame): Output from ``get_top_under_overestimated`` for underestimated rows.
-        overestimated_df (pd.DataFrame): Output from ``get_top_under_overestimated`` for overestimated rows.
-
-    Returns:
-        None: This function renders styled tables (best viewed in notebooks).
+        underestimated_df (pd.DataFrame): First result of get_top_regression_under_over_errors.
+        overestimated_df (pd.DataFrame): Second result of get_top_regression_under_over_errors.
     """
 
     def _style(df: pd.DataFrame, title: str):
@@ -163,9 +161,8 @@ def get_top_classification_errors(
     """
     Get top classification errors for a specific class based on biggest probability difference.
 
-    The function always returns errors (false positives and false negatives)
-    sorted by the magnitude of the difference between the model's predicted
-    class probability and the true class probability (higher = more confident error).
+    Errors are sorted by the gap between the predicted and the true class probability
+    (higher = more confident error). Cutoff examples: binary 0.7, multi-class [0.3, 0.4, 0.3].
 
     Args:
         y_true (pd.Series): True class labels (index-aligned).
@@ -173,13 +170,14 @@ def get_top_classification_errors(
         class_id (int): Target class ID to analyze errors for.
         id2label (dict[int, str]): Mapping from class index to class name.
         top_n (int, optional): Number of rows to return. Defaults to 15.
-        cutoff (float | list[float] | None): Custom threshold(s) for classification.
-            - For binary: single float (e.g., 0.7)
-            - For multi-class: list of floats, one per class (e.g., [0.3, 0.4, 0.3])
-            If None, uses argmax for predictions.
+        cutoff (float | list[float] | None): Binary float or per-class list; None means argmax.
 
     Returns:
         pd.DataFrame: Top classification errors sorted by confidence/error magnitude.
+
+    Raises:
+        TypeError: If y_true is not a pandas Series.
+        ValueError: If sample counts, class_id or the number of cutoffs do not match.
     """
     if not isinstance(y_true, pd.Series):
         raise TypeError("y_true must be a pandas Series aligned to predictions.")
@@ -205,7 +203,8 @@ def get_top_classification_errors(
             cutoff_array = np.array(cutoff)
             if y_pred_proba.shape[1] != len(cutoff_array):
                 raise ValueError(
-                    f"Number of cutoffs ({len(cutoff_array)}) must match number of classes ({y_pred_proba.shape[1]})"
+                    f"Number of cutoffs ({len(cutoff_array)}) must match "
+                    f"number of classes ({y_pred_proba.shape[1]})"
                 )
             normalized = y_pred_proba / cutoff_array
             predicted_classes = np.argmax(normalized, axis=1)
@@ -251,11 +250,8 @@ def display_classification_errors(errors_by_class: dict, id2label: dict[int, str
     """Display styled tables of classification errors for each class.
 
     Args:
-        errors_by_class (dict): Dictionary mapping class_id to error DataFrame from get_top_classification_errors.
+        errors_by_class (dict): Error DataFrame per class_id from get_top_classification_errors.
         id2label (dict[int, str]): Mapping from class index to class name.
-
-    Returns:
-        None: This function renders styled tables (best viewed in notebooks).
     """
 
     def _style(df: pd.DataFrame, title: str):
