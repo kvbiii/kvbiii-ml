@@ -1,11 +1,12 @@
 import gc
 from copy import deepcopy
+from typing import cast
 
 import numpy as np
 import pandas as pd
 from sklearn.pipeline import Pipeline
 
-from kvbiii_ml._typing import Estimator
+from kvbiii_ml._typing import Estimator, RfeSummary
 from kvbiii_ml.data_processing.preprocessing.pipeline_dependency import (
     PipelineDependencyGraph,
 )
@@ -113,7 +114,7 @@ class ModelImportanceRecursiveFeatureElimination:
         updated.set_params(cat_features=active_cats or None)
         return updated
 
-    def run(self, X: pd.DataFrame, y: pd.Series | np.ndarray) -> dict[str, list | pd.DataFrame]:
+    def run(self, X: pd.DataFrame, y: pd.Series | np.ndarray) -> RfeSummary:
         """
         Run Model Importance RFE and return the selection summary.
 
@@ -130,7 +131,7 @@ class ModelImportanceRecursiveFeatureElimination:
             y (pd.Series | np.ndarray): Target array/series aligned with X.
 
         Returns:
-            dict[str, list | pd.DataFrame]: Dictionary with keys:
+            RfeSummary: Dictionary with keys:
                 - selected_features (list): Final selected processed feature names.
                 - selected_features_names (list): Alias of selected_features.
                 - history (pd.DataFrame): Step-wise metrics and removals.
@@ -158,10 +159,10 @@ class ModelImportanceRecursiveFeatureElimination:
 
         current_features = list(self.all_processed_features)
 
-        summary_df = {
+        summary_df: RfeSummary = {
             "selected_features": [],
             "selected_features_names": [],
-            "history": pd.DataFrame(columns=self.history_schema.keys()).astype(self.history_schema),
+            "history": pd.DataFrame(columns=self.history_schema.keys()).astype(self.history_schema),  # ty: ignore[invalid-argument-type]
         }
 
         summary_df["history"] = pd.concat(
@@ -344,14 +345,14 @@ class ModelImportanceRecursiveFeatureElimination:
             y_data,
             preprocessing_pipeline_override=pipeline_override,
         )
-        importances = []
+        importances: list[np.ndarray] = []
         for estimator in self.cross_validator.fitted_estimators_:
             if not hasattr(estimator, "feature_importances_"):
                 raise AttributeError(
                     f"Estimator {type(estimator).__name__} does not have "
                     "'feature_importances_' attribute."
                 )
-            importances.append(estimator.feature_importances_)
+            importances.append(cast("np.ndarray", estimator.feature_importances_))
 
         avg_importances = np.nan_to_num(np.mean(importances, axis=0), nan=0.0)
         avg_importance_map = {
@@ -392,7 +393,7 @@ class ModelImportanceRecursiveFeatureElimination:
 
     def _log_step(
         self,
-        summary_df: dict[str, list | pd.DataFrame],
+        summary_df: RfeSummary,
         step_idx: int,
         current_features: list[str],
         importance_scores: dict[str, float],
@@ -403,7 +404,7 @@ class ModelImportanceRecursiveFeatureElimination:
         Log results for the current elimination step.
 
         Args:
-            summary_df (dict[str, list | pd.DataFrame]): Summary dict carrying history.
+            summary_df (RfeSummary): Summary dict carrying history.
             step_idx (int): Current step number.
             current_features (list[str]): Remaining features; mutated in place as they are removed.
             importance_scores (dict[str, float]): Importance score for each processed feature.

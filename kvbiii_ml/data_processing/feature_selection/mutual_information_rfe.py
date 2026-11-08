@@ -1,9 +1,10 @@
 import gc
+from typing import cast
 
 import numpy as np
 import pandas as pd
 
-from kvbiii_ml._typing import Estimator
+from kvbiii_ml._typing import Estimator, RfeSummary
 from kvbiii_ml.data_processing.eda.data_analysis import DataAnalyzer
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
@@ -61,7 +62,7 @@ class MutualInformationRecursiveFeatureElimination:
             "mi_score": float,
         }
 
-    def run(self, X: pd.DataFrame, y: pd.Series | np.ndarray) -> dict[str, list | pd.DataFrame]:
+    def run(self, X: pd.DataFrame, y: pd.Series | np.ndarray) -> RfeSummary:
         """Run MI-based selection and return the selection summary.
 
         Args:
@@ -69,7 +70,7 @@ class MutualInformationRecursiveFeatureElimination:
             y (pd.Series | np.ndarray): Target aligned with X.
 
         Returns:
-            dict[str, list | pd.DataFrame]: Dictionary with keys:
+            RfeSummary: Dictionary with keys:
                 - selected_features (list)
                 - selected_features_names (list)
                 - history (pd.DataFrame)
@@ -87,7 +88,9 @@ class MutualInformationRecursiveFeatureElimination:
 
         prev_metric = None
         for step_idx, n_remove in enumerate(removal_schedule, start=1):
-            step_metric, step_metric_std = self._cross_val_base_metric(X, y, current_features)
+            step_metric, step_metric_std = self._cross_val_base_metric(
+                X, cast("pd.Series", y), current_features
+            )
 
             if self.verbose:
                 print(
@@ -131,7 +134,7 @@ class MutualInformationRecursiveFeatureElimination:
             history_df, self.alpha
         )
 
-        self._print_summary(history_df, selected_features, metric_selected)
+        self._print_summary(history_df, selected_features, metric_selected)  # ty: ignore[invalid-argument-type]
         gc.collect()
 
         return {

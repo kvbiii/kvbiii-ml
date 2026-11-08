@@ -1,3 +1,6 @@
+from collections.abc import Mapping
+from typing import Any
+
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
@@ -87,7 +90,7 @@ def build_fast_estimator() -> RandomForestClassifier:
     return RandomForestClassifier(n_estimators=5, max_depth=2, random_state=RANDOM_STATE)
 
 
-def assert_valid_rfe_run_result_keys(result: dict) -> None:
+def assert_valid_rfe_run_result_keys(result: Mapping[str, Any]) -> None:
     """Asserts an RFE-style run() result exposes exactly the documented keys.
 
     Args:
@@ -104,7 +107,7 @@ def assert_valid_rfe_run_result_keys(result: dict) -> None:
         raise AssertionError("run() result is missing an expected key.")
 
 
-def assert_selected_features_subset_of_columns(result: dict, X: pd.DataFrame) -> None:
+def assert_selected_features_subset_of_columns(result: Mapping[str, Any], X: pd.DataFrame) -> None:
     """Asserts selected_features is a non-larger subset of X's columns.
 
     Args:
@@ -137,7 +140,9 @@ def assert_empty_history_returns_no_selection(selected: list, best_metric: float
         raise AssertionError("Expected best_metric to be None for an empty history.")
 
 
-def assert_rfe_run_summary_starts_with_full_feature_set(result: dict, X: pd.DataFrame) -> None:
+def assert_rfe_run_summary_starts_with_full_feature_set(
+    result: Mapping[str, Any], X: pd.DataFrame
+) -> None:
     """Asserts the run() summary starts at step 0 with the full feature set selected.
 
     Shared by the RFE variants (model importance, permutation) that report step 0
@@ -164,7 +169,7 @@ def assert_rfe_run_summary_starts_with_full_feature_set(result: dict, X: pd.Data
         raise AssertionError("selected_features_names should alias selected_features.")
 
 
-def assert_rfe_run_result_has_nonempty_history(result: dict) -> pd.DataFrame:
+def assert_rfe_run_result_has_nonempty_history(result: Mapping[str, Any]) -> pd.DataFrame:
     """Asserts a run() result exposes the documented keys and a non-empty history.
 
     Shared by the RFE variants (mutual information, SHAP) whose history-start

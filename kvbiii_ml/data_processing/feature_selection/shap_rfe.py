@@ -1,10 +1,11 @@
 import gc
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
 import shap
 
-from kvbiii_ml._typing import Estimator
+from kvbiii_ml._typing import Estimator, RfeSummary
 from kvbiii_ml.evaluation.shap_values import compute_shap_values
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
@@ -66,9 +67,9 @@ class ShapRecursiveFeatureElimination:
         self.metric_type = self.cross_validator.metric_type
         self.metric_direction = self.cross_validator.metric_direction
         self._cv_cache_key = None
-        self._cv_cache_result = None
+        self._cv_cache_result: dict[str, Any] | None = None
 
-    def run(self, X: pd.DataFrame, y: pd.Series | np.ndarray) -> dict[str, list | pd.DataFrame]:
+    def run(self, X: pd.DataFrame, y: pd.Series | np.ndarray) -> RfeSummary:
         """Run SHAP-RFE and return the selection summary.
 
         Args:
@@ -76,7 +77,7 @@ class ShapRecursiveFeatureElimination:
             y (pd.Series | np.ndarray): Target array/series aligned with X.
 
         Returns:
-            dict[str, list | pd.DataFrame]: Dictionary with keys:
+            RfeSummary: Dictionary with keys:
                 - selected_features (list): Final selected features.
                 - selected_features_names (list): Alias of selected_features.
                 - history (pd.DataFrame): Step-wise metrics and removals.
@@ -90,13 +91,13 @@ class ShapRecursiveFeatureElimination:
         if missing_protected:
             raise ValueError(f"Protected features not found in dataset: {missing_protected}")
 
-        summary_df = {
+        summary_df: RfeSummary = {
             "selected_features": [],
             "selected_features_names": [],
-            "history": pd.DataFrame(columns=self.history_schema.keys()).astype(self.history_schema),
+            "history": pd.DataFrame(columns=self.history_schema.keys()).astype(self.history_schema),  # ty: ignore[invalid-argument-type]
         }
 
-        avg_base_metric, _ = self._cross_val_base_metric(X, y, current_features)
+        avg_base_metric, _ = self._cross_val_base_metric(X, cast("pd.Series", y), current_features)
         summary_df["history"] = pd.concat(
             [
                 summary_df["history"],
@@ -129,7 +130,7 @@ class ShapRecursiveFeatureElimination:
 
         for step_idx, n_features_to_remove in enumerate(removal_schedule, start=1):
             avg_metric_feature, fold_base_metric, fold_base_metric_std = (
-                self._cross_val_feature_metrics(X, y, current_features)
+                self._cross_val_feature_metrics(X, cast("pd.Series", y), current_features)
             )
             if self.verbose:
                 print(
@@ -566,7 +567,7 @@ class ShapRecursiveFeatureElimination:
 
     def _log_step(
         self,
-        summary_df: dict[str, list | pd.DataFrame],
+        summary_df: RfeSummary,
         step_idx: int,
         X: pd.DataFrame,
         current_features: list[str],
@@ -577,7 +578,7 @@ class ShapRecursiveFeatureElimination:
         """Log results for the current elimination step.
 
         Args:
-            summary_df (dict[str, list | pd.DataFrame]): Summary dict carrying history.
+            summary_df (RfeSummary): Summary dict carrying history.
             step_idx (int): Current step number (1-based after the base step).
             X (pd.DataFrame): Original input features (for counts only).
             current_features (list[str]): Features remaining before removal.

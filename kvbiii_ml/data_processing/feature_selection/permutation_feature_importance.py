@@ -10,7 +10,7 @@ import pandas as pd
 from sklearn.inspection import permutation_importance
 from tqdm import tqdm
 
-from kvbiii_ml._typing import Estimator
+from kvbiii_ml._typing import Estimator, RfeSummary
 from kvbiii_ml.data_processing.preprocessing.pipeline_dependency import (
     PipelineDependencyGraph,
 )
@@ -49,7 +49,7 @@ def _tqdm_joblib_callback(progress_bar: tqdm) -> Generator[tqdm, None, None]:
         yield progress_bar
     finally:
         joblib.parallel.BatchCompletionCallBack = original_callback
-        remaining = progress_bar.total - progress_bar.n
+        remaining = progress_bar.total - progress_bar.n  # ty: ignore[unsupported-operator]
         if remaining > 0:
             progress_bar.update(remaining)
 
@@ -119,7 +119,7 @@ class PermutationRecursiveFeatureElimination:
             "importance_score": float,
         }
 
-    def run(self, X: pd.DataFrame, y: pd.Series | np.ndarray) -> dict[str, list | pd.DataFrame]:
+    def run(self, X: pd.DataFrame, y: pd.Series | np.ndarray) -> RfeSummary:
         """Run permutation RFE and return the selection summary.
 
         Algorithm:
@@ -138,7 +138,7 @@ class PermutationRecursiveFeatureElimination:
             y (pd.Series | np.ndarray): Target aligned with X.
 
         Returns:
-            dict[str, list | pd.DataFrame]: Keys:
+            RfeSummary: Keys:
                 - selected_features (list[str]): Final selected processed feature names.
                 - selected_features_names (list[str]): Alias for selected_features.
                 - history (pd.DataFrame): Step-wise metrics and removals.
@@ -148,21 +148,25 @@ class PermutationRecursiveFeatureElimination:
         """
         all_raw_features: list[str] = sorted(X.columns.tolist())
 
-        summary_df: dict[str, list | pd.DataFrame] = {
+        summary_df: RfeSummary = {
             "selected_features": [],
             "selected_features_names": [],
-            "history": pd.DataFrame(columns=self.history_schema.keys()).astype(self.history_schema),
+            "history": pd.DataFrame(columns=self.history_schema.keys()).astype(self.history_schema),  # ty: ignore[invalid-argument-type]
         }
 
         pipeline = self.cross_validator.preprocessing_pipeline
-        dependency_graph = PipelineDependencyGraph.build(pipeline, X[all_raw_features], y)
+        dependency_graph = PipelineDependencyGraph.build(
+            pipeline, X[all_raw_features], cast("pd.Series", y)
+        )
 
         baseline_estimator = self._restrict_catboost_cat_features(
             self.estimator,
             set(dependency_graph.processed_columns),
             dependency_graph.processed_dtypes,
         )
-        _, valid_scores, _ = self.cross_validator.fit(baseline_estimator, X[all_raw_features], y)
+        _, valid_scores, _ = self.cross_validator.fit(
+            baseline_estimator, X[all_raw_features], cast("pd.Series", y)
+        )
         baseline_metric = float(np.mean(valid_scores))
 
         fold_splits = list(self.cross_validator.cv.split(X[all_raw_features], y))
@@ -172,7 +176,7 @@ class PermutationRecursiveFeatureElimination:
                 CrossValidationTrainer._transform_with_pipeline(  # noqa: SLF001
                     pipe, X[all_raw_features].iloc[val_idx].copy()
                 ),
-                y.iloc[val_idx],
+                cast("pd.Series", y).iloc[val_idx],
             )
             for (_, val_idx), est, pipe in zip(
                 fold_splits,
@@ -288,7 +292,7 @@ class PermutationRecursiveFeatureElimination:
             _, current_valid_scores, _ = self.cross_validator.fit(
                 step_estimator,
                 X[current_raw_features],
-                y,
+                cast("pd.Series", y),
                 preprocessing_pipeline_override=restricted_pipeline,
             )
 
@@ -455,7 +459,7 @@ class PermutationRecursiveFeatureElimination:
 
     def _log_step(
         self,
-        summary_df: dict[str, list | pd.DataFrame],
+        summary_df: RfeSummary,
         step_idx: int,
         total_processed: int,
         current_processed: list[str],
