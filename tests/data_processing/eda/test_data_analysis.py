@@ -372,5 +372,19 @@ def test_describe_time_series_feature_analyzes_temporal_patterns(sample_datafram
         raise AssertionError()
 
 
+def test_numerical_drift_analysis_is_the_same_for_nullable_and_plain_floats():
+    """Tests numerical_drift_analysis returns the same statistics for float64 and Float64 columns.
+
+    Asserts:
+        - SMD and Std Ratio do not depend on the column dtype
+    """
+    rng = np.random.default_rng(0)
+    plain = pd.DataFrame({"x": rng.normal(size=200)})
+    nullable = plain.astype("Float64")
+    expected = DataAnalyzer.numerical_drift_analysis(plain.iloc[:120], plain.iloc[120:]).data
+    result = DataAnalyzer.numerical_drift_analysis(nullable.iloc[:120], nullable.iloc[120:]).data
+    pd.testing.assert_frame_equal(result, expected)
+
+
 if __name__ == "__main__":
     print("Run this file with pytest to execute tests.")
