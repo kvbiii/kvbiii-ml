@@ -91,7 +91,11 @@ class MutualInformationRecursiveFeatureElimination:
 
             if self.verbose:
                 print(
-                    f"\n🔁 Step {step_idx} | Number of features remaining: {len(current_features)} | {self.cross_validator.metric_name}: {step_metric:.6f} ± {step_metric_std:.6f}\n{sorted(current_features)}"
+                    f"\n🔁 Step {step_idx} | "
+                    f"Number of features remaining: {len(current_features)} | "
+                    f"{self.cross_validator.metric_name}: "
+                    f"{step_metric:.6f} ± {step_metric_std:.6f}\n"
+                    f"{sorted(current_features)}"
                 )
 
             removable_feats = [f for f in current_features if f not in self.protected_features]
@@ -137,7 +141,11 @@ class MutualInformationRecursiveFeatureElimination:
         }
 
     def _validate_protected_features(self, current_features: list[str]) -> None:
-        """Validate that protected features exist in the dataset."""
+        """Validate that protected features exist in the dataset.
+
+        Raises:
+            ValueError: If a protected feature is missing from the dataset.
+        """
         missing = set(self.protected_features) - set(current_features)
         if missing:
             raise ValueError(f"Protected features not found in dataset: {missing}")
@@ -152,7 +160,9 @@ class MutualInformationRecursiveFeatureElimination:
         if not self.verbose:
             return
         print(
-            f"🔍 Starting MI selection with {len(current_features)} features, metric: {self.cross_validator.metric_name} ({self.metric_direction}), steps: {self.steps}."
+            f"🔍 Starting MI selection with {len(current_features)} features, "
+            f"metric: {self.cross_validator.metric_name} ({self.metric_direction}), "
+            f"steps: {self.steps}."
         )
         print(f"📅 Remove per step: {removal_schedule}")
         print(f"🛡️  Protected features: {self.protected_features}")
@@ -174,7 +184,8 @@ class MutualInformationRecursiveFeatureElimination:
         diff = metric_selected - base_val
         diff_pct = 100 * diff / base_val if base_val != 0 else np.nan
         print(
-            f"📈 Final {self.cross_validator.metric_name}: {metric_selected:.6f} | Base: {base_val:.6f} | Δ: {diff:.6f} ({diff_pct:+.2f}%)"
+            f"📈 Final {self.cross_validator.metric_name}: {metric_selected:.6f} | "
+            f"Base: {base_val:.6f} | Δ: {diff:.6f} ({diff_pct:+.2f}%)"
         )
         n_initial = history.iloc[0]["n_features_remaining"]
         n_removed = n_initial - len(selected_features)
@@ -211,7 +222,7 @@ class MutualInformationRecursiveFeatureElimination:
         """Validate types and convert categorical features before MI.
 
         - Ensures X is a DataFrame and y is a Series or ndarray.
-        - If X contains categorical columns, converts them to numeric and, for classification, sets a discrete_features mask in mi_kwargs when missing.
+        - Convert categoricals to numeric; set discrete_features for classification if missing.
 
         Args:
             X (pd.DataFrame): Input features.
@@ -219,11 +230,14 @@ class MutualInformationRecursiveFeatureElimination:
 
         Returns:
             tuple[pd.DataFrame, pd.Series | np.ndarray]: Possibly transformed (X, y).
+
+        Raises:
+            ValueError: If y is not a pandas Series or numpy array.
         """
         if not isinstance(y, (pd.Series, np.ndarray)):
             raise ValueError("y must be a pandas Series or numpy array.")
 
-        x_prepared, discrete_features_mask = DataAnalyzer._prepare_features_for_mutual_information(
+        x_prepared, discrete_features_mask = DataAnalyzer._prepare_features_for_mutual_information(  # noqa: SLF001
             X
         )
 
@@ -313,7 +327,6 @@ if __name__ == "__main__":
         steps=10,
         alpha=0.85,
         verbose=True,
-        # protected_features=["mean radius", "mean texture"],
     )
 
     summary = selector.run(X_df, y_ser)

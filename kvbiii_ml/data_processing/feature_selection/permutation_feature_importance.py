@@ -85,18 +85,12 @@ class PermutationRecursiveFeatureElimination:
 
         Args:
             estimator (BaseEstimator): Estimator to fit within each fold.
-            cross_validator (CrossValidationTrainer): Cross-validation trainer that
-                already holds the preprocessing pipeline.  The pipeline is re-fitted
-                per fold during the baseline run and then injected as a step-restricted
-                override at each elimination step.
+            cross_validator (CrossValidationTrainer): Trainer holding the preprocessing pipeline.
             steps (int): Number of elimination iterations. Defaults to 5.
-            alpha (float): Weight for metric vs feature-count balance in final
-                selection. Defaults to 0.95.
+            alpha (float): Metric vs feature-count weight in final selection. Defaults to 0.95.
             n_repeats (int): Permutation repeats per feature per fold. Defaults to 5.
             verbose (bool): Print emoji-styled step-by-step progress. Defaults to True.
-            protected_features (list[str] | None): Processed feature names never
-                removed.  Validated after the baseline CV against the actual
-                post-pipeline column set.  Defaults to None.
+            protected_features (list[str] | None): Processed names to keep; checked after baseline.
             random_state (int): Random seed for reproducibility. Defaults to 17.
             n_jobs (int): Parallel jobs for permutation importance. Defaults to -1.
         """
@@ -149,8 +143,7 @@ class PermutationRecursiveFeatureElimination:
                 - history (pd.DataFrame): Step-wise metrics and removals.
 
         Raises:
-            ValueError: When protected features are not found in the post-pipeline
-                column set.
+            ValueError: When protected features are not found in the post-pipeline column set.
         """
         all_raw_features: list[str] = sorted(X.columns.tolist())
 
@@ -175,7 +168,7 @@ class PermutationRecursiveFeatureElimination:
         fold_data = [
             (
                 est,
-                CrossValidationTrainer._transform_with_pipeline(
+                CrossValidationTrainer._transform_with_pipeline(  # noqa: SLF001
                     pipe, X[all_raw_features].iloc[val_idx].copy()
                 ),
                 y.iloc[val_idx],
@@ -184,6 +177,7 @@ class PermutationRecursiveFeatureElimination:
                 fold_splits,
                 self.cross_validator.fitted_estimators_,
                 self.cross_validator.fitted_pipelines_,
+                strict=False,
             )
         ]
 
@@ -392,7 +386,7 @@ class PermutationRecursiveFeatureElimination:
         current_features: set[str],
         post_pipeline_dtypes: pd.Series | None = None,
     ) -> BaseEstimator:
-        """Return a cloned CatBoost estimator with cat_features filtered to active non-numeric columns.
+        """Clone a CatBoost estimator, filtering cat_features to active non-numeric columns.
 
         A column is kept in cat_features only when all three conditions hold:
         - it is still present in the active raw feature set,
@@ -405,8 +399,7 @@ class PermutationRecursiveFeatureElimination:
         Args:
             estimator (BaseEstimator): Estimator to potentially update.
             current_features (set[str]): Raw feature names still present in this step.
-            post_pipeline_dtypes (pd.Series | None): Column dtypes of the post-pipeline
-                validation data (index = column names).  Defaults to None.
+            post_pipeline_dtypes (pd.Series | None): Post-pipeline column dtypes. Defaults to None.
 
         Returns:
             BaseEstimator: Updated estimator for CatBoost; original for all others.
@@ -512,8 +505,7 @@ class PermutationRecursiveFeatureElimination:
 
         Args:
             history (pd.DataFrame): Step-wise history DataFrame with processed feature names.
-            alpha (float | None): Weight for metric vs feature-count balance.
-                If None, uses self.alpha. Defaults to None.
+            alpha (float | None): Metric vs feature-count weight; None uses self.alpha.
 
         Returns:
             tuple[list[str], float | None]: Selected processed feature names and the
@@ -576,8 +568,7 @@ class PermutationRecursiveFeatureElimination:
             step_idx (int): Current step number.
             current_processed_features (list[str]): Active processed feature names.
             valid_scores (list[float] | np.ndarray): Per-fold validation scores.
-            sorted_removable (list[tuple[str, float]]): Removable features sorted so
-                the least important appear first (candidates for removal).
+            sorted_removable (list[tuple[str, float]]): Removable features, least important first.
             importance_scores (dict[str, float]): Full importance map for top-5 lookup.
         """
         avg = float(np.mean(valid_scores))
@@ -585,7 +576,8 @@ class PermutationRecursiveFeatureElimination:
         current_set = set(current_processed_features)
 
         print(
-            f"\n🔁 Step {step_idx} | Number of features remaining: {len(current_processed_features)}\n"
+            f"\n🔁 Step {step_idx} | "
+            f"Number of features remaining: {len(current_processed_features)}\n"
         )
         print(f"🔬 Features remaining: {current_processed_features}\n")
         print(f"📊 Average {self.cross_validator.metric_name}: {avg:.6f} ± {std:.6f}")
@@ -728,7 +720,11 @@ if __name__ == "__main__":
         problem_type: str,
         pipeline: Pipeline | None,
     ) -> None:
-        """Run RFE with the given pipeline and print a summary line."""
+        """Run RFE with the given pipeline and print a summary line.
+
+        Raises:
+            AssertionError: If no features are selected or a pipeline adds no derived features.
+        """
         cv_cls = StratifiedKFold if problem_type == "classification" else KFold
         trainer = CrossValidationTrainer(
             problem_type=problem_type,
