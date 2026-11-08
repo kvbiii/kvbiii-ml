@@ -4,14 +4,14 @@ set -euo pipefail
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
 
-python -m pip list --format=freeze \
+uv pip list --format=freeze \
     | cut -d'=' -f1 \
     | sed 's/-/_/g' \
     | tr '[:upper:]' '[:lower:]' \
     | sort -u >"$WORKDIR/installed_packages.txt"
 
-pipreqs . --force --encoding=utf-8 \
-    --ignore kvbiii-ml_venv,build,tests,examples \
+uv run --no-dev --no-sync --with pipreqs --with urllib3==1.26.15 pipreqs . --force --encoding=utf-8 \
+    --ignore .venv,build,tests,examples \
     --savepath "$WORKDIR/requirements_from_imports.txt"
 
 grep -o '^[^=<>]*' "$WORKDIR/requirements_from_imports.txt" \
