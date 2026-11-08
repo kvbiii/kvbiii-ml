@@ -169,7 +169,7 @@ def test_ensemblemodel_predict_combines_estimator_predictions(mock_estimators):
     """
     X = pd.DataFrame(np.random.rand(5, 3))
 
-    # Provide explicit feature ordering expected by each estimator to avoid Mock auto attribute issues
+    # Provide the feature ordering each estimator expects to avoid Mock auto-attribute issues
     for m in mock_estimators:
         cols = X.columns.tolist()
         m.feature_names_in_ = cols  # ensure real list, not a Mock-generated attr
@@ -455,7 +455,7 @@ def test_ensemblemodel_predict_raises_when_a_base_model_cannot_score_x(regressio
     ensemble.fitted_estimators_ = [good, foreign]
     ensemble._weights_normalized = np.array([0.5, 0.5])
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="expects features missing from X"):
         ensemble.predict(X)
 
     ensemble.on_estimator_error = "skip"

@@ -19,6 +19,8 @@ from kvbiii_ml.evaluation.metrics import (
     get_metric_type,
 )
 from kvbiii_ml.modeling.training.base_trainer import (
+    PROBA_MATRIX_NDIM,
+    PROBABILITY_THRESHOLD,
     BaseTrainer,
     order_x_for_estimator,
     predict_with_offset,
@@ -63,67 +65,61 @@ class CrossValidationTrainer(BaseTrainer):
     ) -> None:
         """Initialize the trainer.
 
+        Notes:
+        - preprocessing_pipeline: Optional sklearn Pipeline applied per fold on the training split
+          before fitting the estimator. Defaults to None.
+        - verbose: Verbosity flag. If set to integer 1, estimator fit verbosity is mapped to True
+          for estimators that accept a fit-time verbose parameter. Defaults to True.
+        - custom_metric: Custom metric configuration. Required keys: 'name' (str), 'function'
+          (callable ``f(y_true, y_pred, **kwargs)``), 'metric_type' ("preds" or "probs") and
+          'direction' ("minimize" or "maximize"). Optional key: 'kwargs' (dict), extra keyword
+          arguments passed to 'function' on every call. ``y_true`` arrives as a ``pd.Series`` that
+          keeps the original index of X, so row-aligned extra data passed through 'kwargs' can be
+          aligned with ``extra.loc[y_true.index]``. For "probs" metrics ``y_pred`` is the 1-D
+          positive-class probability for binary problems and the ``(n_samples, n_classes)`` matrix
+          for multiclass (see ``base_trainer.to_metric_proba``). Defaults to None.
+        - n_jobs: Number of folds trained concurrently. Folds run in threads, which parallelise well
+          because the boosting libraries release the GIL while training; give each estimator its own
+          modest thread count so that n_jobs times the estimator's threads stays within the physical
+          cores. Results are collected in fold order, so every score, fitted estimator, fitted
+          pipeline and averaged test prediction is identical to a sequential run. Defaults to 1,
+          which trains the folds sequentially.
+        - sample_weight_fn: Optional callable computing per-sample training weights inside each
+          fold. It is called as ``sample_weight_fn(X_train, y_train)`` with the fold's raw training
+          rows (before the preprocessing pipeline, in their original order) and must return one
+          weight per row. Computing weights per fold keeps them relative to that fold's own training
+          window - e.g. a recency decay anchored at the fold's latest row or class-balancing weights
+          derived from the fold's own target - and never exposes validation rows to it. Validation
+          rows are never weighted and scoring stays unweighted. Defaults to None, which trains
+          without weights.
+        - early_stopping_holdout: Fraction in (0, 1) of each training fold, taken from its end (the
+          latest rows for a time-ordered splitter), held out as the early-stopping eval set. The
+          estimator is fitted on the remaining rows, so the validation fold is used only for scoring
+          and ``valid_scores_`` are not biased by early stopping. Defaults to None, which keeps the
+          previous behaviour: the validation fold is also the early-stopping eval set.
+        - offset_column: Column of X (and X_test) holding a link-scale offset, e.g.
+          ``log(exposure)`` for count models. It is dropped before the pipeline and the estimator
+          see X, passed to training as LightGBM ``init_score``/``eval_init_score``, XGBoost
+          ``base_margin``/``base_margin_eval_set`` or CatBoost ``baseline``, and added to the raw
+          score before the inverse link at predict time (see ``base_trainer.predict_with_offset``).
+          Supported for LightGBM, XGBoost and CatBoost regressors and binary classifiers. Defaults
+          to None.
+
         Args:
             problem_type (str): Problem type, either "classification" or "regression".
-            metric_name (str | None): Metric name defined in METRICS or None if using
-                a custom metric.
-            cv (BaseCrossValidator | None): Cross-validation splitter. Defaults to
-                5-fold KFold with shuffling.
-            preprocessing_pipeline (Pipeline | None): Optional sklearn Pipeline applied
-                per fold on the training split before fitting the estimator. Defaults to None.
-            verbose (bool | int): Verbosity flag. If set to integer 1, estimator fit
-                verbosity is mapped to True for estimators that accept a fit-time verbose
-                parameter. Defaults to True.
-            custom_metric (dict[str, Any] | None): Custom metric configuration. Required
-                keys: 'name' (str), 'function' (callable ``f(y_true, y_pred, **kwargs)``),
-                'metric_type' ("preds" or "probs") and 'direction' ("minimize" or
-                "maximize"). Optional key: 'kwargs' (dict), extra keyword arguments
-                passed to 'function' on every call. ``y_true`` arrives as a
-                ``pd.Series`` that keeps the original index of X, so row-aligned extra
-                data passed through 'kwargs' can be aligned with
-                ``extra.loc[y_true.index]``. For "probs" metrics ``y_pred`` is the 1-D
-                positive-class probability for binary problems and the
-                ``(n_samples, n_classes)`` matrix for multiclass (see
-                ``base_trainer.to_metric_proba``). Defaults to None.
-            n_jobs (int): Number of folds trained concurrently. Folds run in threads,
-                which parallelise well because the boosting libraries release the GIL
-                while training; give each estimator its own modest thread count so that
-                n_jobs times the estimator's threads stays within the physical cores.
-                Results are collected in fold order, so every score, fitted estimator,
-                fitted pipeline and averaged test prediction is identical to a
-                sequential run. Defaults to 1, which trains the folds sequentially.
-            sample_weight_fn (SampleWeightFn | None): Optional callable computing
-                per-sample training weights inside each fold. It is called as
-                ``sample_weight_fn(X_train, y_train)`` with the fold's raw training
-                rows (before the preprocessing pipeline, in their original order) and
-                must return one weight per row. Computing weights per fold keeps them
-                relative to that fold's own training window - e.g. a recency decay
-                anchored at the fold's latest row or class-balancing weights derived
-                from the fold's own target - and never exposes validation rows to it.
-                Validation rows are never weighted and scoring stays unweighted.
-                Defaults to None, which trains without weights.
-            early_stopping_holdout (float | None): Fraction in (0, 1) of each training
-                fold, taken from its end (the latest rows for a time-ordered splitter),
-                held out as the early-stopping eval set. The estimator is fitted on the
-                remaining rows, so the validation fold is used only for scoring and
-                ``valid_scores_`` are not biased by early stopping. Defaults to None,
-                which keeps the previous behaviour: the validation fold is also the
-                early-stopping eval set.
-            offset_column (str | None): Column of X (and X_test) holding a link-scale
-                offset, e.g. ``log(exposure)`` for count models. It is dropped before
-                the pipeline and the estimator see X, passed to training as LightGBM
-                ``init_score``/``eval_init_score``, XGBoost
-                ``base_margin``/``base_margin_eval_set`` or CatBoost ``baseline``, and
-                added to the raw score before the inverse link at predict time (see
-                ``base_trainer.predict_with_offset``). Supported for LightGBM, XGBoost
-                and CatBoost regressors and binary classifiers. Defaults to None.
+            metric_name (str | None): Name from METRICS, or None with a custom metric.
+            cv (BaseCrossValidator | None): Splitter; None means shuffled 5-fold KFold.
+            preprocessing_pipeline (Pipeline | None): Per-fold pipeline fit on the training split.
+            verbose (bool | int): Verbosity flag (1 maps to True for estimators). Defaults to True.
+            custom_metric (dict[str, Any] | None): Custom metric config (see CustomMetricsHandler).
+            n_jobs (int): Folds trained concurrently, in threads.
+            sample_weight_fn (SampleWeightFn | None): Per-fold weights from (X_train, y_train).
+            early_stopping_holdout (float | None): Fold share held out for early stopping.
+            offset_column (str | None): Link-scale offset column of X (e.g. log(exposure)).
 
         Raises:
-            TypeError: If preprocessing_pipeline is not a Pipeline or None, or
-                sample_weight_fn is neither callable nor None.
-            ValueError: If problem_type is invalid, neither metric_name nor
-                custom_metric is provided, n_jobs is not positive, or
-                early_stopping_holdout is not in (0, 1).
+            TypeError: If preprocessing_pipeline or sample_weight_fn has the wrong type.
+            ValueError: If problem_type, metrics, n_jobs or early_stopping_holdout are invalid.
         """
         if problem_type not in {"classification", "regression"}:
             raise ValueError("problem_type must be 'classification' or 'regression'.")
@@ -253,8 +249,7 @@ class CrossValidationTrainer(BaseTrainer):
             X_train (pd.DataFrame): Training features for the current fold.
             X_valid (pd.DataFrame | None): Validation features. Defaults to None.
             X_test (pd.DataFrame | None): Test features. Defaults to None.
-            y_train (pd.Series | None): Training targets forwarded to pipeline.fit_transform.
-                Defaults to None.
+            y_train (pd.Series | None): Targets for pipeline.fit_transform. Defaults to None.
 
         Returns:
             tuple: (x_train_out, x_valid_out, x_test_out, fitted_pipeline) where
@@ -299,17 +294,18 @@ class CrossValidationTrainer(BaseTrainer):
         test split. When ``sample_weight_fn`` is set, each fold's training weights are
         computed from that fold's own training rows.
 
+        Notes:
+        - preprocessing_pipeline_override: When not None, replaces self.preprocessing_pipeline for
+          this call only.  Pass None explicitly to run with no pipeline.  Used by feature selectors
+          to inject step-restricted pipelines at each elimination step without mutating stored
+          state. Defaults to None.
+
         Args:
             estimator (BaseEstimator): Unfitted estimator to clone and train each fold.
             X (pd.DataFrame): Feature matrix aligned with target.
             y (pd.Series): Target values.
-            X_test (pd.DataFrame | None): Optional test set transformed per fold.
-                Defaults to None.
-            preprocessing_pipeline_override (Pipeline | None): When not None, replaces
-                self.preprocessing_pipeline for this call only.  Pass None explicitly to
-                run with no pipeline.  Used by feature selectors to inject step-restricted
-                pipelines at each elimination step without mutating stored state.
-                Defaults to None.
+            X_test (pd.DataFrame | None): Optional test set transformed per fold. Defaults to None.
+            preprocessing_pipeline_override (Pipeline | None): Replaces the pipeline for this call.
 
         Returns:
             tuple[list[float], list[float], np.ndarray | None]:
@@ -354,9 +350,10 @@ class CrossValidationTrainer(BaseTrainer):
                         executor.submit(run_split, train_idx, valid_idx): position
                         for position, (train_idx, valid_idx) in enumerate(splits)
                     }
-                    fold_results = [None] * len(splits)
-                    for future in as_completed(futures):
-                        fold_results[futures[future]] = future.result()
+                    results_by_position = {
+                        futures[future]: future.result() for future in as_completed(futures)
+                    }
+                    fold_results = [results_by_position[i] for i in range(len(splits))]
         finally:
             if progress_bar is not None:
                 progress_bar.close()
@@ -432,7 +429,7 @@ class CrossValidationTrainer(BaseTrainer):
         x_fit, y_fit, w_fit, o_fit = x_train_proc, y_train, fold_weights, off_train
         x_es, y_es, o_es = x_valid_proc, y_valid, off_valid
         if self.early_stopping_holdout is not None:
-            n_holdout = max(1, int(round(len(x_train_proc) * self.early_stopping_holdout)))
+            n_holdout = max(1, round(len(x_train_proc) * self.early_stopping_holdout))
             x_fit, x_es = x_train_proc.iloc[:-n_holdout], x_train_proc.iloc[-n_holdout:]
             y_fit, y_es = y_train.iloc[:-n_holdout], y_train.iloc[-n_holdout:]
             w_fit = None if fold_weights is None else fold_weights[:-n_holdout]
@@ -475,11 +472,15 @@ class CrossValidationTrainer(BaseTrainer):
     def _metric_predictions(
         self, estimator: BaseEstimator, X: pd.DataFrame, offset: np.ndarray | None
     ) -> np.ndarray:
-        """Predict X in the form the configured metric expects (see `to_metric_proba`)."""
+        """Predict X in the form the configured metric expects (see `to_metric_proba`).
+
+        Raises:
+            ValueError: If metric_type is not 'preds' or 'probs'.
+        """
         if self.metric_type == "probs":
-            return to_metric_proba(self._estimator_output(estimator, X, offset, True))
+            return to_metric_proba(self._estimator_output(estimator, X, offset, proba=True))
         if self.metric_type == "preds":
-            return self._estimator_output(estimator, X, offset, False)
+            return self._estimator_output(estimator, X, offset, proba=False)
         raise ValueError(f"Unknown metric type '{self.metric_type}'. Must be 'preds' or 'probs'.")
 
     @staticmethod
@@ -506,8 +507,7 @@ class CrossValidationTrainer(BaseTrainer):
                 no ``sample_weight_fn`` is configured.
 
         Raises:
-            ValueError: If the returned weights are not one-dimensional with one
-                entry per training row.
+            ValueError: If weights are not 1-D with one entry per training row.
         """
         if self.sample_weight_fn is None:
             return None
@@ -539,7 +539,9 @@ class CrossValidationTrainer(BaseTrainer):
 
         X, offset = split_offset(X, self.offset_column)
         preds = []
-        for fitted_estimator, fold_pipeline in zip(self.fitted_estimators_, self.fitted_pipelines_):
+        for fitted_estimator, fold_pipeline in zip(
+            self.fitted_estimators_, self.fitted_pipelines_, strict=False
+        ):
             x_proc = self._transform_with_pipeline(fold_pipeline, X)
             x_ordered = self._order_x_for_estimator(x_proc, fitted_estimator)
             proba = self.problem_type == "classification" and hasattr(
@@ -550,7 +552,11 @@ class CrossValidationTrainer(BaseTrainer):
         preds_arr = np.asarray(preds, dtype=float)
         avg = preds_arr.mean(axis=0)
         if self.problem_type == "classification":
-            return np.argmax(avg, axis=1) if avg.ndim == 2 else (avg >= 0.5).astype(int)
+            return (
+                np.argmax(avg, axis=1)
+                if avg.ndim == PROBA_MATRIX_NDIM
+                else (avg >= PROBABILITY_THRESHOLD).astype(int)
+            )
         return avg
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
@@ -578,10 +584,12 @@ class CrossValidationTrainer(BaseTrainer):
 
         X, offset = split_offset(X, self.offset_column)
         probs = []
-        for fitted_estimator, fold_pipeline in zip(self.fitted_estimators_, self.fitted_pipelines_):
+        for fitted_estimator, fold_pipeline in zip(
+            self.fitted_estimators_, self.fitted_pipelines_, strict=False
+        ):
             x_proc = self._transform_with_pipeline(fold_pipeline, X)
             x_ordered = self._order_x_for_estimator(x_proc, fitted_estimator)
-            probs.append(self._estimator_output(fitted_estimator, x_ordered, offset, True))
+            probs.append(self._estimator_output(fitted_estimator, x_ordered, offset, proba=True))
 
         return np.asarray(probs, dtype=float).mean(axis=0)
 
@@ -611,12 +619,14 @@ class CrossValidationTrainer(BaseTrainer):
         X, offset = split_offset(X, self.offset_column)
         if self.problem_type == "regression":
             fold_preds = []
-            for est, fold_pipeline in zip(self.fitted_estimators_, self.fitted_pipelines_):
+            for est, fold_pipeline in zip(
+                self.fitted_estimators_, self.fitted_pipelines_, strict=False
+            ):
                 x_proc = self._transform_with_pipeline(fold_pipeline, X)
                 x_ordered = self._order_x_for_estimator(x_proc, est)
                 fold_preds.append(
                     np.asarray(
-                        self._estimator_output(est, x_ordered, offset, False),
+                        self._estimator_output(est, x_ordered, offset, proba=False),
                         dtype=float,
                     )
                 )
@@ -631,14 +641,17 @@ class CrossValidationTrainer(BaseTrainer):
             }
 
         probs = []
-        for est, fold_pipeline in zip(self.fitted_estimators_, self.fitted_pipelines_):
+        for est, fold_pipeline in zip(
+            self.fitted_estimators_, self.fitted_pipelines_, strict=False
+        ):
             x_proc = self._transform_with_pipeline(fold_pipeline, X)
             x_ordered = self._order_x_for_estimator(x_proc, est)
             if not hasattr(est, "predict_proba"):
                 raise ValueError(
-                    "All fold estimators must implement predict_proba for classification confidence."
+                    "All fold estimators must implement predict_proba "
+                    "for classification confidence."
                 )
-            p = np.asarray(self._estimator_output(est, x_ordered, offset, True), dtype=float)
+            p = np.asarray(self._estimator_output(est, x_ordered, offset, proba=True), dtype=float)
             if p.ndim == 1:
                 p = np.column_stack([1 - p, p])
             probs.append(p)
@@ -716,7 +729,7 @@ if __name__ == "__main__":
 
     def _run_scenario(
         label: str,
-        estimator: Any,
+        estimator: Any,  # noqa: ANN401
         X: pd.DataFrame,
         y: pd.Series,
         metric_name: str,

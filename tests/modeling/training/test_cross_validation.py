@@ -468,7 +468,7 @@ def test_crossvalidationtrainer_fit_in_parallel_matches_sequential_fit(
         fold_probas = [
             estimator.predict_proba(fitted_pipeline.transform(X_test))
             for estimator, fitted_pipeline in zip(
-                trainer.fitted_estimators_, trainer.fitted_pipelines_
+                trainer.fitted_estimators_, trainer.fitted_pipelines_, strict=False
             )
         ]
         results[n_jobs] = (
@@ -483,7 +483,7 @@ def test_crossvalidationtrainer_fit_in_parallel_matches_sequential_fit(
         raise AssertionError()
     if not np.array_equal(sequential[2], parallel[2]):
         raise AssertionError()
-    for sequential_proba, parallel_proba in zip(sequential[3], parallel[3]):
+    for sequential_proba, parallel_proba in zip(sequential[3], parallel[3], strict=False):
         if not np.array_equal(sequential_proba, parallel_proba):
             raise AssertionError()
 
@@ -537,7 +537,7 @@ def test_crossvalidationtrainer_fit_computes_sample_weights_per_fold(
     expected_indices = [X.index[train_idx] for train_idx, _ in kfold_cv.split(X, y)]
     if len(seen_indices) != len(expected_indices):
         raise AssertionError()
-    for seen, expected in zip(seen_indices, expected_indices):
+    for seen, expected in zip(seen_indices, expected_indices, strict=False):
         if not seen.equals(expected):
             raise AssertionError()
     for estimator in trainer.fitted_estimators_:
@@ -684,7 +684,7 @@ def test_crossvalidationtrainer_early_stopping_holdout_keeps_validation_fold_out
         early_stopping_holdout=0.25,
     )
     trainer.fit(_EvalSetRecordingRegressor(), X, y)
-    for (train_idx, valid_idx), est in zip(splits, trainer.fitted_estimators_):
+    for (train_idx, valid_idx), est in zip(splits, trainer.fitted_estimators_, strict=False):
         train_index = list(X.index[train_idx])
         n_holdout = round(len(train_index) * 0.25)
         if est.eval_index_ != train_index[-n_holdout:]:

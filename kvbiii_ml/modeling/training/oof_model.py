@@ -9,8 +9,12 @@ from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 
 from kvbiii_ml.modeling.training.base_trainer import (
+    BINARY_N_CLASSES,
     CATBOOST_PREFIX,
     LGBM_PREFIX,
+    PROBA_MATRIX_NDIM,
+    PROBABILITY_THRESHOLD,
+    TRAIN_VALID_PAIR,
     XGB_PREFIX,
     BaseTrainer,
 )
@@ -61,11 +65,7 @@ def _set_n_iterations(estimator: BaseEstimator, n: int) -> None:
     class_name = type(estimator).__name__
     if class_name.startswith(CATBOOST_PREFIX):
         estimator.set_params(iterations=n)
-    elif (
-        class_name.startswith(LGBM_PREFIX)
-        or class_name.startswith(XGB_PREFIX)
-        or hasattr(estimator, "n_estimators")
-    ):
+    elif class_name.startswith((LGBM_PREFIX, XGB_PREFIX)) or hasattr(estimator, "n_estimators"):
         estimator.set_params(n_estimators=n)
 
 
@@ -84,7 +84,7 @@ def _disable_early_stopping(estimator: BaseEstimator) -> BaseEstimator:
         BaseEstimator: Same estimator with early-stopping disabled.
     """
     if hasattr(estimator, "_estimators_list"):
-        for sub in estimator._estimators_list:
+        for sub in estimator._estimators_list:  # noqa: SLF001
             _disable_early_stopping(sub)
         return estimator
     params = estimator.get_params() if hasattr(estimator, "get_params") else {}
@@ -143,7 +143,7 @@ def _fit_calibrator(
         cal.fit(p.reshape(-1, 1) if method == "sigmoid" else p, y)
         return cal
 
-    if len(classes) == 2:
+    if len(classes) == BINARY_N_CLASSES:
         return _fit_one(oof_probas[:, 1], (y_oof == classes[1]).astype(int))
     return [_fit_one(oof_probas[:, i], (y_oof == cls).astype(int)) for i, cls in enumerate(classes)]
 
@@ -166,8 +166,7 @@ def _apply_calibrator(
     estimate used for method selection. Clipping keeps both consistent and finite.
 
     Args:
-        calibrator (IsotonicRegression | LogisticRegression | list): Calibrator(s)
-            produced by _fit_calibrator.
+        calibrator (IsotonicRegression | LogisticRegression | list): Fitted calibrator(s).
         raw_probas (np.ndarray): Raw probabilities of shape (n_samples, n_classes).
         classes (np.ndarray): Unique class labels used during fitting.
         method (str): Calibration method used when fitting, either "isotonic" or "sigmoid".
@@ -179,7 +178,7 @@ def _apply_calibrator(
     def _apply_one(cal: IsotonicRegression | LogisticRegression, p: np.ndarray) -> np.ndarray:
         return cal.predict_proba(p.reshape(-1, 1))[:, 1] if method == "sigmoid" else cal.predict(p)
 
-    if len(classes) == 2:
+    if len(classes) == BINARY_N_CLASSES:
         p_cal = np.clip(
             _apply_one(calibrator, raw_probas[:, 1]),
             _CALIBRATION_PROBA_EPS,
@@ -213,6 +212,9 @@ def _collect_oof_probas(
     Returns:
         tuple[np.ndarray, np.ndarray]: OOF true labels of shape (n_samples,) and
             OOF probabilities of shape (n_samples, n_classes).
+
+    Raises:
+        RuntimeError: If no folds were iterated (the cross_validator may not be fitted).
     """
     n_samples = len(y)
     y_arr = y.to_numpy()
@@ -222,9 +224,10 @@ def _collect_oof_probas(
         cross_validator.cv.split(X, y),
         cross_validator.fitted_estimators_,
         cross_validator.fitted_pipelines_,
+        strict=False,
     ):
-        x_val = CrossValidationTrainer._transform_with_pipeline(fold_pipeline, X.iloc[val_idx])
-        x_val = CrossValidationTrainer._order_x_for_estimator(x_val, est)
+        x_val = CrossValidationTrainer._transform_with_pipeline(fold_pipeline, X.iloc[val_idx])  # noqa: SLF001
+        x_val = CrossValidationTrainer._order_x_for_estimator(x_val, est)  # noqa: SLF001
         probas = est.predict_proba(x_val)
         if probas.ndim == 1:
             probas = np.column_stack([1 - probas, probas])
@@ -257,15 +260,19 @@ class OOFModel:
     ) -> None:
         """Initialize the OOF generator.
 
+        Notes:
+        - calibrate: If True, fit a probability calibrator on OOF probabilities and refit the base
+          estimator on the full dataset. Only valid for classification. Defaults to False.
+
         Args:
             estimator (BaseEstimator): Estimator to train on each fold.
             cross_validator (CrossValidationTrainer): Cross-validation trainer to use.
             problem_type (str): Problem type, either "classification" or "regression".
-            calibrate (bool): If True, fit a probability calibrator on OOF probabilities
-                and refit the base estimator on the full dataset. Only valid for
-                classification. Defaults to False.
-            calibration_method (str): Calibration method, "isotonic" or "sigmoid".
-                Only used when calibrate=True. Defaults to "isotonic".
+            calibrate (bool): Calibrate OOF probabilities and refit on all data. Defaults to False.
+            calibration_method (str): "isotonic" or "sigmoid". Defaults to "isotonic".
+
+        Raises:
+            ValueError: If problem_type is invalid or calibrate=True is used with regression.
         """
         if problem_type not in {"classification", "regression"}:
             raise ValueError("problem_type must be either 'classification' or 'regression'.")
@@ -300,15 +307,16 @@ class OOFModel:
         is preserved for that final refit; otherwise it is disabled and the fixed
         iteration count is used.
 
+        Notes:
+        - eval_set: Validation data for early stopping during the calibrated full refit. Accepts the
+          same format as EnsembleModel: [(X_train, y_train), (X_valid, y_valid)] or [(X_valid,
+          y_valid)]. Only used when calibrate=True. Defaults to None.
+
         Args:
             X (pd.DataFrame): Feature matrix aligned with target.
             y (pd.Series): Target vector.
-            X_test (pd.DataFrame | None): Optional test features passed through the
-                pipeline per fold. Defaults to None.
-            eval_set (list[tuple[pd.DataFrame, pd.Series]] | None): Validation data for
-                early stopping during the calibrated full refit. Accepts the same format
-                as EnsembleModel: [(X_train, y_train), (X_valid, y_valid)] or
-                [(X_valid, y_valid)]. Only used when calibrate=True. Defaults to None.
+            X_test (pd.DataFrame | None): Test features run through the pipeline per fold.
+            eval_set (list[tuple[pd.DataFrame, pd.Series]] | None): Data for early stopping.
 
         Returns:
             OOFModel: Fitted instance with fitted_estimators_ populated.
@@ -356,7 +364,7 @@ class OOFModel:
 
         preds = []
         for est in self.fitted_estimators_:
-            x_ord = CrossValidationTrainer._order_x_for_estimator(X, est)
+            x_ord = CrossValidationTrainer._order_x_for_estimator(X, est)  # noqa: SLF001
             if self.problem_type == "classification" and hasattr(est, "predict_proba"):
                 preds.append(est.predict_proba(x_ord))
             else:
@@ -364,7 +372,11 @@ class OOFModel:
 
         avg = np.asarray(preds, dtype=float).mean(axis=0)
         if self.problem_type == "classification":
-            return np.argmax(avg, axis=1) if avg.ndim == 2 else (avg >= 0.5).astype(int)
+            return (
+                np.argmax(avg, axis=1)
+                if avg.ndim == PROBA_MATRIX_NDIM
+                else (avg >= PROBABILITY_THRESHOLD).astype(int)
+            )
         return avg
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
@@ -389,14 +401,14 @@ class OOFModel:
             raise RuntimeError("OOFModel must be fitted before calling predict_proba().")
 
         if self.calibrate and self.fitted_estimator_ is not None:
-            x_ord = CrossValidationTrainer._order_x_for_estimator(X, self.fitted_estimator_)
+            x_ord = CrossValidationTrainer._order_x_for_estimator(X, self.fitted_estimator_)  # noqa: SLF001
             raw = self.fitted_estimator_.predict_proba(x_ord)
             if raw.ndim == 1:
                 raw = np.column_stack([1 - raw, raw])
             return _apply_calibrator(self.calibrator_, raw, self.classes_, self.calibration_method)
 
         probs = [
-            est.predict_proba(CrossValidationTrainer._order_x_for_estimator(X, est))
+            est.predict_proba(CrossValidationTrainer._order_x_for_estimator(X, est))  # noqa: SLF001
             for est in self.fitted_estimators_
         ]
         return np.asarray(probs, dtype=float).mean(axis=0)
@@ -407,9 +419,11 @@ class OOFModel:
     ) -> tuple[pd.DataFrame | None, pd.Series | None]:
         """Extract validation data from an eval_set in EnsembleModel format.
 
+        Notes:
+        - eval_set: [(X_train, y_train), (X_valid, y_valid)] or [(X_valid, y_valid)], or None.
+
         Args:
-            eval_set (list[tuple] | None): [(X_train, y_train), (X_valid, y_valid)] or
-                [(X_valid, y_valid)], or None.
+            eval_set (list[tuple] | None): Early-stopping data, or None.
 
         Returns:
             tuple: (X_valid, y_valid) or (None, None) if eval_set is absent.
@@ -420,14 +434,14 @@ class OOFModel:
             and len(eval_set) >= 1
             and isinstance(eval_set[0], tuple)
         ):
-            return eval_set[1] if len(eval_set) == 2 else eval_set[0]
+            return eval_set[1] if len(eval_set) == TRAIN_VALID_PAIR else eval_set[0]
         return None, None
 
 
 if __name__ == "__main__":
     from lightgbm import LGBMClassifier
     from sklearn.datasets import make_classification
-    from sklearn.linear_model import LogisticRegression as LR
+    from sklearn.linear_model import LogisticRegression
     from sklearn.model_selection import KFold
 
     def _run_demo() -> None:
@@ -451,7 +465,7 @@ if __name__ == "__main__":
 
         print("=== OOFModel without calibration ===")
         oof = OOFModel(
-            estimator=LR(max_iter=1000, solver="liblinear", random_state=17),
+            estimator=LogisticRegression(max_iter=1000, solver="liblinear", random_state=17),
             cross_validator=cv,
             problem_type="classification",
         )

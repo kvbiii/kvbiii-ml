@@ -25,6 +25,11 @@ EARLY_STOPPING_PARAMS: dict[str, tuple[str, ...]] = {
 }
 
 EXP_LINK_OBJECTIVES = ("poisson", "tweedie", "gamma")
+PROBABILITY_THRESHOLD = 0.5
+PROBA_MATRIX_NDIM = 2
+BINARY_N_CLASSES = 2
+TRAIN_VALID_PAIR = 2
+MAX_LISTED_MISSING = 10
 
 
 def split_offset(
@@ -34,8 +39,7 @@ def split_offset(
 
     Args:
         X (pd.DataFrame): Features, holding ``offset_column`` when it is set.
-        offset_column (str | None): Name of the offset column (on the link scale,
-            e.g. ``log(exposure)`` for a Poisson model), or None.
+        offset_column (str | None): Link-scale offset column (e.g. log(exposure)), or None.
 
     Returns:
         tuple[pd.DataFrame, np.ndarray | None]: X without the offset column, and the
@@ -70,8 +74,7 @@ def predict_with_offset(
         estimator (BaseEstimator): Fitted LightGBM, XGBoost or CatBoost estimator.
         X (pd.DataFrame): Features without the offset column.
         offset (np.ndarray): Offset per row, on the link scale.
-        proba (bool): Return the ``(n, 2)`` probability matrix instead of labels for
-            classifiers. Defaults to False.
+        proba (bool): Return the (n, 2) probability matrix for classifiers. Defaults to False.
 
     Returns:
         np.ndarray: Predictions, labels, or probabilities.
@@ -102,7 +105,7 @@ def predict_with_offset(
         positive = 1.0 / (1.0 + np.exp(-raw))
         if proba:
             return np.column_stack([1.0 - positive, positive])
-        return np.asarray(estimator.classes_)[(positive >= 0.5).astype(int)]
+        return np.asarray(estimator.classes_)[(positive >= PROBABILITY_THRESHOLD).astype(int)]
     if any(token in _objective_name(estimator) for token in EXP_LINK_OBJECTIVES):
         return np.exp(raw)
     return raw
@@ -135,7 +138,7 @@ def to_metric_proba(proba: np.ndarray) -> np.ndarray:
             unchanged.
     """
     proba = np.asarray(proba)
-    if proba.ndim == 2 and proba.shape[1] == 2:
+    if proba.ndim == PROBA_MATRIX_NDIM and proba.shape[1] == BINARY_N_CLASSES:
         return proba[:, 1]
     return proba
 
@@ -151,13 +154,15 @@ def order_x_for_estimator(
     estimator exposes no feature names X is returned unchanged; when its names
     cannot be matched X is returned unchanged too, unless ``strict``.
 
+    Notes:
+    - strict: Raise instead of returning X when the estimator's feature names are not all present in
+      X. Use it where a silent fallback could let a model with the same feature count score the
+      wrong columns. Defaults to False.
+
     Args:
         X (pd.DataFrame): Input features.
         estimator (BaseEstimator): Trained estimator.
-        strict (bool): Raise instead of returning X when the estimator's feature
-            names are not all present in X. Use it where a silent fallback could
-            let a model with the same feature count score the wrong columns.
-            Defaults to False.
+        strict (bool): Raise if the estimator's feature names are not all in X. Defaults to False.
 
     Returns:
         pd.DataFrame: Reordered features, or the original X.
@@ -186,7 +191,8 @@ def order_x_for_estimator(
             missing = [n for n in expected_names if n not in columns_set]
             raise ValueError(
                 f"{type(estimator).__name__} expects features missing from X: "
-                f"{missing[:10]}{'...' if len(missing) > 10 else ''}"
+                f"{missing[:MAX_LISTED_MISSING]}"
+                f"{'...' if len(missing) > MAX_LISTED_MISSING else ''}"
             )
     return X
 
@@ -244,8 +250,7 @@ class BaseTrainer:
 
         Args:
             estimator (BaseEstimator): Estimator being fit.
-            sig (Signature): Signature of `estimator.fit`, used to confirm the
-                estimator actually accepts a `categorical_feature` argument.
+            sig (Signature): Signature of estimator.fit, checked for a categorical_feature argument.
 
         Returns:
             dict: `{"categorical_feature": []}` when the override applies, else `{}`.
@@ -280,7 +285,7 @@ class BaseTrainer:
             estimator (BaseEstimator): Unfitted sklearn-compatible estimator.
             X_valid (pd.DataFrame): Validation features to use as eval_set.
             y_valid (pd.Series): Validation target to use as eval_set.
-            verbose (bool | int | None): Verbosity level for non-boosting estimators. Defaults to False.
+            verbose (bool | int | None): Verbosity for non-boosting estimators. Defaults to False.
 
         Returns:
             dict: Keyword arguments to pass to estimator.fit(), or empty dict for
@@ -344,7 +349,7 @@ class BaseTrainer:
                 cat_features = estimator.get_params().get("cat_features")
                 fit_params["eval_set"] = [
                     Pool(x, y, cat_features=cat_features, baseline=offset)
-                    for (x, y), offset in zip(eval_set, eval_offsets)
+                    for (x, y), offset in zip(eval_set, eval_offsets, strict=False)
                 ]
         else:
             raise TypeError(
@@ -453,6 +458,19 @@ class BaseTrainer:
         turned off on a copy (see `_disable_early_stopping`) instead of letting
         the library raise.
 
+        Notes:
+        - eval_on_train: Whether the training split is included in eval_set alongside the validation
+          split. Boosting libraries score every eval_set entry on every iteration, so including a
+          large training split is pure overhead for callers that only early-stop and never read the
+          training curve. Defaults to True, preserving the historical behaviour for every existing
+          caller.
+        - offset_train: Link-scale offset per training row. Passed as LightGBM ``init_score``,
+          XGBoost ``base_margin`` or CatBoost ``baseline``. Defaults to None.
+        - offset_valid: Offset per validation row, passed as ``eval_init_score`` /
+          ``base_margin_eval_set`` / a CatBoost eval ``Pool`` baseline. Defaults to None. An
+          estimator with its own ``offset_column`` (e.g. ``EnsembleModel``) receives both offsets as
+          that column of X instead.
+
         Args:
             estimator (BaseEstimator): Estimator to fit.
             X_train (pd.DataFrame): Training features.
@@ -461,20 +479,9 @@ class BaseTrainer:
             y_valid (pd.Series | None): Validation target for eval_set. Defaults to None.
             sample_weight (pd.Series | None): Optional per-sample weights. Defaults to None.
             verbose (bool | int | None): Verbosity for non-boosting estimators. Defaults to None.
-            eval_on_train (bool): Whether the training split is included in eval_set
-                alongside the validation split. Boosting libraries score every eval_set
-                entry on every iteration, so including a large training split is pure
-                overhead for callers that only early-stop and never read the training
-                curve. Defaults to True, preserving the historical behaviour for every
-                existing caller.
-            offset_train (np.ndarray | None): Link-scale offset per training row. Passed
-                as LightGBM ``init_score``, XGBoost ``base_margin`` or CatBoost
-                ``baseline``. Defaults to None.
-            offset_valid (np.ndarray | None): Offset per validation row, passed as
-                ``eval_init_score`` / ``base_margin_eval_set`` / a CatBoost eval
-                ``Pool`` baseline. Defaults to None. An estimator with its own
-                ``offset_column`` (e.g. ``EnsembleModel``) receives both offsets as
-                that column of X instead.
+            eval_on_train (bool): Include the training split in eval_set. Defaults to True.
+            offset_train (np.ndarray | None): Link-scale offset per training row. Defaults to None.
+            offset_valid (np.ndarray | None): Offset per validation row. Defaults to None.
 
         Returns:
             BaseEstimator: Fitted estimator instance.
@@ -498,9 +505,10 @@ class BaseTrainer:
                 fit_params["verbose"] = log_period
             elif "verbosity" in sig.parameters:
                 fit_params["verbosity"] = verbose
-            if "callbacks" in sig.parameters:
-                if estimator.__class__.__name__.startswith(LGBM_PREFIX):
-                    fit_params["callbacks"] = [log_evaluation(log_period)]
+            if "callbacks" in sig.parameters and estimator.__class__.__name__.startswith(
+                LGBM_PREFIX
+            ):
+                fit_params["callbacks"] = [log_evaluation(log_period)]
             if (
                 estimator.__class__.__name__.startswith(HISTGB_PREFIX)
                 and "verbose" in estimator.get_params()
@@ -568,6 +576,12 @@ class BaseTrainer:
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, BaseEstimator]:
         """Fit and produce predictions according to metric_type.
 
+        Notes:
+        - sample_weight: Optional per-sample training weights, forwarded to ``fit_estimator`` and
+          from there to any estimator whose ``fit`` accepts ``sample_weight``. Must already be
+          restricted and aligned to ``X_train``; this method does no slicing of its own. Defaults to
+          None.
+
         Args:
             estimator (BaseEstimator): Estimator to fit.
             X_train (pd.DataFrame): Training features.
@@ -577,16 +591,15 @@ class BaseTrainer:
             metric_type (str): Prediction mode, either "preds" or "probs". Defaults to "preds".
             X_test (pd.DataFrame | None): Optional test features to predict. Defaults to None.
             verbose (bool | int | None): Optional verbosity for fitting. Defaults to False.
-            sample_weight (pd.Series | np.ndarray | None): Optional per-sample training
-                weights, forwarded to ``fit_estimator`` and from there to any estimator
-                whose ``fit`` accepts ``sample_weight``. Must already be restricted and
-                aligned to ``X_train``; this method does no slicing of its own. Defaults
-                to None.
+            sample_weight (pd.Series | np.ndarray | None): Training weights aligned to X_train.
 
         Returns:
             tuple[np.ndarray, np.ndarray, np.ndarray | None, BaseEstimator]:
                 Training predictions, validation predictions, optional test predictions,
                 and the fitted estimator.
+
+        Raises:
+            ValueError: If metric_type is not 'preds' or 'probs'.
         """
         fitted_estimator = BaseTrainer.fit_estimator(
             estimator,
