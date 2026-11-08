@@ -350,9 +350,10 @@ class CrossValidationTrainer(BaseTrainer):
                         executor.submit(run_split, train_idx, valid_idx): position
                         for position, (train_idx, valid_idx) in enumerate(splits)
                     }
-                    fold_results = [None] * len(splits)
-                    for future in as_completed(futures):
-                        fold_results[futures[future]] = future.result()
+                    results_by_position = {
+                        futures[future]: future.result() for future in as_completed(futures)
+                    }
+                    fold_results = [results_by_position[i] for i in range(len(splits))]
         finally:
             if progress_bar is not None:
                 progress_bar.close()
