@@ -24,10 +24,8 @@ class LogTransformerWithOriginal(_WithOriginalBase):
         Initialize LogTransformerWithOriginal.
 
         Args:
-            variables (list[str] | None, optional): Numerical columns to transform.
-                Defaults to None (auto-detect).
-            base (str, optional): Logarithm base - ``"e"`` for natural log or
-                ``"10"`` for log base 10. Defaults to ``"e"``.
+            variables (list[str] | None): Numerical columns to transform. Defaults to auto-detect.
+            base (str): "e" (natural log) or "10". Defaults to "e".
         """
         self.variables = variables
         self.base = base

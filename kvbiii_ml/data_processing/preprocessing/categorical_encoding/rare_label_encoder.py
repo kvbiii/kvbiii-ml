@@ -31,21 +31,13 @@ class RareLabelEncoderWithOriginal(_WithOriginalBase):
         Initialize RareLabelEncoderWithOriginal.
 
         Args:
-            tol (float, optional): Minimum frequency threshold. Categories with a
-                relative frequency below this value are grouped into the rare label.
-                Defaults to 0.05.
-            n_categories (int, optional): Minimum number of distinct categories a
-                variable must have before rare-label grouping is applied. Defaults to 10.
-            max_n_categories (int | None, optional): Maximum number of categories to
-                keep as-is (excluding the rare label). Defaults to None (no cap).
-            replace_with (str | int | float, optional): Label assigned to all rare
-                categories. Defaults to ``"Rare"``.
-            variables (list[str] | None, optional): Categorical columns to encode.
-                Defaults to None (auto-detect all object/categorical columns).
-            missing_values (str, optional): How to handle NaN - ``"raise"`` or
-                ``"ignore"``. Defaults to ``"raise"``.
-            ignore_format (bool, optional): If True, also encode numeric columns.
-                Defaults to False.
+            tol (float): Min relative frequency; rarer categories are grouped. Defaults to 0.05.
+            n_categories (int): Min distinct categories before rare grouping. Defaults to 10.
+            max_n_categories (int | None): Categories kept (excl. rare label). Defaults to no cap.
+            replace_with (str | int | float): Label for rare categories. Defaults to "Rare".
+            variables (list[str] | None): Categorical columns to encode. Defaults to auto-detect.
+            missing_values (str): How to handle NaN - "raise" or "ignore". Defaults to "raise".
+            ignore_format (bool, optional): If True, also encode numeric columns. Defaults to False.
         """
         self.tol = tol
         self.n_categories = n_categories

@@ -35,17 +35,11 @@ class StringSimilarityEncoderWithOriginal(_WithOriginalBase):
         Initialize StringSimilarityEncoderWithOriginal.
 
         Args:
-            top_categories (int | None, optional): Keep only the top N most frequent
-                strings per variable. Defaults to None (keep all).
-            keywords (dict | None, optional): Per-variable keyword overrides passed
-                to the inner encoder. Defaults to None.
-            missing_values (str, optional): How to handle NaN - ``"impute"`` replaces
-                with an empty string; ``"raise"`` raises an error.
-                Defaults to ``"impute"``.
-            variables (list[str | int] | None, optional): Columns to encode.
-                Defaults to None (auto-detect all object/categorical columns).
-            ignore_format (bool, optional): If True, also encode numeric columns.
-                Defaults to False.
+            top_categories (int | None): Top N frequent strings kept per variable. Defaults to all.
+            keywords (dict | None): Per-variable kwargs for the inner encoder. Defaults to None.
+            missing_values (str): "impute" fills NaN with "", "raise" errors. Defaults to "impute".
+            variables (list[str | int] | None): Columns to encode. Defaults to auto-detect.
+            ignore_format (bool, optional): If True, also encode numeric columns. Defaults to False.
         """
         self.top_categories = top_categories
         self.keywords = keywords

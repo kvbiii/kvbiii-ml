@@ -47,31 +47,12 @@ class TargetEncoderWithOriginal(_WithOriginalSubsetBase):
         Initialize TargetEncoderWithOriginal.
 
         Args:
-            categories (Literal["auto"] | list[list], optional): Per-variable
-                category lists, or ``"auto"`` to detect them during fitting.
-                Defaults to "auto".
-            target_type (Literal["auto", "continuous", "binary", "multiclass"], optional):
-                Kind of target being encoded against, or ``"auto"`` to infer it
-                from y. Defaults to "auto".
-            smooth (float | Literal["auto"], optional): Shrinkage strength toward
-                the global target mean - higher smooths harder; ``"auto"`` picks
-                it from the target's variance. Defaults to "auto".
-            cv (int, optional): Number of cross-fitting folds used to encode the
-                training set inside ``fit_transform``. Defaults to 5.
-            variables (list[str] | None, optional): Columns to encode. May include
-                numeric columns - they are recast to object dtype internally
-                before encoding. Defaults to None (auto-detect all non-numeric
-                columns).
-            random_state (int | None, optional): Seed controlling the shuffle
-                scikit-learn's ``TargetEncoder`` applies before splitting into
-                ``cv`` folds for its internal cross-fitting. Left unset, that
-                shuffle uses a fresh random split on every single
-                ``fit_transform`` call, so encoded values - and therefore any
-                metric computed downstream of them - differ between otherwise
-                identical runs even with every other seed fixed. Passing a
-                fixed value here removes that source of non-determinism.
-                Defaults to None, which reproduces the unseeded behavior
-                exactly.
+            categories (Literal["auto"] | list[list]): Per-variable lists, or "auto" to detect.
+            target_type (Literal["auto", "continuous", "binary", "multiclass"]): "auto" infers it.
+            smooth (float | Literal["auto"]): Shrinkage to the global mean; "auto" is data-driven.
+            cv (int): Folds used to encode the training set inside fit_transform. Defaults to 5.
+            variables (list[str] | None): Columns to encode; numeric ones are cast to object.
+            random_state (int | None): TargetEncoder cv shuffle seed; None is not reproducible.
         """
         self.categories = categories
         self.target_type = target_type

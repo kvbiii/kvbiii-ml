@@ -20,8 +20,7 @@ class ArcsinTransformerWithOriginal(_WithOriginalBase):
         Initialize ArcsinTransformerWithOriginal.
 
         Args:
-            variables (list[str] | None, optional): Numerical columns in [0, 1]
-                to transform. Defaults to None (auto-detect).
+            variables (list[str] | None): Columns in [0, 1] to transform. Defaults to auto-detect.
         """
         self.variables = variables
 

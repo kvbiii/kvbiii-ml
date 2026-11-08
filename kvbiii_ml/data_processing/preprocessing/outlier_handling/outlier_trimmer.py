@@ -28,17 +28,11 @@ class OutlierTrimmerWithOriginal(_WithOriginalBase):
         Initialize OutlierTrimmerWithOriginal.
 
         Args:
-            capping_method (str, optional): Method to compute outlier boundaries -
-                ``"gaussian"``, ``"iqr"``, ``"mad"``, or ``"quantiles"``.
-                Defaults to ``"gaussian"``.
-            tail (str, optional): Which tail(s) to trim - ``"right"``, ``"left"``,
-                or ``"both"``. Defaults to ``"right"``.
-            fold (int | float | str, optional): Multiplier for boundary calculation.
-                ``"auto"`` uses the method's natural default. Defaults to ``"auto"``.
-            variables (list[str] | None, optional): Numerical columns to trim.
-                Defaults to None (auto-detect).
-            missing_values (str, optional): How to handle NaN - ``"raise"`` or
-                ``"ignore"``. Defaults to ``"raise"``.
+            capping_method (str): "gaussian", "iqr", "mad" or "quantiles". Defaults to "gaussian".
+            tail (str): Which tail(s) to trim - "right", "left", or "both". Defaults to "right".
+            fold (int | float | str): Boundary multiplier; "auto" is the method default.
+            variables (list[str] | None): Numerical columns to trim. Defaults to None (auto-detect).
+            missing_values (str): How to handle NaN - "raise" or "ignore". Defaults to "raise".
         """
         self.capping_method = capping_method
         self.tail = tail

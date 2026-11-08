@@ -28,16 +28,11 @@ class ArbitraryDiscretiserWithOriginal(_WithOriginalBase):
         Initialize ArbitraryDiscretiserWithOriginal.
 
         Args:
-            binning_dict (dict[str, list]): Mapping from variable name to a list of
-                cut-points, e.g. ``{"age": [0, 18, 35, 60, np.inf]}``.
-            return_object (bool, optional): If True, returns bin labels as strings.
-                Defaults to False.
-            return_boundaries (bool, optional): If True, returns interval boundaries
-                as labels. Defaults to False.
-            precision (int, optional): Rounding precision for bin boundaries.
-                Defaults to 3.
-            errors (str, optional): How to handle values outside defined bins -
-                ``"ignore"`` or ``"raise"``. Defaults to ``"ignore"``.
+            binning_dict (dict[str, list]): Variable to cut-points, e.g. {"age": [0, 18, np.inf]}.
+            return_object (bool): If True, returns bin labels as strings. Defaults to False.
+            return_boundaries (bool): Return interval boundaries as labels. Defaults to False.
+            precision (int, optional): Rounding precision for bin boundaries. Defaults to 3.
+            errors (str): Values outside the bins: "ignore" or "raise". Defaults to "ignore".
         """
         self.binning_dict = binning_dict
         self.return_object = return_object

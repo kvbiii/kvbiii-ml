@@ -27,14 +27,10 @@ class WinsorizerWithOriginal(_WithOriginalBase):
         Initialize WinsorizerWithOriginal.
 
         Args:
-            variables (list[str] | None, optional): Numerical variables to cap.
-                Defaults to None (auto-detect all numerical columns).
-            capping_method (str, optional): Capping strategy - ``"iqr"``,
-                ``"gaussian"``, ``"mad"``, or ``"quantiles"``. Defaults to ``"iqr"``.
-            tail (str, optional): Which tail(s) to cap - ``"both"``, ``"left"``,
-                or ``"right"``. Defaults to ``"both"``.
-            fold (float, optional): IQR / std multiplier that determines cap
-                boundaries. Defaults to 3.0.
+            variables (list[str] | None): Numerical variables to cap. Defaults to auto-detect.
+            capping_method (str): "iqr", "gaussian", "mad" or "quantiles". Defaults to "iqr".
+            tail (str): Which tail(s) to cap - "both", "left", or "right". Defaults to "both".
+            fold (float): IQR / std multiplier that determines cap boundaries. Defaults to 3.0.
         """
         self.variables = variables
         self.capping_method = capping_method

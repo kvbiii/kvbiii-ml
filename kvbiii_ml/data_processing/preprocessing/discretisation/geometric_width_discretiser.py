@@ -28,15 +28,11 @@ class GeometricWidthDiscretiserWithOriginal(_WithOriginalBase):
         Initialize GeometricWidthDiscretiserWithOriginal.
 
         Args:
-            variables (list[str] | None, optional): Numerical columns to discretise.
-                Defaults to None (auto-detect).
+            variables (list[str] | None): Numerical columns to discretise. Defaults to auto-detect.
             bins (int, optional): Number of geometric-width bins. Defaults to 10.
-            return_object (bool, optional): If True, returns bin labels as strings.
-                Defaults to False.
-            return_boundaries (bool, optional): If True, returns interval boundaries
-                as labels. Defaults to False.
-            precision (int, optional): Rounding precision for bin boundaries.
-                Defaults to 7.
+            return_object (bool): If True, returns bin labels as strings. Defaults to False.
+            return_boundaries (bool): Return interval boundaries as labels. Defaults to False.
+            precision (int, optional): Rounding precision for bin boundaries. Defaults to 7.
         """
         self.variables = variables
         self.bins = bins

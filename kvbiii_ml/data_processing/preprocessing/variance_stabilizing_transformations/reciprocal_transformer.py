@@ -20,8 +20,7 @@ class ReciprocalTransformerWithOriginal(_WithOriginalBase):
         Initialize ReciprocalTransformerWithOriginal.
 
         Args:
-            variables (list[str] | None, optional): Numerical columns to transform.
-                Defaults to None (auto-detect).
+            variables (list[str] | None): Numerical columns to transform. Defaults to auto-detect.
         """
         self.variables = variables
 

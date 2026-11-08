@@ -21,10 +21,8 @@ def _cast_numeric_variables_to_object(X: pd.DataFrame, variables: list[str] | No
     picks up already non-numeric columns - is unaffected by this helper.
 
     Args:
-        X (pd.DataFrame): Features to adjust. Not mutated - a copy is made
-            only when a cast is actually needed.
-        variables (list[str] | None): Columns to force to object dtype where
-            numeric, or None/empty to leave X untouched.
+        X (pd.DataFrame): Features to adjust; copied only when a cast is needed.
+        variables (list[str] | None): Numeric columns to cast to object; None leaves X as is.
 
     Returns:
         pd.DataFrame: X (or a copy, if any column was recast) with every
@@ -80,8 +78,7 @@ class _WithOriginalBase(BaseEstimator, TransformerMixin, abc.ABC):
         Args:
             inner (Any): Unfitted inner transformer from _build_inner.
             X (pd.DataFrame): Training features.
-            y (Any): Target forwarded from fit(). Pass to inner.fit() for
-                supervised transformers; ignore it for unsupervised ones.
+            y (Any): Target from fit(), passed to inner.fit() for supervised transformers.
 
         Returns:
             Any: Fitted inner transformer.
@@ -104,8 +101,7 @@ class _WithOriginalBase(BaseEstimator, TransformerMixin, abc.ABC):
 
         Args:
             X (pd.DataFrame): Training features.
-            y (Any, optional): Target forwarded to supervised inner transformers.
-                Defaults to None.
+            y (Any, optional): Target forwarded to supervised inner transformers. Defaults to None.
 
         Returns:
             _WithOriginalBase: Fitted instance (self).
@@ -177,8 +173,9 @@ class _WithOriginalBase(BaseEstimator, TransformerMixin, abc.ABC):
 
 
 class _WithOriginalSubsetBase(BaseEstimator, TransformerMixin, abc.ABC):
-    """Abstract base for transformers that keep originals and append derived columns
-    computed from an inner transformer restricted to an explicit column subset.
+    """Abstract base for transformers that keep originals and append derived columns.
+
+    The derived columns come from an inner transformer restricted to an explicit column subset.
 
     Built for raw scikit-learn transformers (e.g. ``KBinsDiscretizer``,
     ``TargetEncoder``) that, unlike the feature_engine transformers `_WithOriginalBase`
@@ -231,8 +228,7 @@ class _WithOriginalSubsetBase(BaseEstimator, TransformerMixin, abc.ABC):
 
         Args:
             X (pd.DataFrame): Training features.
-            y (Any, optional): Target forwarded to supervised inner transformers.
-                Defaults to None.
+            y (Any, optional): Target forwarded to supervised inner transformers. Defaults to None.
 
         Returns:
             _WithOriginalSubsetBase: Fitted instance (self).

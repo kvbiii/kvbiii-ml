@@ -42,23 +42,11 @@ class MeanEncoderWithOriginal(_WithOriginalBase):
         Initialize MeanEncoderWithOriginal.
 
         Args:
-            variables (list[str] | None, optional): Columns to encode. May include
-                numeric columns - they are recast to object dtype internally so
-                they encode without error. Defaults to None (auto-detect all
-                object/categorical columns).
-            missing_values (str, optional): How to handle NaN - ``"raise"`` or
-                ``"ignore"``. Defaults to ``"raise"``.
-            ignore_format (bool, optional): If True, also encode numeric columns.
-                Defaults to False.
-            unseen (str, optional): Strategy for categories seen at transform time
-                but not during fit - ``"encode"`` replaces them with the fitted
-                prior (global target mean), ``"ignore"`` replaces them with NaN
-                and emits a UserWarning, and ``"raise"`` raises a ValueError.
-                Defaults to ``"encode"`` so unseen categories never silently
-                introduce NaN downstream.
-            smoothing (int | float | str, optional): Bayesian shrinkage factor.
-                ``0.0`` disables smoothing; higher values pull category means toward
-                the global mean. Defaults to ``0.0``.
+            variables (list[str] | None): Columns to encode; numeric ones are cast to object.
+            missing_values (str): How to handle NaN - "raise" or "ignore". Defaults to "raise".
+            ignore_format (bool, optional): If True, also encode numeric columns. Defaults to False.
+            unseen (str): "encode" (prior), "ignore" (NaN, warns) or "raise". Defaults to "encode".
+            smoothing (int | float | str): Shrinkage to the global mean; 0.0 = off. Defaults to 0.0.
         """
         self.variables = variables
         self.missing_values = missing_values

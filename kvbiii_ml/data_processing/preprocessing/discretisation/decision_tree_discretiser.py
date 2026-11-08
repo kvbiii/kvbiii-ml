@@ -31,19 +31,13 @@ class DecisionTreeDiscretiserWithOriginal(_WithOriginalBase):
         Initialize DecisionTreeDiscretiserWithOriginal.
 
         Args:
-            variables (list[str] | None, optional): Numerical columns to discretise.
-                Defaults to None (auto-detect).
-            bin_output (str, optional): What the tree leaf value represents -
-                ``"prediction"`` or ``"bin_number"``. Defaults to ``"prediction"``.
+            variables (list[str] | None): Numerical columns to discretise. Defaults to auto-detect.
+            bin_output (str): "prediction" or "bin_number" leaf value. Defaults to "prediction".
             precision (int | None, optional): Decimal places for rounding. Defaults to None.
-            cv (int, optional): Cross-validation folds used for tree depth tuning.
-                Defaults to 3.
-            scoring (str, optional): sklearn scoring metric for CV. Defaults to
-                ``"neg_mean_squared_error"``.
-            param_grid (dict | None, optional): Grid of tree parameters to search.
-                Defaults to None.
-            regression (bool, optional): If True, fits a regression tree; if False,
-                a classification tree. Defaults to True.
+            cv (int, optional): Cross-validation folds used for tree depth tuning. Defaults to 3.
+            scoring (str): sklearn scoring metric for CV. Defaults to ``"neg_mean_squared_error"``.
+            param_grid (dict | None, optional): Grid of tree parameters to search. Defaults to None.
+            regression (bool): Regression tree if True, else classification. Defaults to True.
             random_state (int | None, optional): Random seed. Defaults to None.
         """
         self.variables = variables

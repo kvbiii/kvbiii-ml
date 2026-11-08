@@ -24,10 +24,8 @@ class PowerTransformerWithOriginal(_WithOriginalBase):
         Initialize PowerTransformerWithOriginal.
 
         Args:
-            variables (list[str] | None, optional): Numerical columns to transform.
-                Defaults to None (auto-detect).
-            exp (float | int, optional): Exponent applied to each value. ``0.5``
-                gives the square-root transform. Defaults to 0.5.
+            variables (list[str] | None): Numerical columns to transform. Defaults to auto-detect.
+            exp (float | int): Exponent applied to each value (0.5 = square root). Defaults to 0.5.
         """
         self.variables = variables
         self.exp = exp

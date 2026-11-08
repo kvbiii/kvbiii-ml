@@ -26,12 +26,9 @@ class LogCpTransformerWithOriginal(_WithOriginalBase):
         Initialize LogCpTransformerWithOriginal.
 
         Args:
-            variables (list[str] | None, optional): Numerical columns to transform.
-                Defaults to None (auto-detect).
+            variables (list[str] | None): Numerical columns to transform. Defaults to auto-detect.
             base (str, optional): Logarithm base - ``"e"`` or ``"10"``. Defaults to ``"e"``.
-            C (int | float | str | dict, optional): Constant added before log. ``"auto"``
-                sets C to the absolute value of the minimum plus a small epsilon.
-                Defaults to ``"auto"``.
+            C (int | float | str | dict): Constant added before log; "auto" = abs(min) + epsilon.
         """
         self.variables = variables
         self.base = base
