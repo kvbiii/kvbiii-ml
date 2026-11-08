@@ -42,19 +42,12 @@ class ModelImportanceRecursiveFeatureElimination:
 
         Args:
             estimator (BaseEstimator): Estimator with feature_importances_ attribute.
-            cross_validator (CrossValidationTrainer): Cross-validation trainer that
-                optionally holds a preprocessing pipeline.  The pipeline is re-fitted
-                per fold at each elimination step via a restricted clone.
+            cross_validator (CrossValidationTrainer): Trainer; its pipeline is refit per fold.
             steps (int, optional): Number of elimination iterations. Defaults to 5.
-            alpha (float, optional): Weight for the final selection score mix.
-                Defaults to 0.95.
-            verbose (bool, optional): Whether to print progress messages.
-                Defaults to True.
-            protected_features (list[str] | None, optional): Processed column names
-                that should never be removed.  Validated after the baseline CV run
-                against the actual post-pipeline column set. Defaults to None.
-            random_state (int | None, optional): Random state for reproducibility.
-                Defaults to 17.
+            alpha (float, optional): Weight for the final selection score mix. Defaults to 0.95.
+            verbose (bool, optional): Whether to print progress messages. Defaults to True.
+            protected_features (list[str] | None): Processed names never removed. Defaults to None.
+            random_state (int | None, optional): Random state for reproducibility. Defaults to 17.
         """
         self.estimator = estimator
         self.cross_validator = cross_validator
@@ -81,7 +74,7 @@ class ModelImportanceRecursiveFeatureElimination:
         current_features: set[str],
         post_pipeline_dtypes: pd.Series | None = None,
     ) -> BaseEstimator:
-        """Return a cloned CatBoost estimator with cat_features filtered to active non-numeric columns.
+        """Clone a CatBoost estimator, filtering cat_features to active non-numeric columns.
 
         A column is kept in cat_features only when all three conditions hold:
         - it is still present in the active feature set,
@@ -93,8 +86,7 @@ class ModelImportanceRecursiveFeatureElimination:
         Args:
             estimator (BaseEstimator): Estimator to potentially update.
             current_features (set[str]): Feature names still present in this step.
-            post_pipeline_dtypes (pd.Series | None): Column dtypes of the post-pipeline
-                validation data. Defaults to None.
+            post_pipeline_dtypes (pd.Series | None): Post-pipeline column dtypes. Defaults to None.
 
         Returns:
             BaseEstimator: Updated estimator for CatBoost; original for all others.
@@ -144,8 +136,7 @@ class ModelImportanceRecursiveFeatureElimination:
                 - history (pd.DataFrame): Step-wise metrics and removals.
 
         Raises:
-            ValueError: If protected features are not found in the post-pipeline
-                column set.
+            ValueError: If protected features are not found in the post-pipeline column set.
         """
         X = X.reset_index(drop=True)
         y = pd.Series(y).reset_index(drop=True)
@@ -306,8 +297,7 @@ class ModelImportanceRecursiveFeatureElimination:
         Args:
             X (pd.DataFrame): Raw feature matrix.
             y (pd.Series): Target values.
-            dependency_graph (PipelineDependencyGraph): Baseline graph built from the
-                full pipeline fit, used to bootstrap CatBoost's cat_features.
+            dependency_graph (PipelineDependencyGraph): Baseline graph for CatBoost's cat_features.
 
         Returns:
             tuple[float, float]: Average metric and its standard deviation.
@@ -335,8 +325,7 @@ class ModelImportanceRecursiveFeatureElimination:
         Args:
             x_data (pd.DataFrame): Raw features for this step.
             y_data (pd.Series): The target series.
-            current_processed_features (list[str]): Processed column names the
-                model sees, in the order feature_importances_ reports them.
+            current_processed_features (list[str]): Model columns, in feature_importances_ order.
             step_estimator (BaseEstimator): Estimator restricted to active cat features.
             pipeline_override (Pipeline | None): Restricted pipeline for this step.
 
@@ -415,8 +404,7 @@ class ModelImportanceRecursiveFeatureElimination:
         Args:
             summary_df (dict[str, list | pd.DataFrame]): Summary dict carrying history.
             step_idx (int): Current step number.
-            current_features (list[str]): Processed features remaining before removal.
-                Mutated in place - each removed feature is popped as it is logged.
+            current_features (list[str]): Remaining features; mutated in place as they are removed.
             importance_scores (dict[str, float]): Importance score for each processed feature.
             fold_base_metric (float): Base metric for the current set of features.
             features_to_remove (list[str]): Processed features to remove this step.
@@ -456,8 +444,7 @@ class ModelImportanceRecursiveFeatureElimination:
 
         Args:
             history (pd.DataFrame): Step-wise elimination history.
-            alpha (float | None, optional): Weight for metric vs. features.
-                Defaults to self.alpha.
+            alpha (float | None, optional): Weight for metric vs. features. Defaults to self.alpha.
 
         Returns:
             tuple[list[str], float | None]: Selected features and their metric value.

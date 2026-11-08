@@ -35,7 +35,7 @@ class ShapRecursiveFeatureElimination:
             alpha (float, optional): Weight for the final selection score mix. Defaults to 0.95.
             verbose (bool, optional): Whether to print progress messages. Defaults to True.
             protected_features (list[str], optional): Features that should never be removed.
-            max_samples_shap (int, optional): Maximum samples for SHAP computation. Defaults to 50000.
+            max_samples_shap (int): Maximum samples for SHAP computation. Defaults to 50000.
         """
         self.estimator = estimator
         self.cross_validator = cross_validator
@@ -74,6 +74,9 @@ class ShapRecursiveFeatureElimination:
                 - selected_features (list): Final selected features.
                 - selected_features_names (list): Alias of selected_features.
                 - history (pd.DataFrame): Step-wise metrics and removals.
+
+        Raises:
+            ValueError: If protected features are missing from the dataset.
         """
         X = self._convert_categorical_to_codes(X)
         current_features = list(X.columns)
@@ -111,7 +114,10 @@ class ShapRecursiveFeatureElimination:
         removal_schedule = self.compute_removal_schedule(len(removable_features))
         if self.verbose:
             print(
-                f"🔍 Starting SHAP-RFE with {len(current_features)} features, target metric: {self.cross_validator.metric_name} ({self.metric_direction}), steps: {self.steps}.\n📅 The number of features to remove every step: {removal_schedule}"
+                f"🔍 Starting SHAP-RFE with {len(current_features)} features, "
+                f"target metric: {self.cross_validator.metric_name} ({self.metric_direction}), "
+                f"steps: {self.steps}.\n"
+                f"📅 The number of features to remove every step: {removal_schedule}"
             )
             print(f"🛡️  Protected features: {self.protected_features}")
 
@@ -125,7 +131,8 @@ class ShapRecursiveFeatureElimination:
                 )
                 print(f"\n🔬 Features remaining: {current_features}\n")
                 print(
-                    f"📊 Average {self.cross_validator.metric_name}: {fold_base_metric:.6f} ± {fold_base_metric_std:.6f}"
+                    f"📊 Average {self.cross_validator.metric_name}: "
+                    f"{fold_base_metric:.6f} ± {fold_base_metric_std:.6f}"
                 )
             removable_metrics = {
                 k: v for k, v in avg_metric_feature.items() if k not in self.protected_features
@@ -167,7 +174,11 @@ class ShapRecursiveFeatureElimination:
                 / summary_df["history"].iloc[0]["metric_value"]
             )
             print(
-                f"📈 Final {self.cross_validator.metric_name} score (approximated): {metric_selected:.6f} | Base: {summary_df['history'].iloc[0]['metric_value']:.6f} | Δ: {metric_selected - summary_df['history'].iloc[0]['metric_value']:.6f} ({diff_pct:+.2f}%)"
+                f"📈 Final {self.cross_validator.metric_name} score (approximated): "
+                f"{metric_selected:.6f} | "
+                f"Base: {summary_df['history'].iloc[0]['metric_value']:.6f} | "
+                f"Δ: {metric_selected - summary_df['history'].iloc[0]['metric_value']:.6f} "
+                f"({diff_pct:+.2f}%)"
             )
             n_features_initial = summary_df["history"].iloc[0]["n_features_remaining"]
             n_features_selected = len(summary_df["selected_features"])
@@ -208,7 +219,9 @@ class ShapRecursiveFeatureElimination:
                 self._large_dataset_warning_printed = True
                 print(
                     f"⚠️ Large dataset detected: {X.shape[0]} samples. "
-                    f"For computational efficiency, only a random subset of {self.max_samples_shap} samples will be used for SHAP-based feature elimination in each step. "
+                    "For computational efficiency, only a random subset of "
+                    f"{self.max_samples_shap} samples will be used for SHAP-based "
+                    "feature elimination in each step. "
                     "This may affect the stability of feature importance estimates. "
                     "Consider running on the full dataset if reproducibility is critical."
                 )
@@ -270,7 +283,7 @@ class ShapRecursiveFeatureElimination:
         allowed_removals = max(0, total_removable_features - 1)
         current_sum = int(removal_counts.sum())
         if current_sum > allowed_removals:
-            # reduce removals starting from the last steps so earlier steps keep their relative weight
+            # reduce removals from the last steps so earlier steps keep their relative weight
             for idx in range(self.steps - 1, -1, -1):
                 if current_sum <= allowed_removals:
                     break

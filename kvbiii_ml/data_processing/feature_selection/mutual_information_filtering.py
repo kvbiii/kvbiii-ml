@@ -24,10 +24,12 @@ class MutualInformationFiltering:
 
         Args:
             problem_type (str): Type of problem, either "classification" or "regression".
-            threshold (float, optional): Minimum MI value required to keep a feature. Defaults to 0.1.
-            keep_top_k (int | None, optional): If provided, select the top-k features by MI and ignore the threshold.
-                Prints the implied nominal MI threshold (border) when verbose is True. Defaults to None.
+            threshold (float): Minimum MI value required to keep a feature. Defaults to 0.1.
+            keep_top_k (int | None): Select top-k by MI, ignoring the threshold. Defaults to None.
             verbose (bool, optional): Whether to print selection details. Defaults to False.
+
+        Raises:
+            ValueError: If problem_type is neither "classification" nor "regression".
         """
         if problem_type not in {"classification", "regression"}:
             raise ValueError("problem_type must be either 'classification' or 'regression'.")
@@ -51,6 +53,9 @@ class MutualInformationFiltering:
 
         Returns:
             MutualInformationFiltering: Fitted instance with selected features.
+
+        Raises:
+            ValueError: If keep_top_k is not a positive integer.
         """
         mi_scores = self._compute_mi_scores(X, y)
         sorted_items = list(mi_scores.items())
@@ -63,7 +68,8 @@ class MutualInformationFiltering:
             self.threshold_border_ = float(sorted_items[k - 1][1]) if k > 0 else None
             if self.verbose:
                 print(
-                    f"Using top-k selection (k={self.keep_top_k}). Implied MI threshold (border): {self.threshold_border_:.6f}"
+                    f"Using top-k selection (k={self.keep_top_k}). "
+                    f"Implied MI threshold (border): {self.threshold_border_:.6f}"
                 )
         else:
             self.selected_features_ = [
@@ -72,7 +78,8 @@ class MutualInformationFiltering:
             self.threshold_border_ = self.threshold
             if self.verbose:
                 print(
-                    f"Using nominal MI threshold: {self.threshold_border_:.6f}. Selected {len(self.selected_features_)} features."
+                    f"Using nominal MI threshold: {self.threshold_border_:.6f}. "
+                    f"Selected {len(self.selected_features_)} features."
                 )
         return self
 
@@ -84,6 +91,9 @@ class MutualInformationFiltering:
 
         Returns:
             pd.DataFrame: Filtered DataFrame containing only selected features.
+
+        Raises:
+            ValueError: If the filter has not been fitted.
         """
         if not self.selected_features_:
             raise ValueError("The filter has not been fitted yet. Call fit() first.")
@@ -132,6 +142,9 @@ class MutualInformationFiltering:
         Returns:
             tuple[pd.DataFrame, pd.Series | np.ndarray]: Tuple of (X, y) with
             categorical columns encoded and MI kwargs adjusted when needed.
+
+        Raises:
+            ValueError: If y is not a pandas Series or numpy array.
         """
         if not isinstance(y, (pd.Series, np.ndarray)):
             raise ValueError("y must be a pandas Series or numpy array.")
