@@ -1,0 +1,12 @@
+[rules]
+blanket-ignore-comment = "error"
+possibly-unresolved-reference = "error"
+redundant-cast = "error"
+invalid-argument-type = "warn"
+unresolved-attribute = "warn"
+no-matching-overload = "warn"
+unsupported-operator = "warn"
+unknown-argument = "warn"
+not-subscriptable = "warn"
+invalid-assignment = "warn"
+not-iterable = "warn"

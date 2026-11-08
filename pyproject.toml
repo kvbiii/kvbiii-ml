@@ -42,27 +42,24 @@ dependencies = {file = ["requirements.txt"]}
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]
+cache_dir = ".cache/pytest"
 
-[tool.pylint.main]
-ignore = ["kvbiii-ml_venv", "build"]
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }]
+# Resolution only (not published metadata): without it uv picks numba 0.53.1 for shap 0.51 on Python 3.11, which cannot build.
+constraint-dependencies = ["numba>=0.60"]
 
-[tool.pylint."messages control"]
-disable = ["all"]
-enable = [
-    "unused-import",
-    "wrong-import-order",
-    "unused-variable",
-    "import-outside-toplevel",
-    "missing-function-docstring",
-    "invalid-name",
-    "bare-except",
-    "duplicate-code",
-]
-
-[tool.pylint.basic]
-good-names = ["X", "X_train", "X_test", "X_valid", "C"]
+# Lint and type-check settings live in ruff.toml and ty.toml next to this file.
+# Both are discovered automatically and take precedence over pyproject.toml.
 
 [project.urls]
 Homepage = "https://github.com/kvbiii/kvbiii-ml"
 Repository = "https://github.com/kvbiii/kvbiii-ml"
 Issues = "https://github.com/kvbiii/kvbiii-ml/issues"
+
+[dependency-groups]
+dev = [
+    "pytest-cov>=7.1.0",
+    "ruff>=0.17.4",
+    "ty>=0.0.99",
+]

@@ -565,7 +565,11 @@ if __name__ == "__main__":
         lightgbm.LGBMClassifier(n_estimators=5, early_stopping_rounds=3, verbose=-1),
         XGBClassifier(n_estimators=5, early_stopping_rounds=3),
         CatBoostClassifier(
-            iterations=5, early_stopping_rounds=3, od_type="Iter", verbose=0
+            iterations=5,
+            early_stopping_rounds=3,
+            od_type="Iter",
+            verbose=0,
+            allow_writing_files=False,
         ),
     ],
 )

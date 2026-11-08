@@ -1012,6 +1012,7 @@ if __name__ == "__main__":
                 early_stopping_rounds=ES,
                 verbose=0,
                 random_state=RANDOM_STATE,
+                allow_writing_files=False,
             )
             cv_2 = _build_cv("Log Loss")
             for label, est, x_in in [
@@ -1040,24 +1041,28 @@ if __name__ == "__main__":
                 early_stopping_rounds=ES,
                 verbose=0,
                 random_state=RANDOM_STATE + 2,
+                allow_writing_files=False,
             ),
             CatBoostClassifier(
                 iterations=200,
                 early_stopping_rounds=ES,
                 verbose=0,
                 random_state=RANDOM_STATE + 2,
+                allow_writing_files=False,
             ),
             CatBoostClassifier(
                 iterations=200,
                 early_stopping_rounds=ES,
                 verbose=0,
                 random_state=RANDOM_STATE + 2,
+                allow_writing_files=False,
             ),
             CatBoostClassifier(
                 iterations=200,
                 early_stopping_rounds=ES,
                 verbose=0,
                 random_state=RANDOM_STATE + 2,
+                allow_writing_files=False,
             ),
         ]
         ensemble = EnsembleModel(estimators=estimators, problem_type="classification")

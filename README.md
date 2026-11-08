@@ -101,7 +101,8 @@ It provides reusable components for building robust ML pipelines, including tool
 ┣━ ⚙️ pyproject.toml
 ┣━ 📖 README.md
 ┣━ 📃 requirements.txt
-┗━ 🐚 setup_venv.sh
+┣━ ⚙️ ruff.toml
+┗━ ⚙️ ty.toml
 ```
 
 ## Files Description
@@ -201,6 +202,8 @@ It provides reusable components for building robust ML pipelines, including tool
 * ⚙️ `pyproject.toml`: Project metadata and build configuration.
 * 📖 `README.md`: Project documentation.
 * 📃 `requirements.txt`: Python dependencies list.
+* ⚙️ `ruff.toml`: Ruff linter and formatter configuration.
+* ⚙️ `ty.toml`: ty type checker configuration.
 
 ## Installation
 To install the repository, follow these steps:
@@ -214,14 +217,17 @@ git clone https://github.com/kvbiii/kvbiii-ml.git
 cd kvbiii-ml
 ```
 
-3. Create a virtual environment (optional but recommended):
+3. Create the virtual environment and install the package with dev tools (requires [uv](https://docs.astral.sh/uv/)):
 ```bash
-bash setup_venv.sh
+uv sync
 ```
 
-4. Activate the virtual environment:
+4. Run tools inside it, no activation needed:
 ```bash
-source kvbiii-ml_venv/bin/activate
+uv run pytest
+uv run ruff check
+uv run ruff format --check
+uv run ty check
 ```
 
 ## Usage

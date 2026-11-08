@@ -1,0 +1,55 @@
+line-length = 100
+target-version = "py311"
+cache-dir = ".cache/ruff"
+extend-exclude = ["*.ipynb", "*.md"]
+
+[lint]
+preview = true
+explicit-preview-rules = true
+select = ["ALL"]
+extend-select = ["PLR0914", "DOC102", "DOC202", "DOC501", "DOC502"]
+ignore = [
+    "COM812",
+    "ISC001",
+    "D100",
+    "D104",
+    "D203",
+    "D212",
+    "EM101",
+    "EM102",
+    "TRY003",
+    "FBT001",
+    "FBT002",
+    "T201",
+    "PYI041",
+    "EXE002",
+    "CPY001",
+    "INP001",
+    "ARG002",
+    "PLR0917",
+    "PT006",
+    "RET504",
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    "TC001",
+    "TC002",
+    "TC003",
+    "TRY004",
+]
+
+[lint.per-file-ignores]
+"tests/**" = ["ANN", "DOC501", "NPY002", "PLR2004", "RSE102", "S101", "SLF001"]
+
+[lint.pydocstyle]
+convention = "google"
+
+[lint.pep8-naming]
+ignore-names = ["X", "X_*", "C"]
+
+[lint.pylint]
+max-args = 5
+max-locals = 15
+
+[lint.mccabe]
+max-complexity = 10

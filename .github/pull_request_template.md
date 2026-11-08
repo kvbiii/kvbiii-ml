@@ -14,6 +14,6 @@
 ## Checklist
 
 - [ ] Tests added or updated for the change
-- [ ] `black`, `pylint`, and `bandit` pass locally
+- [ ] `ruff`, `ty`, and `bandit` pass locally
 - [ ] `requirements.txt` updated if dependencies changed
 - [ ] Documentation updated if user-facing behavior changed

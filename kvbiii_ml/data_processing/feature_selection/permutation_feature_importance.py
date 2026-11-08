@@ -891,6 +891,7 @@ if __name__ == "__main__":
             verbose=0,
             random_state=RANDOM_STATE,
             cat_features=CAT_FEATURES,
+            allow_writing_files=False,
         )
         cat_multi = CatBoostClassifier(
             n_estimators=200,
@@ -899,6 +900,7 @@ if __name__ == "__main__":
             random_state=RANDOM_STATE,
             cat_features=CAT_FEATURES,
             loss_function="MultiClass",
+            allow_writing_files=False,
         )
         cat_reg = CatBoostRegressor(
             n_estimators=200,
@@ -906,6 +908,7 @@ if __name__ == "__main__":
             verbose=0,
             random_state=RANDOM_STATE,
             cat_features=CAT_FEATURES,
+            allow_writing_files=False,
         )
         _run_rfe(
             "CatBoost | binary classification",
