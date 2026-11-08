@@ -27,7 +27,7 @@ def test_custom_metrics_handler_validate_raises_error_for_non_dict_input():
         - ValueError is raised when custom_metric is not a dict.
     """
     with pytest.raises(ValueError, match="dictionary"):
-        CustomMetricsHandler.validate_custom_metric_config(["not", "a", "dict"])
+        CustomMetricsHandler.validate_custom_metric_config(["not", "a", "dict"])  # ty: ignore[invalid-argument-type]
 
 
 @pytest.mark.parametrize("missing_key", ["name", "function", "metric_type", "direction"])

@@ -486,7 +486,7 @@ def test_ensemblemodel_stacking_meta_learner_trusts_memorising_model_less_out_of
     ).fit(X, y)
 
     in_sample = LinearRegression().fit(ensemble._generate_meta_features(X), y)
-    oof_tree_weight = ensemble.fitted_meta_learner_.coef_[0]
+    oof_tree_weight = ensemble.fitted_meta_learner_.coef_[0]  # ty: ignore[unresolved-attribute]
     if not oof_tree_weight < in_sample.coef_[0] - 0.3:
         raise AssertionError((oof_tree_weight, in_sample.coef_[0]))
 
@@ -525,5 +525,5 @@ def test_ensemblemodel_offset_column_matches_hand_rolled_lgb_train_with_init_sco
 
     if not np.allclose(ensemble.predict(X), expected, rtol=1e-6):
         raise AssertionError(np.abs(ensemble.predict(X) - expected).max())
-    if "log_exposure" in ensemble.fitted_estimators_[0].feature_name_:
+    if "log_exposure" in ensemble.fitted_estimators_[0].feature_name_:  # ty: ignore[unresolved-attribute]
         raise AssertionError("offset used as a feature")

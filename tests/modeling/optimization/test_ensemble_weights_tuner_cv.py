@@ -163,6 +163,8 @@ def test_tune_never_selects_weights_worse_than_uniform(small_classification_data
     n = len(estimators)
     uniform_score = tuner._score_weights(np.full(n, 1.0 / n), y_true, preds_list, fold_boundaries)
 
+    assert uniform_score is not None
+    assert tuner.best_score_ is not None
     if tuner.best_score_ < uniform_score - 1e-9:
         raise AssertionError()
 
@@ -203,7 +205,10 @@ def test_objective_prunes_degenerate_weights():
     mock_trial.suggest_float.side_effect = [0.5, -0.5]
 
     y_true = pd.Series([1.0, 2.0, 3.0, 4.0])
-    preds_list = [pd.Series([1.0, 2.0, 3.0, 4.0]), pd.Series([1.0, 2.0, 3.0, 4.0])]
+    preds_list: list[pd.Series | pd.DataFrame] = [
+        pd.Series([1.0, 2.0, 3.0, 4.0]),
+        pd.Series([1.0, 2.0, 3.0, 4.0]),
+    ]
     fold_boundaries = [0, 2, 4]
 
     with pytest.raises(optuna.TrialPruned):
@@ -240,7 +245,10 @@ def test_blend_predictions_shapes_classification_logits():
     """
     dummy_cv = _build_dummy_cv("Roc AUC", "classification")
     t = EnsembleWeightTunerCV([], dummy_cv, n_trials=1, allow_negative_weights=True)
-    preds_list = [pd.Series(np.full(10, 0.7)), pd.Series(np.full(10, 0.2))]
+    preds_list: list[pd.Series | pd.DataFrame] = [
+        pd.Series(np.full(10, 0.7)),
+        pd.Series(np.full(10, 0.2)),
+    ]
     weights = np.array([0.4, -0.6])
     blended = t._blend_predictions(preds_list, weights)
     if blended.shape != (10,):
@@ -260,7 +268,7 @@ def test_blend_predictions_multiclass_probability_normalization():
     t = EnsembleWeightTunerCV([], dummy_cv, n_trials=1)
     t.metric_type = "probs"
     columns = ["class_0", "class_1", "class_2"]
-    preds_list = [
+    preds_list: list[pd.Series | pd.DataFrame] = [
         pd.DataFrame(np.tile([[0.2, 0.3, 0.5]], (6, 1)), columns=columns),
         pd.DataFrame(np.tile([[0.1, 0.6, 0.3]], (6, 1)), columns=columns),
     ]

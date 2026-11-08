@@ -395,7 +395,7 @@ def test_categoricalaligner_fit_raises_on_invalid_fill_strategy(
     Asserts:
         - ValueError is raised mentioning the invalid strategy
     """
-    aligner = CategoricalAligner(variables=["color"], fill_strategy="median")
+    aligner = CategoricalAligner(variables=["color"], fill_strategy="median")  # ty: ignore[invalid-argument-type]
     with pytest.raises(ValueError, match="fill_strategy"):
         aligner.fit(categorical_training_data)
 

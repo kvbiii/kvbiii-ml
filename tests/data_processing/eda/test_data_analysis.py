@@ -162,11 +162,11 @@ def test_extract_unique_items_handles_various_inputs():
         raise AssertionError()
 
     # Test None/NaN
-    result = DataAnalyzer.extract_unique_items(None)
+    result = DataAnalyzer.extract_unique_items(None)  # ty: ignore[invalid-argument-type]
     if result != []:
         raise AssertionError()
 
-    result = DataAnalyzer.extract_unique_items(pd.NA)
+    result = DataAnalyzer.extract_unique_items(pd.NA)  # ty: ignore[invalid-argument-type]
     if result != []:
         raise AssertionError()
 

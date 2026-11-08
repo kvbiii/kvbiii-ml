@@ -48,7 +48,7 @@ def test_pipeline_basic_flow():
         custom_features_generation_before_preprocessing=before,
     )
     transformed = pipe.fit_transform(df, y=pd.Series([0, 1, 0, 1]))
-    cross_cols = steps[0].get_feature_names()
+    cross_cols = steps[0].get_feature_names()  # ty: ignore[unresolved-attribute]
     if not any(col in transformed.columns for col in cross_cols):
         raise AssertionError()
     if "ADDED" not in transformed.columns:

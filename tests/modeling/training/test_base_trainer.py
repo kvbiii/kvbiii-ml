@@ -594,7 +594,7 @@ def test_basetrainer_fit_estimator_does_not_pass_validation_set_as_x_test(
 
     X = sample_dataframe
     y = pd.Series(np.zeros(len(X)))
-    BaseTrainer.fit_estimator(_XTestEstimator(), X, y, X.iloc[:5], y.iloc[:5])
+    BaseTrainer.fit_estimator(_XTestEstimator(), X, y, X.iloc[:5], y.iloc[:5])  # ty: ignore[invalid-argument-type]
     if received["X_test"] is not None:
         raise AssertionError("validation set was passed as X_test")
 

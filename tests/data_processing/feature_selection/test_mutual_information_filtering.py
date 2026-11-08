@@ -354,11 +354,11 @@ def test_mutualinformationfiltering_prepare_x_y_for_mi_validates_inputs():
 
     # Test invalid X type
     with pytest.raises(ValueError, match="X must be a pandas DataFrame"):
-        mif._prepare_x_y_for_mi(np.array([[1, 2], [3, 4]]), pd.Series([0, 1]))
+        mif._prepare_x_y_for_mi(np.array([[1, 2], [3, 4]]), pd.Series([0, 1]))  # ty: ignore[invalid-argument-type]
 
     # Test invalid y type
     with pytest.raises(ValueError, match="y must be a pandas Series or numpy array"):
-        mif._prepare_x_y_for_mi(pd.DataFrame({"A": [1, 2]}), [[0, 1]])
+        mif._prepare_x_y_for_mi(pd.DataFrame({"A": [1, 2]}), [[0, 1]])  # ty: ignore[invalid-argument-type]
 
 
 def test_mutualinformationfiltering_prepare_x_y_for_mi_handles_categorical_features():
@@ -382,9 +382,9 @@ def test_mutualinformationfiltering_prepare_x_y_for_mi_handles_categorical_featu
     # discrete_features should be set for MI computation
     if "discrete_features" not in mif.mi_kwargs:
         raise AssertionError()
-    if not mif.mi_kwargs["discrete_features"][1]:
+    if not mif.mi_kwargs["discrete_features"][1]:  # ty: ignore[not-subscriptable]
         raise AssertionError()
-    if mif.mi_kwargs["discrete_features"][0]:
+    if mif.mi_kwargs["discrete_features"][0]:  # ty: ignore[not-subscriptable]
         raise AssertionError()
 
 

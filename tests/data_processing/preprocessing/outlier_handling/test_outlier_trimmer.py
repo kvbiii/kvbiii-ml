@@ -47,7 +47,7 @@ def test_outliertrimmerwithoriginal_transform_nans_out_of_bound_rows_across_capp
         kwargs["fold"] = 0.1
     if capping_method == "gaussian":
         kwargs["fold"] = 1.0
-    trimmer = OutlierTrimmerWithOriginal(variables=["salary"], **kwargs)
+    trimmer = OutlierTrimmerWithOriginal(variables=["salary"], **kwargs)  # ty: ignore[invalid-argument-type]
     trimmer.fit(salary_with_outlier)
     result = trimmer.transform(salary_with_outlier)
     if len(result) != len(salary_with_outlier):

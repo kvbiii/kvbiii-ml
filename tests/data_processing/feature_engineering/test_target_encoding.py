@@ -96,11 +96,11 @@ def test_targetencodingfeaturegenerator_validate_init_params_raises_error_for_in
     """
     # Test non-list features
     with pytest.raises(ValueError, match="features_names must be a list of strings"):
-        TargetEncodingFeatureGenerator(features_names="not_a_list")
+        TargetEncodingFeatureGenerator(features_names="not_a_list")  # ty: ignore[invalid-argument-type]
 
     # Test non-string elements in list
     with pytest.raises(ValueError, match="features_names must be a list of strings"):
-        TargetEncodingFeatureGenerator(features_names=["valid", 123, "also_valid"])
+        TargetEncodingFeatureGenerator(features_names=["valid", 123, "also_valid"])  # ty: ignore[invalid-argument-type]
 
 
 def test_targetencodingfeaturegenerator_validate_init_params_raises_error_for_invalid_aggregation():

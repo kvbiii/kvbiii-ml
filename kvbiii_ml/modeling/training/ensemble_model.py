@@ -1,5 +1,5 @@
 import warnings
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from typing import cast
@@ -33,7 +33,7 @@ class EnsembleModel(BaseEstimator):
         self,
         estimators: list,
         problem_type: str,
-        weights: np.ndarray | None = None,
+        weights: Sequence[float] | np.ndarray | None = None,
         meta_learner: Estimator | None = None,
         n_jobs: int = 1,
         cv: BaseCrossValidator | None = None,
@@ -67,7 +67,7 @@ class EnsembleModel(BaseEstimator):
         Args:
             estimators (list): Base estimators to include in the ensemble.
             problem_type (str): Problem type, either "classification" or "regression".
-            weights (np.ndarray | None): Estimator weights (normalised); None means equal.
+            weights (Sequence[float] | np.ndarray | None): Normalised weights; None means equal.
             meta_learner (Estimator | None): Stacking meta-learner; None means blending.
             n_jobs (int): Base estimators fitted concurrently, in threads.
             cv (BaseCrossValidator | None): Splitter for out-of-fold stacking meta-features.
@@ -154,11 +154,13 @@ class EnsembleModel(BaseEstimator):
             ):
                 return estimator
 
-    def _validate_and_normalize_weights(self, weights: np.ndarray | None) -> np.ndarray:
+    def _validate_and_normalize_weights(
+        self, weights: Sequence[float] | np.ndarray | None
+    ) -> np.ndarray:
         """Validate and normalize estimator weights.
 
         Args:
-            weights (np.ndarray | None): Input weights or None.
+            weights (Sequence[float] | np.ndarray | None): Input weights or None.
 
         Returns:
             np.ndarray: Normalized weights that sum to 1.

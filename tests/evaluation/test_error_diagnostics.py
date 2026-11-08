@@ -22,7 +22,7 @@ def test_get_top_regression_under_over_errors_raises_typeerror_for_non_series_y_
     y_pred = np.array([1.1, 2.2, 2.8])
 
     with pytest.raises(TypeError, match="y_true must be a pandas Series"):
-        get_top_regression_under_over_errors(y_true, y_pred)
+        get_top_regression_under_over_errors(y_true, y_pred)  # ty: ignore[invalid-argument-type]
 
 
 def test_get_top_regression_under_over_errors_protects_against_zero_true_values():
@@ -116,7 +116,10 @@ def test_get_top_classification_errors_raises_typeerror_for_non_series_y_true():
 
     with pytest.raises(TypeError, match="y_true must be a pandas Series"):
         get_top_classification_errors(
-            y_true, y_pred_proba, class_id=0, id2label={0: "neg", 1: "pos"}
+            y_true,  # ty: ignore[invalid-argument-type]
+            y_pred_proba,
+            class_id=0,
+            id2label={0: "neg", 1: "pos"},
         )
 
 

@@ -43,7 +43,7 @@ class DummyExplainer:
             _DummyExplanation: Explanation with `.values` of ones and zero `.base_values`.
         """
         arr = X.values if hasattr(X, "values") else X  # noqa: PD011
-        return _DummyExplanation(np.ones_like(arr, dtype=float), np.zeros(arr.shape[0]))
+        return _DummyExplanation(np.ones_like(arr, dtype=float), np.zeros(arr.shape[0]))  # ty: ignore[unresolved-attribute]
 
 
 @pytest.fixture(autouse=True)

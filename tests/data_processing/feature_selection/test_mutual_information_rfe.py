@@ -254,7 +254,7 @@ def test_prepare_x_y_categorical_mi_rfe():
         raise AssertionError()
     if not pd.api.types.is_numeric_dtype(prepared_x["b"]):
         raise AssertionError()
-    if not prepared_y.equals(y):
+    if not prepared_y.equals(y):  # ty: ignore[unresolved-attribute]
         raise AssertionError()
 
 
@@ -267,7 +267,7 @@ def test_prepare_x_y_for_mi_rejects_invalid_y_type():
     selector = _build_selector(steps=2)
     X = pd.DataFrame({"a": [1, 2, 3]})
     with pytest.raises(ValueError, match="y must be a pandas Series or numpy array"):
-        selector._prepare_x_y_for_mi(X, [0, 1, 0])
+        selector._prepare_x_y_for_mi(X, [0, 1, 0])  # ty: ignore[invalid-argument-type]
 
 
 def test_convert_categorical_to_codes():
