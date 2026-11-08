@@ -6,11 +6,7 @@ import pandas as pd
 
 
 class CustomMetricsHandler:
-    """Handler for extracting and wrapping custom metrics from configuration dictionaries.
-
-    This class validates custom metric configurations and creates wrapped metric functions
-    that properly handle additional data and parameters beyond y_true and y_pred.
-    """
+    """Extract and wrap custom metrics from configuration dictionaries."""
 
     @staticmethod
     def validate_custom_metric_config(custom_metric: dict[str, Any]) -> None:
@@ -48,25 +44,20 @@ class CustomMetricsHandler:
     def extract_metric_details(
         custom_metric: dict[str, Any],
     ) -> tuple[str, Callable[..., float], str, str]:
-        """Extract and validate metric details from a configuration dictionary.
+        """Validate a metric configuration, raising ValueError if invalid, and return its details.
 
-        This method validates the custom metric configuration and returns a wrapped
-        metric function that properly handles parameters.
+        Configuration keys:
+        - name (str): Metric name. Required.
+        - function (Callable[..., float]): ``f(y_true, y_pred, **kwargs)``. Required.
+        - metric_type (str): "preds" or "probs". Required.
+        - direction (str): "minimize" or "maximize". Required.
+        - kwargs (dict[str, Any]): Extra keyword arguments passed to the function on every call.
 
         Args:
-            custom_metric (dict[str, Any]): Configuration dictionary with keys:
-                - name (str): Metric name. Required.
-                - function (Callable[..., float]): ``f(y_true, y_pred, **kwargs)``. Required.
-                - metric_type (str): "preds" or "probs". Required.
-                - direction (str): "minimize" or "maximize". Required.
-                - kwargs (dict[str, Any], optional): Extra keyword arguments passed to
-                  the metric function on every call.
+            custom_metric (dict[str, Any]): Configuration dictionary with the keys above.
 
         Returns:
-            tuple[str, Callable[..., float], str, str]: Tuple of (metric_name, wrapped_metric_function, metric_type, metric_direction)
-
-        Raises:
-            ValueError: If the configuration is invalid.
+            tuple[str, Callable[..., float], str, str]: Name, wrapped function, type, direction.
         """
         CustomMetricsHandler.validate_custom_metric_config(custom_metric)
 
@@ -77,7 +68,7 @@ class CustomMetricsHandler:
         kwargs = custom_metric.get("kwargs", {})
 
         def wrapped_metric(y_true: pd.Series | np.ndarray, y_pred: pd.Series | np.ndarray) -> float:
-            """Wrapped metric function that injects parameters."""
+            """Call the metric function with the configured kwargs."""
             return metric_function(y_true, y_pred, **kwargs)
 
         return metric_name, wrapped_metric, metric_type, metric_direction

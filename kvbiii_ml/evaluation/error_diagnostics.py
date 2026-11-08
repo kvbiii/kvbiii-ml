@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from pandas.io.formats.style import Styler
 
 try:  # optional notebook dependency
     from IPython.display import display
@@ -21,10 +22,8 @@ def get_top_regression_under_over_errors(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Compute top under- and over-estimated observations.
 
-    Percentage error is (pred - true) / true * 100. Very small or zero true
-    values are protected by ``epsilon`` to avoid division by zero. When
-    ``log`` is True, y_true and y_pred are treated as log-scaled values and
-    additional exponentiated columns are included.
+    - Percentage error is (pred - true) / true * 100, with zero true values replaced by ``epsilon``.
+    - When ``log`` is True, inputs are log-scaled and exponentiated columns are added.
 
     Args:
         y_true (pd.Series): True target values (index-aligned).
@@ -35,6 +34,9 @@ def get_top_regression_under_over_errors(
 
     Returns:
         tuple[pd.DataFrame, pd.DataFrame]: (underestimated_df, overestimated_df) DataFrames.
+
+    Raises:
+        TypeError: If y_true is not a pandas Series.
     """
     if not isinstance(y_true, pd.Series):
         raise TypeError("y_true must be a pandas Series aligned to predictions.")
@@ -50,7 +52,7 @@ def get_top_regression_under_over_errors(
     # Overestimated -> positive pct_error (prediction > true)
     overestimated = pct_error[pct_error > 0].sort_values(ascending=False).head(top_n)
 
-    def _build(df_index):
+    def _build(df_index: pd.Index) -> pd.DataFrame:
         df = pd.DataFrame(
             {
                 "True Value": y_true.loc[df_index],
@@ -74,17 +76,14 @@ def get_top_regression_under_over_errors(
 def display_regression_under_over_errors(
     underestimated_df: pd.DataFrame, overestimated_df: pd.DataFrame
 ) -> None:
-    """Display styled tables of under- and over-estimated observations.
+    """Display styled tables of under- and over-estimated observations (best in notebooks).
 
     Args:
-        underestimated_df (pd.DataFrame): Output from ``get_top_under_overestimated`` for underestimated rows.
-        overestimated_df (pd.DataFrame): Output from ``get_top_under_overestimated`` for overestimated rows.
-
-    Returns:
-        None: This function renders styled tables (best viewed in notebooks).
+        underestimated_df (pd.DataFrame): First result of get_top_regression_under_over_errors.
+        overestimated_df (pd.DataFrame): Second result of get_top_regression_under_over_errors.
     """
 
-    def _style(df: pd.DataFrame, title: str):
+    def _style(df: pd.DataFrame, title: str) -> Styler:
         fmt: dict[str, str] = {}
         for col in df.columns:
             if df[col].dtype.kind in "fc":
@@ -163,9 +162,8 @@ def get_top_classification_errors(
     """
     Get top classification errors for a specific class based on biggest probability difference.
 
-    The function always returns errors (false positives and false negatives)
-    sorted by the magnitude of the difference between the model's predicted
-    class probability and the true class probability (higher = more confident error).
+    Errors are sorted by the gap between the predicted and the true class probability
+    (higher = more confident error). Cutoff examples: binary 0.7, multi-class [0.3, 0.4, 0.3].
 
     Args:
         y_true (pd.Series): True class labels (index-aligned).
@@ -173,13 +171,14 @@ def get_top_classification_errors(
         class_id (int): Target class ID to analyze errors for.
         id2label (dict[int, str]): Mapping from class index to class name.
         top_n (int, optional): Number of rows to return. Defaults to 15.
-        cutoff (float | list[float] | None): Custom threshold(s) for classification.
-            - For binary: single float (e.g., 0.7)
-            - For multi-class: list of floats, one per class (e.g., [0.3, 0.4, 0.3])
-            If None, uses argmax for predictions.
+        cutoff (float | list[float] | None): Binary float or per-class list; None means argmax.
 
     Returns:
         pd.DataFrame: Top classification errors sorted by confidence/error magnitude.
+
+    Raises:
+        TypeError: If y_true is not a pandas Series.
+        ValueError: If sample counts or cutoffs do not match, or class_id is out of bounds.
     """
     if not isinstance(y_true, pd.Series):
         raise TypeError("y_true must be a pandas Series aligned to predictions.")
@@ -205,7 +204,8 @@ def get_top_classification_errors(
             cutoff_array = np.array(cutoff)
             if y_pred_proba.shape[1] != len(cutoff_array):
                 raise ValueError(
-                    f"Number of cutoffs ({len(cutoff_array)}) must match number of classes ({y_pred_proba.shape[1]})"
+                    f"Number of cutoffs ({len(cutoff_array)}) must match "
+                    f"number of classes ({y_pred_proba.shape[1]})"
                 )
             normalized = y_pred_proba / cutoff_array
             predicted_classes = np.argmax(normalized, axis=1)
@@ -251,14 +251,11 @@ def display_classification_errors(errors_by_class: dict, id2label: dict[int, str
     """Display styled tables of classification errors for each class.
 
     Args:
-        errors_by_class (dict): Dictionary mapping class_id to error DataFrame from get_top_classification_errors.
+        errors_by_class (dict): Error DataFrame per class_id from get_top_classification_errors.
         id2label (dict[int, str]): Mapping from class index to class name.
-
-    Returns:
-        None: This function renders styled tables (best viewed in notebooks).
     """
 
-    def _style(df: pd.DataFrame, title: str):
+    def _style(df: pd.DataFrame, title: str) -> Styler:
         fmt: dict[str, str] = {}
         for col in df.columns:
             if df[col].dtype.kind in "fc" and "Probability" in col:
@@ -334,7 +331,7 @@ if __name__ == "__main__":
     prob_pos = 1 / (1 + np.exp(-raw_scores))
     errors_by_class = {}
     id2label = {0: "Negative", 1: "Positive"}
-    for class_id, class_name in id2label.items():
+    for class_id in id2label:
         df = get_top_classification_errors(
             y_true_cls, prob_pos, class_id=class_id, id2label=id2label, top_n=10
         )

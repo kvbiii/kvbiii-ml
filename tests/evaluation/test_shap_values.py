@@ -42,7 +42,7 @@ class DummyExplainer:
         Returns:
             _DummyExplanation: Explanation with `.values` of ones and zero `.base_values`.
         """
-        arr = X.values if hasattr(X, "values") else X
+        arr = X.values if hasattr(X, "values") else X  # noqa: PD011
         return _DummyExplanation(np.ones_like(arr, dtype=float), np.zeros(arr.shape[0]))
 
 
@@ -52,9 +52,6 @@ def patch_tree_explainer(monkeypatch: pytest.MonkeyPatch):
 
     Args:
         monkeypatch (pytest.MonkeyPatch): Pytest monkeypatch fixture.
-
-    Yields:
-        None: Control back to the test after patching is applied.
     """
     monkeypatch.setattr(
         shap_module,
@@ -68,7 +65,6 @@ def patch_tree_explainer(monkeypatch: pytest.MonkeyPatch):
             },
         ),
     )
-    yield
 
 
 def test_computeshapvalues_single_model_path():
@@ -89,7 +85,7 @@ def test_computeshapvalues_single_model_path():
 
     if not hasattr(exp, "values"):
         raise AssertionError()
-    if exp.values.shape != (5, 3):
+    if exp.values.shape != (5, 3):  # noqa: PD011
         raise AssertionError()
 
 
@@ -112,7 +108,7 @@ def test_computeshapvalues_ensemble_model_path_weights():
     X = pd.DataFrame(np.random.randn(4, 2), columns=["f0", "f1"])
     exp = shap_module.compute_shap_values(ens, X)
 
-    if exp.values.shape != (4, 2):
+    if exp.values.shape != (4, 2):  # noqa: PD011
         raise AssertionError()
 
 
@@ -135,7 +131,7 @@ def test_computeshapvalues_ensemble_uniform_weights_fallback():
     X = pd.DataFrame(np.random.randn(3, 2), columns=["f0", "f1"])
     exp = shap_module.compute_shap_values(obj, X)
 
-    if exp.values.shape != (3, 2):
+    if exp.values.shape != (3, 2):  # noqa: PD011
         raise AssertionError()
 
 
@@ -175,7 +171,7 @@ def test_computeshapvalues_ensemble_skips_histgradientboosting_submodel():
     X = pd.DataFrame(np.random.randn(4, 2), columns=["f0", "f1"])
     exp = shap_module.compute_shap_values(ens, X)
 
-    if exp.values.shape != (4, 2):
+    if exp.values.shape != (4, 2):  # noqa: PD011
         raise AssertionError()
 
 
@@ -222,7 +218,7 @@ def test_computeshapvalues_ensemble_skips_nested_ensemble_with_too_many_estimato
     X = pd.DataFrame(np.random.randn(4, 2), columns=["f0", "f1"])
     exp = shap_module.compute_shap_values(ens, X)
 
-    if exp.values.shape != (4, 2):
+    if exp.values.shape != (4, 2):  # noqa: PD011
         raise AssertionError()
 
 
@@ -302,7 +298,7 @@ def test_computesinglemodelshap_falls_back_to_values_on_attributeerror(
     X = pd.DataFrame(np.random.randn(4, 2), columns=["f0", "f1"])
     exp = shap_module._compute_single_model_shap(GoodModel(), X)
 
-    if exp.values.shape != (4, 2):
+    if exp.values.shape != (4, 2):  # noqa: PD011
         raise AssertionError()
 
 

@@ -22,13 +22,19 @@ from sklearn.metrics import (
 
 MetricFunction = Callable[..., float]
 TWEEDIE_POWER = 1.5
+PROBA_MATRIX_NDIM = 2
+BINARY_N_CLASSES = 2
 
 
 def _root_mean_squared_percentage_error(
     y_true_values: np.ndarray,
     y_pred_values: np.ndarray,
 ) -> float:
-    """Computes root mean squared percentage error."""
+    """Compute root mean squared percentage error.
+
+    Raises:
+        ValueError: If all true values are zero.
+    """
     y_true_array = np.asarray(y_true_values, dtype=float)
     y_pred_array = np.asarray(y_pred_values, dtype=float)
     non_zero_mask = y_true_array != 0
@@ -42,21 +48,20 @@ def _root_mean_squared_percentage_error(
 def _brier_score(y_true: np.ndarray, y_prob: np.ndarray) -> float:
     """Compute Brier score for binary and multiclass problems.
 
-    Binary: standard brier_score_loss on the positive-class column.
-    Multiclass: mean OVR brier_score_loss across all classes.
+    - Binary: standard brier_score_loss on the positive-class column.
+    - Multiclass: mean OVR brier_score_loss across all classes.
 
     Args:
         y_true (np.ndarray): True labels of shape (n_samples,).
-        y_prob (np.ndarray): Probabilities, either 1d for binary or
-            (n_samples, n_classes) for multiclass/binary matrix input.
+        y_prob (np.ndarray): Probabilities, 1d for binary or (n_samples, n_classes) as a matrix.
 
     Returns:
         float: Brier score (lower is better).
     """
     y_prob_arr = np.asarray(y_prob)
     y_true_arr = np.asarray(y_true)
-    if y_prob_arr.ndim == 2:
-        if y_prob_arr.shape[1] == 2:
+    if y_prob_arr.ndim == PROBA_MATRIX_NDIM:
+        if y_prob_arr.shape[1] == BINARY_N_CLASSES:
             return float(brier_score_loss(y_true_arr, y_prob_arr[:, 1]))
         classes = np.unique(y_true_arr)
         return float(
@@ -91,7 +96,11 @@ METRICS_NAMES: dict[str, MetricFunction] = {
         y_true,
         (
             y_score[:, 1]
-            if (hasattr(y_score, "ndim") and y_score.ndim == 2 and y_score.shape[1] == 2)
+            if (
+                hasattr(y_score, "ndim")
+                and y_score.ndim == PROBA_MATRIX_NDIM
+                and y_score.shape[1] == BINARY_N_CLASSES
+            )
             else y_score
         ),
     ),
@@ -140,7 +149,7 @@ METRICS: dict[str, tuple[MetricFunction, str, str]] = {
 
 
 def get_metric_function(metric_name: str) -> MetricFunction:
-    """Gets the metric function by name.
+    """Get the metric function by name.
 
     Args:
         metric_name (str): Name of the metric.
@@ -159,7 +168,7 @@ def get_metric_function(metric_name: str) -> MetricFunction:
 
 
 def get_metric_type(metric_name: str) -> str:
-    """Gets the prediction type required for the metric.
+    """Get the prediction type required for the metric.
 
     Args:
         metric_name (str): Name of the metric.
@@ -178,7 +187,7 @@ def get_metric_type(metric_name: str) -> str:
 
 
 def get_metric_direction(metric_name: str) -> str:
-    """Gets the optimization direction for the metric.
+    """Get the optimization direction for the metric.
 
     Args:
         metric_name (str): Name of the metric.
@@ -197,7 +206,7 @@ def get_metric_direction(metric_name: str) -> str:
 
 
 def list_available_metrics() -> list[str]:
-    """Lists all available metric names.
+    """List all available metric names.
 
     Returns:
         list[str]: List of available metric names.

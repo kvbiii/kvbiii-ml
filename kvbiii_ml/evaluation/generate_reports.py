@@ -19,6 +19,8 @@ from sklearn.metrics import (
     root_mean_squared_error,
 )
 
+BINARY_N_CLASSES = 2
+
 
 def _apply_fancy_styling(
     styled_df: Styler,
@@ -120,7 +122,7 @@ def regression_results(
     """
 
     def _safe_mape(y_true: pd.Series | np.ndarray, y_pred: np.ndarray) -> float:
-        """Computes MAPE on non-zero targets to avoid division by zero."""
+        """Compute MAPE on non-zero targets to avoid division by zero."""
         y_true_array = np.asarray(y_true)
         y_pred_array = np.asarray(y_pred)
         non_zero_mask = y_true_array != 0
@@ -178,7 +180,7 @@ def _per_class_roc_auc(
 
 def _build_per_class_split(
     y_true: pd.Series | np.ndarray,
-    y_pred: np.ndarray,
+    y_pred: pd.Series | np.ndarray,
     y_proba: np.ndarray | None,
     classes: np.ndarray,
     split_label: str,
@@ -211,7 +213,7 @@ def _safe_roc_auc(
     try:
         return (
             roc_auc_score(y_true, y_proba[:, 1] if y_proba.ndim > 1 else y_proba)
-            if len(np.unique(y_true)) == 2
+            if len(np.unique(y_true)) == BINARY_N_CLASSES
             else roc_auc_score(y_true, y_proba, multi_class="ovr", average=average)
         )
     except (ValueError, IndexError):
@@ -240,8 +242,7 @@ def _apply_cutoff(
 
     Args:
         y_proba (np.ndarray): Predicted probabilities.
-        cutoff_val (float | list[float]): Single threshold for binary or per-class
-            thresholds for multiclass.
+        cutoff_val (float | list[float]): Binary threshold, or per-class thresholds for multiclass.
 
     Returns:
         np.ndarray: Integer class predictions.
@@ -266,9 +267,9 @@ def _apply_cutoff(
 
 def _build_overall_table(
     y_train_true: pd.Series | np.ndarray,
-    y_train_pred: np.ndarray,
+    y_train_pred: pd.Series | np.ndarray,
     y_test_true: pd.Series | np.ndarray,
-    y_test_pred: np.ndarray,
+    y_test_pred: pd.Series | np.ndarray,
     y_train_proba: np.ndarray | None,
     y_test_proba: np.ndarray | None,
     average: str,
@@ -279,9 +280,9 @@ def _build_overall_table(
 
     Args:
         y_train_true (pd.Series | np.ndarray): True training labels.
-        y_train_pred (np.ndarray): Predicted training labels.
+        y_train_pred (pd.Series | np.ndarray): Predicted training labels.
         y_test_true (pd.Series | np.ndarray): True test labels.
-        y_test_pred (np.ndarray): Predicted test labels.
+        y_test_pred (pd.Series | np.ndarray): Predicted test labels.
         y_train_proba (np.ndarray | None): Training probabilities for ROC-AUC/Log Loss.
         y_test_proba (np.ndarray | None): Test probabilities for ROC-AUC/Log Loss.
         average (str): Averaging strategy for multi-class metrics.
@@ -324,9 +325,9 @@ def _build_overall_table(
 
 def _build_per_class_table(
     y_train_true: pd.Series | np.ndarray,
-    y_train_pred: np.ndarray,
+    y_train_pred: pd.Series | np.ndarray,
     y_test_true: pd.Series | np.ndarray,
-    y_test_pred: np.ndarray,
+    y_test_pred: pd.Series | np.ndarray,
     y_train_proba: np.ndarray | None,
     y_test_proba: np.ndarray | None,
     classes: np.ndarray,
@@ -337,9 +338,9 @@ def _build_per_class_table(
 
     Args:
         y_train_true (pd.Series | np.ndarray): True training labels.
-        y_train_pred (np.ndarray): Predicted training labels.
+        y_train_pred (pd.Series | np.ndarray): Predicted training labels.
         y_test_true (pd.Series | np.ndarray): True test labels.
-        y_test_pred (np.ndarray): Predicted test labels.
+        y_test_pred (pd.Series | np.ndarray): Predicted test labels.
         y_train_proba (np.ndarray | None): Training probabilities for per-class ROC-AUC.
         y_test_proba (np.ndarray | None): Test probabilities for per-class ROC-AUC.
         classes (np.ndarray): Unique class labels.
@@ -380,32 +381,22 @@ def classification_results(
     """
     Generate comprehensive styled DataFrames with classification evaluation metrics.
 
-    Always returns an overall metrics table computed with the original predictions
-    (default cutoffs, typically 0.5). When `cutoffs` is provided, a second overall table
-    is appended using the custom threshold(s) applied to probabilities. For multiclass
-    problems (> 2 classes), matching per-class tables are appended in the same order.
+    - Without ``cutoffs``: returns (overall, per-class) at the default cutoff (typically 0.5).
+    - With ``cutoffs``: returns (overall, overall at cutoff, per-class, per-class at cutoff).
 
     Args:
         y_train_true (pd.Series | np.ndarray): True training target values.
         y_train_pred (np.ndarray): Predicted training target values.
         y_test_true (pd.Series | np.ndarray): True testing target values.
         y_test_pred (np.ndarray): Predicted testing target values.
-        y_train_proba (np.ndarray | None, optional): Predicted probabilities for train. Defaults to None.
-        y_test_proba (np.ndarray | None, optional): Predicted probabilities for test. Defaults to None.
-        id2label (dict[int, str] | None, optional): Mapping from class indices to labels for nicer display. Defaults to None (uses class indices).
-        cutoffs (float | list[float] | None, optional): Custom threshold(s). For binary: single float. For multi-class: list of floats per class. Defaults to None.
-        average (str, optional): Averaging method for multi-class metrics. Defaults to "weighted".
+        y_train_proba (np.ndarray | None): Predicted probabilities for train. Defaults to None.
+        y_test_proba (np.ndarray | None): Predicted probabilities for test. Defaults to None.
+        id2label (dict[int, str] | None): Class index to label mapping. Defaults to None (indices).
+        cutoffs (float | list[float] | None): Binary float or per-class list. Defaults to None.
+        average (str): Averaging method for multi-class metrics. Defaults to "weighted".
 
     Returns:
-        tuple[Styler, Styler] | tuple[Styler, Styler, Styler, Styler]:
-            When ``cutoffs`` is None (always 2 tables):
-                [0] overall_metrics_styled  — overall metrics at default cutoff.
-                [1] per_class_metrics_styled — per-class metrics at default cutoff.
-            When ``cutoffs`` is provided (always 4 tables):
-                [0] overall_metrics_styled         — overall, default cutoff.
-                [1] overall_metrics_cutoff_styled  — overall, custom cutoff.
-                [2] per_class_metrics_styled        — per-class, default cutoff.
-                [3] per_class_metrics_cutoff_styled — per-class, custom cutoff.
+        tuple[Styler, ...]: Two styled tables, or four when ``cutoffs`` is provided.
 
     Raises:
         ValueError: If ``cutoffs`` is provided but probabilities or ``id2label`` are missing.
