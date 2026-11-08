@@ -664,6 +664,7 @@ if __name__ == "__main__":
 
         x_tr, y_tr = _make_data(N_LABELED, n_classes=2, seed=RANDOM_STATE)
         x_unl, _ = _make_data(N_UNLABELED, n_classes=2, seed=RANDOM_STATE + 99)
+
         print("\n>>> Scenario 2: Binary + top_k threshold (top 20%)")
         _run_scenario(
             "Binary + LightGBM + top_k threshold",

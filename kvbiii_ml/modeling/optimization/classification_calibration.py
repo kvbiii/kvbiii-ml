@@ -269,7 +269,7 @@ class ClassificationCalibrator:
         Args:
             estimator (BaseEstimator): Unfitted estimator or EnsembleModel to calibrate.
             cross_validator (CrossValidationTrainer): Configured CV trainer.
-            methods (Iterable[str] | None): "isotonic" and/or "sigmoid". Defaults to both.
+            methods (Iterable[str] | None): "isotonic" and/or "sigmoid"; None means both.
             n_bins (int): Number of bins for ECE computation and calibration curves. Defaults to 10.
             seed (int): Seed for the winning CalibratedModel's hold-out split. Defaults to 17.
             id2label (dict[int, str] | None): Class labels for plot titles. Defaults to None.
