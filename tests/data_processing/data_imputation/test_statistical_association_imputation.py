@@ -113,5 +113,20 @@ def test_imputer_handles_all_missing_column():
         raise AssertionError()
 
 
+def test_transform_verbose_imputes_categorical_and_numeric_features():
+    """Verbose transform should impute a categorical feature without the numeric KS test."""
+    df = pd.DataFrame(
+        {
+            "cat": ["x", "y", None, "x", "y", None, "x", "y"],
+            "num": [1.2, 2.3, 2.1, np.nan, 3.4, 1.0, 0.5, 2.2],
+            "other": ["u", "v", "u", "u", "v", "u", "v", "v"],
+        }
+    )
+    imputer = StatisticalAssociationImputer(verbose=True)
+    result = imputer.fit_transform(df)
+    if result[["cat", "num"]].isna().any().any():
+        raise AssertionError()
+
+
 if __name__ == "__main__":
     print("Run this file with pytest to execute tests.")

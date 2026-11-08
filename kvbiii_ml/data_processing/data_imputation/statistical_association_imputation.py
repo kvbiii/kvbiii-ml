@@ -133,7 +133,7 @@ class StatisticalAssociationImputer:
 
             df = self.impute_with_stats(df, feature, feature_info["stats"], selected_cols)
 
-            if self.verbose:
+            if self.verbose and pd.api.types.is_numeric_dtype(df[feature]):
                 self.ks_test(df, feature)
 
             df[feature] = df["imputed"]
