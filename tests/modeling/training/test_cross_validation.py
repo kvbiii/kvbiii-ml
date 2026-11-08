@@ -120,7 +120,7 @@ def test_crossvalidationtrainer_validate_pipeline_raises_for_invalid_state():
           to a non-Pipeline value raises TypeError.
     """
     trainer = CrossValidationTrainer(problem_type="classification", metric_name="Accuracy")
-    trainer.preprocessing_pipeline = "not_a_pipeline"
+    trainer.preprocessing_pipeline = "not_a_pipeline"  # ty: ignore[invalid-assignment]
 
     with pytest.raises(TypeError, match="must be an sklearn Pipeline or None"):
         trainer.validate_pipeline()

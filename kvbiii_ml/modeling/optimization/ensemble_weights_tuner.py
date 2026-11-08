@@ -1,7 +1,7 @@
 import copy
 import itertools
 import warnings
-from typing import ClassVar
+from typing import ClassVar, Literal, overload
 
 import numpy as np
 import optuna
@@ -532,6 +532,26 @@ class EnsembleWeightTunerCV:
         trainer.fitted_estimators_ = []
         trainer.fitted_pipelines_ = []
         return trainer
+
+    @overload
+    def _score_weights(
+        self,
+        weights: np.ndarray,
+        y_true: pd.Series,
+        preds_list: list[pd.Series | pd.DataFrame],
+        fold_boundaries: list[int],
+        return_fold_scores: Literal[False] = False,
+    ) -> float | None: ...
+
+    @overload
+    def _score_weights(
+        self,
+        weights: np.ndarray,
+        y_true: pd.Series,
+        preds_list: list[pd.Series | pd.DataFrame],
+        fold_boundaries: list[int],
+        return_fold_scores: Literal[True],
+    ) -> tuple[float | None, list[float]]: ...
 
     def _score_weights(
         self,

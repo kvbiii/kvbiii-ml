@@ -43,7 +43,7 @@ def _tqdm_joblib_callback(progress_bar: tqdm) -> Generator[tqdm, None, None]:
             progress_bar.update(self.batch_size)
             return super().__call__(*args, **kwargs)
 
-    joblib.parallel.BatchCompletionCallBack = _TqdmBatchCompletionCallback
+    joblib.parallel.BatchCompletionCallBack = _TqdmBatchCompletionCallback  # ty: ignore[invalid-assignment]
     try:
         yield progress_bar
     finally:
