@@ -1,9 +1,16 @@
 from ast import literal_eval
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import pandas as pd
+from pandas.io.formats.style import Styler
 from scipy.stats import chi2_contingency, kruskal, ks_2samp, wasserstein_distance
 from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
+
+from kvbiii_ml._typing import StylerFormat
+
+if TYPE_CHECKING:
+    from pandas.io.formats.style_render import CSSDict
 
 BINARY_CARDINALITY = 2
 MIN_ITEMS_TO_COMPARE = 2
@@ -42,14 +49,14 @@ class DataAnalyzer:
     """
 
     @staticmethod
-    def base_information(data: pd.DataFrame) -> pd.DataFrame:
+    def base_information(data: pd.DataFrame) -> Styler:
         """Generates base information about the dataset.
 
         Args:
             data (pd.DataFrame): The input DataFrame to analyze.
 
         Returns:
-            pd.DataFrame: A styled DataFrame with base information about each feature
+            Styler: A styled DataFrame with base information about each feature
                 including data types, missing values, unique values, and counts.
         """
         df = pd.DataFrame(data.dtypes, columns=["dtypes"])
@@ -59,14 +66,16 @@ class DataAnalyzer:
         df["Count"] = data.count().to_numpy()
         df = df.reset_index().rename(columns={"index": "Feature"})
         styled_df = (
-            df.style.set_caption("📝 Base Information")
-            .format(
-                {
-                    "Number of missing values": "{:,.0f}",
-                    "Percentage of missing values": "{:.2f}%",
-                    "Unique values": "{:,.0f}",
-                    "Count": "{:,.0f}",
-                }
+            cast(
+                "Styler",
+                df.style.set_caption("📝 Base Information").format(
+                    {
+                        "Number of missing values": "{:,.0f}",
+                        "Percentage of missing values": "{:.2f}%",
+                        "Unique values": "{:,.0f}",
+                        "Count": "{:,.0f}",
+                    }
+                ),
             )
             .bar(
                 subset=["Percentage of missing values"],
@@ -151,7 +160,7 @@ class DataAnalyzer:
         return list({str(feature).strip().lower() for feature in item_list})
 
     @staticmethod
-    def describe_numerical_feature(data: pd.DataFrame, feature: str) -> pd.DataFrame:
+    def describe_numerical_feature(data: pd.DataFrame, feature: str) -> Styler:
         """Provides enhanced numerical feature analysis with styling.
 
         Args:
@@ -159,7 +168,7 @@ class DataAnalyzer:
             feature (str): The numerical feature name to analyze.
 
         Returns:
-            pd.DataFrame: A styled DataFrame with comprehensive statistics including
+            Styler: A styled DataFrame with comprehensive statistics including
                 descriptive statistics, percentiles, variance, skewness, and kurtosis.
         """
         stats = data[feature].describe().T
@@ -206,25 +215,27 @@ class DataAnalyzer:
         stats_df = stats.to_frame().T
 
         styled_stats = (
-            stats_df.style.set_caption(f"📈 {feature} Statistics")
-            .format(
-                {
-                    "Count": "{:,.0f}",
-                    "Mean": "{:,.2f}",
-                    "Std": "{:,.2f}",
-                    "Min": "{:,.2f}",
-                    "5%": "{:,.2f}",
-                    "Q1": "{:,.2f}",
-                    "Median": "{:,.2f}",
-                    "Q3": "{:,.2f}",
-                    "95%": "{:,.2f}",
-                    "Max": "{:,.2f}",
-                    "variance": "{:,.2f}",
-                    "skewness": "{:,.2f}",
-                    "kurtosis": "{:,.2f}",
-                    "Missing": "{:,.0f}",
-                    "Missing (%)": "{:.2f}%",
-                }
+            cast(
+                "Styler",
+                stats_df.style.set_caption(f"📈 {feature} Statistics").format(
+                    {
+                        "Count": "{:,.0f}",
+                        "Mean": "{:,.2f}",
+                        "Std": "{:,.2f}",
+                        "Min": "{:,.2f}",
+                        "5%": "{:,.2f}",
+                        "Q1": "{:,.2f}",
+                        "Median": "{:,.2f}",
+                        "Q3": "{:,.2f}",
+                        "95%": "{:,.2f}",
+                        "Max": "{:,.2f}",
+                        "variance": "{:,.2f}",
+                        "skewness": "{:,.2f}",
+                        "kurtosis": "{:,.2f}",
+                        "Missing": "{:,.0f}",
+                        "Missing (%)": "{:.2f}%",
+                    }
+                ),
             )
             .set_properties(
                 **{
@@ -253,7 +264,7 @@ class DataAnalyzer:
     @staticmethod
     def describe_categorical_feature(
         data: pd.DataFrame, feature: str, top_n: int = 10, show_null: bool = True
-    ) -> pd.DataFrame:
+    ) -> Styler:
         """Provides enhanced categorical feature analysis with styling.
 
         Args:
@@ -263,7 +274,7 @@ class DataAnalyzer:
             show_null (bool, optional): Whether to include null values in the analysis.
 
         Returns:
-            pd.DataFrame: A styled DataFrame with category distribution including
+            Styler: A styled DataFrame with category distribution including
                 counts and percentages.
         """
         data_copy = data.copy()
@@ -287,8 +298,12 @@ class DataAnalyzer:
         )
 
         styled_stats = (
-            stats.style.set_caption(f"📊 {feature} Distribution")
-            .format({"Count": "{:,.0f}", "Percentage (%)": "{:.2f}%"})
+            cast(
+                "Styler",
+                stats.style.set_caption(f"📊 {feature} Distribution").format(
+                    {"Count": "{:,.0f}", "Percentage (%)": "{:.2f}%"}
+                ),
+            )
             .bar(subset=["Percentage (%)"], color="#4a90e2", vmin=0, vmax=100)
             .set_properties(
                 **{
@@ -317,7 +332,7 @@ class DataAnalyzer:
     @staticmethod
     def describe_time_series_feature(
         data: pd.DataFrame, feature: str, agg_freq: str = "ME"
-    ) -> pd.DataFrame:
+    ) -> Styler:
         """Provides enhanced time series feature analysis with styling.
 
         Args:
@@ -326,7 +341,7 @@ class DataAnalyzer:
             agg_freq (str): Aggregation frequency ('ME', 'YE', 'D', 'W', 'H'). Defaults to "ME".
 
         Returns:
-            pd.DataFrame: A styled DataFrame with temporal distribution analysis.
+            Styler: A styled DataFrame with temporal distribution analysis.
 
         Raises:
             ValueError: If agg_freq is not one of the supported values.
@@ -360,8 +375,9 @@ class DataAnalyzer:
             )
 
         styled_df = (
-            df.style.set_caption(caption.format(feature))
-            .format({"Count": "{:,.0f}"})
+            cast(
+                "Styler", df.style.set_caption(caption.format(feature)).format({"Count": "{:,.0f}"})
+            )
             .bar(subset=["Count"], color="#4a90e2", vmin=0, vmax=df["Count"].max())
             .set_properties(
                 **{
@@ -417,7 +433,7 @@ class DataAnalyzer:
         skew_threshold: float = 1.0,
         kurtosis_threshold: float = 3.0,
         zero_pct_threshold: float = 5.0,
-    ) -> pd.DataFrame:
+    ) -> Styler:
         """Generates a summary statistics table for all numerical features.
 
         Computes mean, median, std, min, max, skewness, kurtosis, zero percentage,
@@ -435,7 +451,7 @@ class DataAnalyzer:
             zero_pct_threshold (float): Percent zeros threshold for ZERO-INFLATED. Defaults to 5.0.
 
         Returns:
-            pd.DataFrame: A styled DataFrame with one row per numerical feature.
+            Styler: A styled DataFrame with one row per numerical feature.
         """
         rows = []
         for col in numerical_features:
@@ -478,7 +494,7 @@ class DataAnalyzer:
 
         df = pd.DataFrame(rows)
 
-        table_styles = [
+        table_styles: list[CSSDict] = [
             {
                 "selector": "caption",
                 "props": [
@@ -529,17 +545,19 @@ class DataAnalyzer:
         ]
 
         styled = (
-            df.style.set_caption("📊 Numerical Feature Statistics")
-            .format(
-                {
-                    "Min": "{:.3f}",
-                    "Mean": "{:.3f}",
-                    "Median": "{:.3f}",
-                    "Max": "{:.3f}",
-                    "Std": "{:.3f}",
-                    "Skewness": "{:.3f}",
-                    "Kurtosis": "{:.3f}",
-                }
+            cast(
+                "Styler",
+                df.style.set_caption("📊 Numerical Feature Statistics").format(
+                    {
+                        "Min": "{:.3f}",
+                        "Mean": "{:.3f}",
+                        "Median": "{:.3f}",
+                        "Max": "{:.3f}",
+                        "Std": "{:.3f}",
+                        "Skewness": "{:.3f}",
+                        "Kurtosis": "{:.3f}",
+                    }
+                ),
             )
             .map(DataAnalyzer._skewness_cell_color, subset=["Skewness"])
             .set_table_styles(table_styles)
@@ -645,7 +663,7 @@ class DataAnalyzer:
         target: str,
         problem_type: str,
         n_quantiles: int = 4,
-    ) -> pd.DataFrame:
+    ) -> Styler:
         """Per-group descriptive statistics for a single numerical feature.
 
         For classification, groups by each unique target class.  For regression,
@@ -668,7 +686,7 @@ class DataAnalyzer:
             n_quantiles (int): Quantile bands when problem_type="regression". Defaults to 4.
 
         Returns:
-            pd.DataFrame: A styled DataFrame with one row per group plus Overall.
+            Styler: A styled DataFrame with one row per group plus Overall.
 
         Raises:
             ValueError: If ``problem_type`` is not ``"classification"`` or ``"regression"``.
@@ -751,7 +769,7 @@ class DataAnalyzer:
                 "background-color: #d4e6f1; font-weight: bold; border-top: 2px solid #1e3a5f"
             ] * len(row)
 
-        table_styles = [
+        table_styles: list[CSSDict] = [
             {
                 "selector": "caption",
                 "props": [
@@ -802,20 +820,22 @@ class DataAnalyzer:
         ]
 
         styled = (
-            df.style.set_caption(caption)
-            .format(
-                {
-                    "Count": "{:,.0f}",
-                    "Mean": "{:.3f}",
-                    "Std": "{:.3f}",
-                    "Min": "{:.3f}",
-                    "Q25": "{:.3f}",
-                    "Median": "{:.3f}",
-                    "Q75": "{:.3f}",
-                    "Max": "{:.3f}",
-                    "Skewness": "{:.3f}",
-                    "Missing (%)": "{:.2f}%",
-                }
+            cast(
+                "Styler",
+                df.style.set_caption(caption).format(
+                    {
+                        "Count": "{:,.0f}",
+                        "Mean": "{:.3f}",
+                        "Std": "{:.3f}",
+                        "Min": "{:.3f}",
+                        "Q25": "{:.3f}",
+                        "Median": "{:.3f}",
+                        "Q75": "{:.3f}",
+                        "Max": "{:.3f}",
+                        "Skewness": "{:.3f}",
+                        "Missing (%)": "{:.2f}%",
+                    }
+                ),
             )
             .map(DataAnalyzer._skewness_cell_color, subset=["Skewness"])
             .apply(_highlight_overall, axis=1)
@@ -845,7 +865,7 @@ class DataAnalyzer:
         target: str,
         problem_type: str,
         n_quantiles: int = 4,
-    ) -> pd.DataFrame:
+    ) -> Styler:
         """Cross-group comparison of numerical features against a target.
 
         For every numerical column computes per-group median and IQR alongside three
@@ -873,7 +893,7 @@ class DataAnalyzer:
             n_quantiles (int): Quantile bands when problem_type="regression". Defaults to 4.
 
         Returns:
-            pd.DataFrame: A styled DataFrame sorted by η² descending.
+            Styler: A styled DataFrame sorted by η² descending.
 
         Raises:
             ValueError: If ``problem_type`` is invalid or ``target`` is absent.
@@ -944,7 +964,7 @@ class DataAnalyzer:
 
         df = pd.DataFrame(rows).sort_values("η²", ascending=False).reset_index(drop=True)
 
-        format_dict: dict[str, str] = {
+        format_dict: StylerFormat = {
             "η²": "{:.5f}",
             "ε²": "{:.5f}",
             "KW p-value": "{:.3e}",
@@ -954,7 +974,7 @@ class DataAnalyzer:
             format_dict[f"{cls} Median"] = "{:.5f}"
             format_dict[f"{cls} IQR"] = "{:.5f}"
 
-        table_styles = [
+        table_styles: list[CSSDict] = [
             {
                 "selector": "caption",
                 "props": [
@@ -1005,8 +1025,7 @@ class DataAnalyzer:
         ]
 
         styled = (
-            df.style.set_caption(caption)
-            .format(format_dict)
+            cast("Styler", df.style.set_caption(caption).format(format_dict))
             .map(DataAnalyzer._effect_size_cell_color, subset=["η²", "ε²"])
             .map(DataAnalyzer._pvalue_cell_color, subset=["KW p-value"])
             .set_table_styles(table_styles)
@@ -1100,7 +1119,7 @@ class DataAnalyzer:
         data: pd.DataFrame,
         categorical_features: list[str],
         rare_threshold: float = 5.0,
-    ) -> pd.DataFrame:
+    ) -> Styler:
         """Generates a summary statistics table for all categorical features.
 
         For each categorical column (dtype object, category, or bool) computes:
@@ -1119,7 +1138,7 @@ class DataAnalyzer:
             rare_threshold (float): Percent of rows below which a category is rare. Defaults to 5.0.
 
         Returns:
-            pd.DataFrame: A styled DataFrame with one row per categorical feature.
+            Styler: A styled DataFrame with one row per categorical feature.
         """
         rows = []
         for col in categorical_features:
@@ -1156,7 +1175,7 @@ class DataAnalyzer:
 
         df = pd.DataFrame(rows).sort_values("N Unique").reset_index(drop=True)
 
-        table_styles = [
+        table_styles: list[CSSDict] = [
             {
                 "selector": "caption",
                 "props": [
@@ -1207,16 +1226,18 @@ class DataAnalyzer:
         ]
 
         styled = (
-            df.style.set_caption("📋 Categorical Feature Statistics")
-            .format(
-                {
-                    "N Unique": "{:,.0f}",
-                    "Mode %": "{:.2f}%",
-                    "Top-3 Coverage %": "{:.2f}%",
-                    "Entropy (norm.)": "{:.3f}",
-                    "Rare Categories": "{:,.0f}",
-                    "Missing %": "{:.2f}%",
-                }
+            cast(
+                "Styler",
+                df.style.set_caption("📋 Categorical Feature Statistics").format(
+                    {
+                        "N Unique": "{:,.0f}",
+                        "Mode %": "{:.2f}%",
+                        "Top-3 Coverage %": "{:.2f}%",
+                        "Entropy (norm.)": "{:.3f}",
+                        "Rare Categories": "{:,.0f}",
+                        "Missing %": "{:.2f}%",
+                    }
+                ),
             )
             .map(DataAnalyzer._entropy_cell_color, subset=["Entropy (norm.)"])
             .bar(subset=["Missing %"], color="#4a90e2", vmin=0, vmax=100)
@@ -1245,7 +1266,7 @@ class DataAnalyzer:
         problem_type: str,
         n_quantiles: int = 4,
         top_n: int = 15,
-    ) -> pd.DataFrame:
+    ) -> Styler:
         """Cross-distribution of a categorical feature against a target.
 
         Each row corresponds to a unique category of ``feature`` (top ``top_n`` by
@@ -1271,7 +1292,7 @@ class DataAnalyzer:
             top_n (int, optional): Max categories before collapsing into "Other". Defaults to 15.
 
         Returns:
-            pd.DataFrame: A styled cross-distribution table.
+            Styler: A styled cross-distribution table.
 
         Raises:
             ValueError: If ``problem_type`` is invalid.
@@ -1327,7 +1348,7 @@ class DataAnalyzer:
             total_row[f"{cls} Row %"] = cls_total / n_total * 100
         df = pd.concat([df, pd.DataFrame([total_row])], ignore_index=True)
 
-        format_dict: dict[str, str] = {"Count": "{:,.0f}", "Count %": "{:.2f}%"}
+        format_dict: StylerFormat = {"Count": "{:,.0f}", "Count %": "{:.2f}%"}
         for cls in classes:
             format_dict[f"{cls} Count"] = "{:,.0f}"
             format_dict[f"{cls} Row %"] = "{:.2f}%"
@@ -1342,7 +1363,7 @@ class DataAnalyzer:
 
         row_pct_cols = [f"{cls} Row %" for cls in classes]
 
-        table_styles = [
+        table_styles: list[CSSDict] = [
             {
                 "selector": "caption",
                 "props": [
@@ -1393,8 +1414,7 @@ class DataAnalyzer:
         ]
 
         styled = (
-            df.style.set_caption(caption)
-            .format(format_dict)
+            cast("Styler", df.style.set_caption(caption).format(format_dict))
             .background_gradient(subset=row_pct_cols, cmap="Blues", axis=0, vmin=0, vmax=100)
             .apply(_highlight_total, axis=1)
             .set_table_styles(table_styles)
@@ -1420,7 +1440,7 @@ class DataAnalyzer:
         target: str,
         problem_type: str,
         n_quantiles: int = 4,
-    ) -> pd.DataFrame:
+    ) -> Styler:
         """Ranked association between categorical features and a target.
 
         For every categorical column computes:
@@ -1449,7 +1469,7 @@ class DataAnalyzer:
             n_quantiles (int): Quantile bands when problem_type="regression". Defaults to 4.
 
         Returns:
-            pd.DataFrame: A styled DataFrame sorted by Cramér's V descending.
+            Styler: A styled DataFrame sorted by Cramér's V descending.
 
         Raises:
             ValueError: If ``problem_type`` is invalid or ``target`` is absent.
@@ -1488,7 +1508,7 @@ class DataAnalyzer:
 
         df = pd.DataFrame(rows).sort_values("Cramér's V", ascending=False).reset_index(drop=True)
 
-        table_styles = [
+        table_styles: list[CSSDict] = [
             {
                 "selector": "caption",
                 "props": [
@@ -1539,15 +1559,17 @@ class DataAnalyzer:
         ]
 
         styled = (
-            df.style.set_caption(caption)
-            .format(
-                {
-                    "N Unique": "{:,.0f}",
-                    "Cramér's V": "{:.5f}",
-                    "Theil's U": "{:.5f}",
-                    "χ²": "{:,.3f}",
-                    "p-value": "{:.3e}",
-                }
+            cast(
+                "Styler",
+                df.style.set_caption(caption).format(
+                    {
+                        "N Unique": "{:,.0f}",
+                        "Cramér's V": "{:.5f}",
+                        "Theil's U": "{:.5f}",
+                        "χ²": "{:,.3f}",
+                        "p-value": "{:.3e}",
+                    }
+                ),
             )
             .map(DataAnalyzer._association_cell_color, subset=["Cramér's V", "Theil's U"])
             .map(DataAnalyzer._pvalue_cell_color, subset=["p-value"])
@@ -1656,7 +1678,7 @@ class DataAnalyzer:
         test_data: pd.DataFrame,
         numerical_features: list[str] | None = None,
         n_bins: int = 10,
-    ) -> pd.DataFrame:
+    ) -> Styler:
         """Distribution drift analysis for numerical features between train and test sets.
 
         For each numerical feature computes a battery of complementary drift metrics:
@@ -1688,7 +1710,7 @@ class DataAnalyzer:
             n_bins (int, optional): Number of equal-frequency bins used for PSI. Defaults to 10.
 
         Returns:
-            pd.DataFrame: A styled DataFrame sorted by KS Stat descending.
+            Styler: A styled DataFrame sorted by KS Stat descending.
         """
         if numerical_features is None:
             numerical_features = [
@@ -1742,7 +1764,7 @@ class DataAnalyzer:
 
         df = pd.DataFrame(rows).sort_values("KS Stat", ascending=False).reset_index(drop=True)
 
-        table_styles = [
+        table_styles: list[CSSDict] = [
             {
                 "selector": "caption",
                 "props": [
@@ -1793,18 +1815,20 @@ class DataAnalyzer:
         ]
 
         styled = (
-            df.style.set_caption("📉 Numerical Feature Drift Analysis")
-            .format(
-                {
-                    "KS Stat": "{:.5f}",
-                    "KS p-value": "{:.3e}",
-                    "Wasserstein": "{:.5f}",
-                    "SMD": "{:.5f}",
-                    "PSI": "{:.5f}",
-                    "Mean Δ%": "{:.2f}%",
-                    "Std Ratio": "{:.3f}",
-                },
-                na_rep="—",
+            cast(
+                "Styler",
+                df.style.set_caption("📉 Numerical Feature Drift Analysis").format(
+                    {
+                        "KS Stat": "{:.5f}",
+                        "KS p-value": "{:.3e}",
+                        "Wasserstein": "{:.5f}",
+                        "SMD": "{:.5f}",
+                        "PSI": "{:.5f}",
+                        "Mean Δ%": "{:.2f}%",
+                        "Std Ratio": "{:.3f}",
+                    },
+                    na_rep="—",
+                ),
             )
             .map(DataAnalyzer._drift_score_cell_color, subset=["KS Stat", "PSI"])
             .map(DataAnalyzer._drift_pvalue_cell_color, subset=["KS p-value"])
@@ -1834,7 +1858,7 @@ class DataAnalyzer:
         train_data: pd.DataFrame,
         test_data: pd.DataFrame,
         categorical_features: list[str] | None = None,
-    ) -> pd.DataFrame:
+    ) -> Styler:
         """Distribution drift analysis for categorical features between train and test sets.
 
         For each categorical feature computes:
@@ -1863,7 +1887,7 @@ class DataAnalyzer:
             categorical_features (list[str] | None): Columns to analyse; None auto-detects.
 
         Returns:
-            pd.DataFrame: A styled DataFrame sorted by JS Distance descending.
+            Styler: A styled DataFrame sorted by JS Distance descending.
         """
         if categorical_features is None:
             shared = set(train_data.columns) & set(test_data.columns)
@@ -1925,7 +1949,7 @@ class DataAnalyzer:
 
         df = pd.DataFrame(rows).sort_values("JS Distance", ascending=False).reset_index(drop=True)
 
-        table_styles = [
+        table_styles: list[CSSDict] = [
             {
                 "selector": "caption",
                 "props": [
@@ -1976,16 +2000,18 @@ class DataAnalyzer:
         ]
 
         styled = (
-            df.style.set_caption("📉 Categorical Feature Drift Analysis")
-            .format(
-                {
-                    "JS Distance": "{:.5f}",
-                    "PSI": "{:.5f}",
-                    "χ² p-value": "{:.3e}",
-                    "New Categories": "{:,.0f}",
-                    "Missing Categories": "{:,.0f}",
-                },
-                na_rep="—",
+            cast(
+                "Styler",
+                df.style.set_caption("📉 Categorical Feature Drift Analysis").format(
+                    {
+                        "JS Distance": "{:.5f}",
+                        "PSI": "{:.5f}",
+                        "χ² p-value": "{:.3e}",
+                        "New Categories": "{:,.0f}",
+                        "Missing Categories": "{:,.0f}",
+                    },
+                    na_rep="—",
+                ),
             )
             .map(DataAnalyzer._drift_score_cell_color, subset=["JS Distance", "PSI"])
             .map(DataAnalyzer._drift_pvalue_cell_color, subset=["χ² p-value"])

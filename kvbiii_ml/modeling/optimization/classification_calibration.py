@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 from collections.abc import Iterable
 from copy import deepcopy
+from typing import cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -511,7 +512,7 @@ class ClassificationCalibrator:
             raise RuntimeError("Call fit() before style_scores().")
 
         styled = _apply_fancy_styling(
-            self.calibration_scores_df_.style.format("{:.4f}"),
+            cast("Styler", self.calibration_scores_df_.style.format("{:.4f}")),
             "🎯 Calibration Method Comparison",
         )
         return styled.apply(self._highlight_best_row, axis=1)
