@@ -83,7 +83,7 @@ def test_impute_missing_values_basic_functionality(structured_categorical_data):
         - Some missing values are imputed based on joint distributions
     """
     original_data = structured_categorical_data.copy()
-    original_missing_count = original_data["A"].isnull().sum()
+    original_missing_count = original_data["A"].isna().sum()
 
     result = impute_missing_values(
         df=original_data,
@@ -98,7 +98,7 @@ def test_impute_missing_values_basic_functionality(structured_categorical_data):
         raise AssertionError()
 
     # Should have fewer missing values after imputation
-    new_missing_count = result["A"].isnull().sum()
+    new_missing_count = result["A"].isna().sum()
     if not new_missing_count <= original_missing_count:
         raise AssertionError()
 
@@ -139,8 +139,8 @@ def test_impute_missing_values_respects_threshold_parameter():
     )
 
     # Low threshold should result in more imputation
-    missing_high = result_high["target"].isnull().sum()
-    missing_low = result_low["target"].isnull().sum()
+    missing_high = result_high["target"].isna().sum()
+    missing_low = result_low["target"].isna().sum()
     if not missing_low <= missing_high:
         raise AssertionError()
 
@@ -164,7 +164,7 @@ def test_impute_missing_values_handles_no_eligible_mappings():
     for col in data.columns:
         data[col] = data[col].astype("category")
 
-    original_missing = data["ambiguous"].isnull().sum()
+    original_missing = data["ambiguous"].isna().sum()
 
     result = impute_missing_values(
         df=data,
@@ -174,7 +174,7 @@ def test_impute_missing_values_handles_no_eligible_mappings():
     )
 
     # Should not impute when mappings are ambiguous
-    if result["ambiguous"].isnull().sum() != original_missing:
+    if result["ambiguous"].isna().sum() != original_missing:
         raise AssertionError()
 
 
@@ -194,7 +194,7 @@ def test_impute_missing_values_preserves_non_missing_values(
     original_data = categorical_data_with_missing.copy()
 
     # Record non-missing values for comparison
-    non_missing_mask = ~original_data["cat_to_impute_1"].isnull()
+    non_missing_mask = ~original_data["cat_to_impute_1"].isna()
     original_non_missing = original_data.loc[non_missing_mask, "cat_to_impute_1"].copy()
 
     result = impute_missing_values(
@@ -229,8 +229,8 @@ def test_impute_missing_values_handles_multiple_columns_to_impute():
     for col in data.columns:
         data[col] = data[col].astype("category")
 
-    original_missing_1 = data["cat1"].isnull().sum()
-    original_missing_2 = data["cat2"].isnull().sum()
+    original_missing_1 = data["cat1"].isna().sum()
+    original_missing_2 = data["cat2"].isna().sum()
 
     result = impute_missing_values(
         df=data,
@@ -240,8 +240,8 @@ def test_impute_missing_values_handles_multiple_columns_to_impute():
     )
 
     # Should attempt imputation on both columns
-    new_missing_1 = result["cat1"].isnull().sum()
-    new_missing_2 = result["cat2"].isnull().sum()
+    new_missing_1 = result["cat1"].isna().sum()
+    new_missing_2 = result["cat2"].isna().sum()
 
     if not new_missing_1 <= original_missing_1:
         raise AssertionError()
@@ -268,7 +268,7 @@ def test_impute_missing_values_handles_multiple_predictor_columns():
     for col in data.columns:
         data[col] = data[col].astype("category")
 
-    original_missing = data["target"].isnull().sum()
+    original_missing = data["target"].isna().sum()
 
     result = impute_missing_values(
         df=data,
@@ -277,7 +277,7 @@ def test_impute_missing_values_handles_multiple_predictor_columns():
         threshold_num_observation=5,
     )
 
-    new_missing = result["target"].isnull().sum()
+    new_missing = result["target"].isna().sum()
     if not new_missing <= original_missing:
         raise AssertionError()
 
@@ -339,7 +339,7 @@ def test_impute_missing_values_creates_visualization(mock_plots):
     )
 
     # Should call heatmap when imputation occurs
-    if result["A"].isnull().sum() < data["A"].isnull().sum():
+    if result["A"].isna().sum() < data["A"].isna().sum():
         mock_plots.heatmap.assert_called()
 
 
@@ -404,7 +404,7 @@ def test_impute_missing_values_handles_single_unique_mapping():
     )
 
     # All missing values where B='u' should be imputed to 'x'
-    missing_with_u = data["A"].isnull() & (data["B"] == "u")
+    missing_with_u = data["A"].isna() & (data["B"] == "u")
     if missing_with_u.any():
         imputed_values = result.loc[missing_with_u, "A"]
         if not all(val == "x" for val in imputed_values):

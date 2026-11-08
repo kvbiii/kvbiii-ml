@@ -8,15 +8,15 @@ multivariate_plots = MultivariatePlots()
 
 
 def _get_joint_distribution(df: pd.DataFrame, col_impute: str, col_by: str) -> pd.DataFrame:
-    """Builds the contingency table used by the imputation routine."""
-    return df.groupby([col_impute, col_by], observed=False)[col_by].size().unstack().fillna(0)
+    """Build the contingency table used by the imputation routine."""
+    return df.groupby([col_impute, col_by], observed=False)[col_by].size().unstack().fillna(0)  # noqa: PD010
 
 
 def _get_mapping(
     joint_distribution: pd.DataFrame,
     threshold_num_observation: int,
 ) -> dict[str, str]:
-    """Builds deterministic by-value to imputed-value mapping."""
+    """Build the deterministic by-value to imputed-value mapping."""
     nonzero_counts = (joint_distribution != 0.0).sum(axis=0)
     col_sums = joint_distribution.sum(axis=0)
     eligible_cols = nonzero_counts.eq(1) & col_sums.ge(threshold_num_observation)
@@ -38,7 +38,7 @@ def _plot_and_apply_mapping(
     mapping: dict[str, str],
     joint_distribution: pd.DataFrame,
 ) -> None:
-    """Plots imputation heatmap and writes imputed values in-place."""
+    """Plot the imputation heatmap and write imputed values in place."""
     mask = df[col_impute].isna() & df[col_by].isin(mapping)
     if not mask.any():
         return
@@ -73,17 +73,15 @@ def impute_missing_values(
 ) -> pd.DataFrame:
     """Impute missing values using joint distributions of categorical pairs.
 
-    For each pair (to_impute, by_column), if a category in by_column maps to a
-    single non-zero category in to_impute and has at least the given threshold
-    of observations, the missing values in to_impute are filled with that unique
-    category.
+    - For each pair (to_impute, by_column), find by_column categories that map to one category.
+    - Keep only categories with at least ``threshold_num_observation`` observations.
+    - Fill the missing values in to_impute with that unique category.
 
     Args:
         df (pd.DataFrame): Input DataFrame.
         categorical_to_impute (list[str]): Categorical columns with missing values.
         non_missing_categorical (list[str]): Categorical columns with no missing values.
-        threshold_num_observation (int, optional):
-            Minimum observations required per by-category. Defaults to 10.
+        threshold_num_observation (int): Minimum observations per by-category. Defaults to 10.
 
     Returns:
         pd.DataFrame: A copy of the DataFrame with imputed values.
