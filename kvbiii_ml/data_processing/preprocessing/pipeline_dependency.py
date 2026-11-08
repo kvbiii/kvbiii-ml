@@ -114,18 +114,15 @@ class PipelineDependencyGraph:
         those bookkeeping steps when it adds its own.
 
         Args:
-            pipeline (Pipeline | None): Preprocessing pipeline template, or None
-                when the caller has no pipeline (identity graph).
+            pipeline (Pipeline | None): Pipeline template; None means an identity graph.
             X (pd.DataFrame): Full raw feature matrix.
-            y (pd.Series | None, optional): Target forwarded to each step's
-                fit(). Defaults to None.
+            y (pd.Series | None, optional): Target forwarded to each step's fit(). Defaults to None.
 
         Returns:
             PipelineDependencyGraph: The built graph.
 
         Raises:
-            TypeError: If any step's fit_transform() does not return a pandas
-                DataFrame.
+            TypeError: If any step's fit_transform() does not return a pandas DataFrame.
         """
         raw_columns = list(X.columns)
         if pipeline is None:
@@ -209,8 +206,7 @@ class PipelineDependencyGraph:
         already-restricted pipeline would collide on duplicate step names.
 
         Args:
-            processed_features (list[str]): Processed columns the caller wants
-                the restricted pipeline to still produce.
+            processed_features (list[str]): Processed columns the pipeline must still produce.
 
         Returns:
             tuple[list[str], Pipeline | None]: Raw columns needed, in the
@@ -271,8 +267,7 @@ class PipelineDependencyGraph:
         """Walks step_derivations backward to find each step's still-needed source columns.
 
         Args:
-            processed_features (list[str]): Processed columns the caller wants
-                the restricted pipeline to still produce.
+            processed_features (list[str]): Processed columns the pipeline must still produce.
 
         Returns:
             tuple[dict[str, set[str]], dict[str, set[str]]]: Step name mapped to
@@ -314,13 +309,10 @@ def build_restricted_pipeline(
     restrict() itself, which returns None in that case.
 
     Args:
-        pipeline (Pipeline | None): Preprocessing pipeline template, or None
-            to build only a column-selecting pipeline.
+        pipeline (Pipeline | None): Pipeline template; None builds a column selector only.
         X (pd.DataFrame): Full raw feature matrix.
-        selected_features (list[str]): Processed columns the returned pipeline
-            should produce.
-        y (pd.Series | None, optional): Target forwarded to each step's fit()
-            during the graph build. Defaults to None.
+        selected_features (list[str]): Processed columns the returned pipeline should produce.
+        y (pd.Series | None): Target forwarded to each step's fit(). Defaults to None.
 
     Returns:
         Pipeline: A restricted pipeline ready to fit_transform() directly on

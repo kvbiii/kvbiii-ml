@@ -31,14 +31,10 @@ class WoEEncoderWithOriginal(_WithOriginalBase):
         Initialize WoEEncoderWithOriginal.
 
         Args:
-            variables (list[str] | None, optional): Categorical columns to encode.
-                Defaults to None (auto-detect all object/categorical columns).
-            ignore_format (bool, optional): If True, also encode numeric columns.
-                Defaults to False.
-            unseen (str, optional): Strategy for unseen categories at transform time -
-                ``"ignore"`` or ``"raise"``. Defaults to ``"ignore"``.
-            fill_value (int | float | None, optional): Value used for unseen categories
-                when ``unseen="ignore"``. Defaults to None (uses 0.0).
+            variables (list[str] | None): Categorical columns to encode. Defaults to auto-detect.
+            ignore_format (bool, optional): If True, also encode numeric columns. Defaults to False.
+            unseen (str): "ignore" or "raise" for unseen categories. Defaults to "ignore".
+            fill_value (int | float | None): Unseen value for unseen="ignore". None means 0.0.
         """
         self.variables = variables
         self.ignore_format = ignore_format
@@ -58,7 +54,7 @@ class WoEEncoderWithOriginal(_WithOriginalBase):
             fill_value=self.fill_value,
         )
 
-    def _fit_inner(self, inner: WoEEncoder, X: pd.DataFrame, y: Any) -> WoEEncoder:
+    def _fit_inner(self, inner: WoEEncoder, X: pd.DataFrame, y: Any) -> WoEEncoder:  # noqa: ANN401
         """Fit the encoder on X and y.
 
         Args:

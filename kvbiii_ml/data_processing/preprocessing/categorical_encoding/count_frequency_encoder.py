@@ -39,22 +39,11 @@ class CountFrequencyEncoderWithOriginal(_WithOriginalBase):
         Initialize CountFrequencyEncoderWithOriginal.
 
         Args:
-            encoding_method (str, optional): ``"count"`` replaces each category with
-                its absolute count; ``"frequency"`` uses the relative frequency.
-                Defaults to ``"count"``.
-            variables (list[str] | None, optional): Columns to encode. May include
-                numeric columns - they are recast to object dtype internally so
-                they encode without error. Defaults to None (auto-detect all
-                object/categorical columns).
-            missing_values (str, optional): How to handle NaN - ``"raise"`` or
-                ``"ignore"``. Defaults to ``"raise"``.
-            ignore_format (bool, optional): If True, also encode numeric columns.
-                Defaults to False.
-            unseen (str, optional): Strategy for categories seen at transform time
-                but not during fit - ``"encode"`` replaces them with 0 (zero),
-                ``"ignore"`` replaces them with NaN and emits a UserWarning, and
-                ``"raise"`` raises a ValueError. Defaults to ``"encode"`` so unseen
-                categories never silently introduce NaN downstream.
+            encoding_method (str): "count" or "frequency" (relative). Defaults to "count".
+            variables (list[str] | None): Columns to encode; numeric ones are cast to object.
+            missing_values (str): How to handle NaN - "raise" or "ignore". Defaults to "raise".
+            ignore_format (bool, optional): If True, also encode numeric columns. Defaults to False.
+            unseen (str): "encode" (0), "ignore" (NaN, warns) or "raise". Defaults to "encode".
         """
         self.encoding_method = encoding_method
         self.variables = variables
@@ -77,7 +66,10 @@ class CountFrequencyEncoderWithOriginal(_WithOriginalBase):
         )
 
     def _fit_inner(
-        self, inner: CountFrequencyEncoder, X: pd.DataFrame, y: Any
+        self,
+        inner: CountFrequencyEncoder,
+        X: pd.DataFrame,
+        y: Any,  # noqa: ANN401
     ) -> CountFrequencyEncoder:
         """Fit the encoder on X.
 

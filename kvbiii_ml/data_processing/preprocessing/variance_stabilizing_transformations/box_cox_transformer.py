@@ -1,5 +1,3 @@
-from typing import Any
-
 import pandas as pd
 from feature_engine.transformation import BoxCoxTransformer
 
@@ -20,8 +18,7 @@ class BoxCoxTransformerWithOriginal(_WithOriginalBase):
         Initialize BoxCoxTransformerWithOriginal.
 
         Args:
-            variables (list[str] | None, optional): Numerical columns to transform.
-                Defaults to None (auto-detect).
+            variables (list[str] | None): Numerical columns to transform. Defaults to auto-detect.
         """
         self.variables = variables
 
@@ -33,13 +30,13 @@ class BoxCoxTransformerWithOriginal(_WithOriginalBase):
         """
         return BoxCoxTransformer(variables=self.variables)
 
-    def _fit_inner(self, inner: BoxCoxTransformer, X: pd.DataFrame, y: Any) -> BoxCoxTransformer:
+    def _fit_inner(self, inner: BoxCoxTransformer, X: pd.DataFrame, y: object) -> BoxCoxTransformer:
         """Fit the transformer on X (estimates lambda per variable).
 
         Args:
             inner (BoxCoxTransformer): Unfitted transformer.
             X (pd.DataFrame): Training features.
-            y (Any): Unused; accepted for API consistency.
+            y (object): Unused; accepted for API consistency.
 
         Returns:
             BoxCoxTransformer: Fitted transformer.

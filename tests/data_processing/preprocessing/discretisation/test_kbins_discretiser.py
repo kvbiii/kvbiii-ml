@@ -32,7 +32,7 @@ def data_with_nan() -> pd.DataFrame:
         pd.DataFrame: A "score" column with 12 non-null values and 3 NaNs
             interspersed at the end.
     """
-    values = list(range(12)) + [np.nan, np.nan, np.nan]
+    values = [*range(12), np.nan, np.nan, np.nan]
     return pd.DataFrame({"score": values})
 
 

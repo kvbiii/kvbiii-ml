@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from kvbiii_ml.data_processing.preprocessing.variance_stabilizing_transformations.arcsin_transformer import (
+from kvbiii_ml.data_processing.preprocessing.variance_stabilizing_transformations.arcsin_transformer import (  # noqa: E501
     ArcsinTransformerWithOriginal,
 )
 

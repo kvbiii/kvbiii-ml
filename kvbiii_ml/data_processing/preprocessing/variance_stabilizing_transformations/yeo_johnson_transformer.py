@@ -1,5 +1,3 @@
-from typing import Any
-
 import pandas as pd
 from feature_engine.transformation import YeoJohnsonTransformer
 
@@ -20,8 +18,7 @@ class YeoJohnsonTransformerWithOriginal(_WithOriginalBase):
         Initialize YeoJohnsonTransformerWithOriginal.
 
         Args:
-            variables (list[str] | None, optional): Numerical columns to transform.
-                Defaults to None (auto-detect).
+            variables (list[str] | None): Numerical columns to transform. Defaults to auto-detect.
         """
         self.variables = variables
 
@@ -34,14 +31,14 @@ class YeoJohnsonTransformerWithOriginal(_WithOriginalBase):
         return YeoJohnsonTransformer(variables=self.variables)
 
     def _fit_inner(
-        self, inner: YeoJohnsonTransformer, X: pd.DataFrame, y: Any
+        self, inner: YeoJohnsonTransformer, X: pd.DataFrame, y: object
     ) -> YeoJohnsonTransformer:
         """Fit the transformer on X (estimates lambda per variable).
 
         Args:
             inner (YeoJohnsonTransformer): Unfitted transformer.
             X (pd.DataFrame): Training features.
-            y (Any): Unused; accepted for API consistency.
+            y (object): Unused; accepted for API consistency.
 
         Returns:
             YeoJohnsonTransformer: Fitted transformer.

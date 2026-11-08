@@ -1,5 +1,3 @@
-from typing import Any
-
 import pandas as pd
 from feature_engine.transformation import ReciprocalTransformer
 
@@ -20,8 +18,7 @@ class ReciprocalTransformerWithOriginal(_WithOriginalBase):
         Initialize ReciprocalTransformerWithOriginal.
 
         Args:
-            variables (list[str] | None, optional): Numerical columns to transform.
-                Defaults to None (auto-detect).
+            variables (list[str] | None): Numerical columns to transform. Defaults to auto-detect.
         """
         self.variables = variables
 
@@ -34,14 +31,14 @@ class ReciprocalTransformerWithOriginal(_WithOriginalBase):
         return ReciprocalTransformer(variables=self.variables)
 
     def _fit_inner(
-        self, inner: ReciprocalTransformer, X: pd.DataFrame, y: Any
+        self, inner: ReciprocalTransformer, X: pd.DataFrame, y: object
     ) -> ReciprocalTransformer:
         """Fit the transformer on X.
 
         Args:
             inner (ReciprocalTransformer): Unfitted transformer.
             X (pd.DataFrame): Training features.
-            y (Any): Unused; accepted for API consistency.
+            y (object): Unused; accepted for API consistency.
 
         Returns:
             ReciprocalTransformer: Fitted transformer.

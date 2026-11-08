@@ -1,5 +1,3 @@
-from typing import Any
-
 import pandas as pd
 from feature_engine.transformation import ArcsinTransformer
 
@@ -20,8 +18,7 @@ class ArcsinTransformerWithOriginal(_WithOriginalBase):
         Initialize ArcsinTransformerWithOriginal.
 
         Args:
-            variables (list[str] | None, optional): Numerical columns in [0, 1]
-                to transform. Defaults to None (auto-detect).
+            variables (list[str] | None): Columns in [0, 1] to transform. Defaults to auto-detect.
         """
         self.variables = variables
 
@@ -33,13 +30,13 @@ class ArcsinTransformerWithOriginal(_WithOriginalBase):
         """
         return ArcsinTransformer(variables=self.variables)
 
-    def _fit_inner(self, inner: ArcsinTransformer, X: pd.DataFrame, y: Any) -> ArcsinTransformer:
+    def _fit_inner(self, inner: ArcsinTransformer, X: pd.DataFrame, y: object) -> ArcsinTransformer:
         """Fit the transformer on X.
 
         Args:
             inner (ArcsinTransformer): Unfitted transformer.
             X (pd.DataFrame): Training features.
-            y (Any): Unused; accepted for API consistency.
+            y (object): Unused; accepted for API consistency.
 
         Returns:
             ArcsinTransformer: Fitted transformer.

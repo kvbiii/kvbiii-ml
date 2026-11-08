@@ -47,31 +47,12 @@ class TargetEncoderWithOriginal(_WithOriginalSubsetBase):
         Initialize TargetEncoderWithOriginal.
 
         Args:
-            categories (Literal["auto"] | list[list], optional): Per-variable
-                category lists, or ``"auto"`` to detect them during fitting.
-                Defaults to "auto".
-            target_type (Literal["auto", "continuous", "binary", "multiclass"], optional):
-                Kind of target being encoded against, or ``"auto"`` to infer it
-                from y. Defaults to "auto".
-            smooth (float | Literal["auto"], optional): Shrinkage strength toward
-                the global target mean - higher smooths harder; ``"auto"`` picks
-                it from the target's variance. Defaults to "auto".
-            cv (int, optional): Number of cross-fitting folds used to encode the
-                training set inside ``fit_transform``. Defaults to 5.
-            variables (list[str] | None, optional): Columns to encode. May include
-                numeric columns - they are recast to object dtype internally
-                before encoding. Defaults to None (auto-detect all non-numeric
-                columns).
-            random_state (int | None, optional): Seed controlling the shuffle
-                scikit-learn's ``TargetEncoder`` applies before splitting into
-                ``cv`` folds for its internal cross-fitting. Left unset, that
-                shuffle uses a fresh random split on every single
-                ``fit_transform`` call, so encoded values - and therefore any
-                metric computed downstream of them - differ between otherwise
-                identical runs even with every other seed fixed. Passing a
-                fixed value here removes that source of non-determinism.
-                Defaults to None, which reproduces the unseeded behavior
-                exactly.
+            categories (Literal["auto"] | list[list]): Per-variable lists, or "auto" to detect.
+            target_type (Literal["auto", "continuous", "binary", "multiclass"]): "auto" infers it.
+            smooth (float | Literal["auto"]): Shrinkage to the global mean; "auto" is data-driven.
+            cv (int): Folds used to encode the training set inside fit_transform. Defaults to 5.
+            variables (list[str] | None): Columns to encode; numeric ones are cast to object.
+            random_state (int | None): TargetEncoder cv shuffle seed; None is not reproducible.
         """
         self.categories = categories
         self.target_type = target_type
@@ -123,7 +104,7 @@ class TargetEncoderWithOriginal(_WithOriginalSubsetBase):
         """
         return _cast_numeric_variables_to_object(X, self.variables_)
 
-    def fit_transform(self, X: pd.DataFrame, y: Any = None) -> pd.DataFrame:
+    def fit_transform(self, X: pd.DataFrame, y: object = None) -> pd.DataFrame:
         """Fit using cross-fitted target statistics and transform in one pass.
 
         Overrides the inherited fit().transform() so the training set is
@@ -133,7 +114,7 @@ class TargetEncoderWithOriginal(_WithOriginalSubsetBase):
 
         Args:
             X (pd.DataFrame): Training features.
-            y (Any): Target used to fit the per-category encodings.
+            y (object): Target used to fit the per-category encodings.
 
         Returns:
             pd.DataFrame: Original columns plus one cross-fitted encoded column
@@ -164,14 +145,15 @@ if __name__ == "__main__":
     def _run_demo() -> None:
         """Run TargetEncoder and its original-preserving variant."""
         rng = np.random.default_rng(42)
+        revenue_scale = 150.0
         df = pd.DataFrame(
             {
                 "city": rng.choice(["Warsaw", "Krakow", "Gdansk"], size=300),
                 "tier": rng.choice(["A", "B", "C"], size=300),
-                "revenue": rng.exponential(150.0, size=300),
+                "revenue": rng.exponential(revenue_scale, size=300),
             }
         )
-        y = pd.Series((df["revenue"] > 150.0).astype(int), name="target")
+        y = pd.Series((df["revenue"] > revenue_scale).astype(int), name="target")
 
         enc = TargetEncoder(target_type="binary")
         print("=== TargetEncoder (replace) ===")

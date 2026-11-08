@@ -1,5 +1,3 @@
-from typing import Any
-
 import pandas as pd
 from feature_engine.transformation import LogTransformer
 
@@ -24,10 +22,8 @@ class LogTransformerWithOriginal(_WithOriginalBase):
         Initialize LogTransformerWithOriginal.
 
         Args:
-            variables (list[str] | None, optional): Numerical columns to transform.
-                Defaults to None (auto-detect).
-            base (str, optional): Logarithm base - ``"e"`` for natural log or
-                ``"10"`` for log base 10. Defaults to ``"e"``.
+            variables (list[str] | None): Numerical columns to transform. Defaults to auto-detect.
+            base (str): "e" (natural log) or "10". Defaults to "e".
         """
         self.variables = variables
         self.base = base
@@ -40,13 +36,13 @@ class LogTransformerWithOriginal(_WithOriginalBase):
         """
         return LogTransformer(variables=self.variables, base=self.base)
 
-    def _fit_inner(self, inner: LogTransformer, X: pd.DataFrame, y: Any) -> LogTransformer:
+    def _fit_inner(self, inner: LogTransformer, X: pd.DataFrame, y: object) -> LogTransformer:
         """Fit the transformer on X.
 
         Args:
             inner (LogTransformer): Unfitted transformer.
             X (pd.DataFrame): Training features.
-            y (Any): Unused; accepted for API consistency.
+            y (object): Unused; accepted for API consistency.
 
         Returns:
             LogTransformer: Fitted transformer.

@@ -1,5 +1,3 @@
-from typing import Any
-
 import pandas as pd
 from feature_engine.discretisation import EqualWidthDiscretiser
 
@@ -27,15 +25,11 @@ class EqualWidthDiscretiserWithOriginal(_WithOriginalBase):
         Initialize EqualWidthDiscretiserWithOriginal.
 
         Args:
-            variables (list[str] | None, optional): Numerical columns to discretise.
-                Defaults to None (auto-detect).
+            variables (list[str] | None): Numerical columns to discretise. Defaults to auto-detect.
             bins (int, optional): Number of equal-width bins. Defaults to 10.
-            return_object (bool, optional): If True, returns bin labels as strings.
-                Defaults to False.
-            return_boundaries (bool, optional): If True, returns interval boundaries
-                as labels. Defaults to False.
-            precision (int, optional): Rounding precision for bin boundaries.
-                Defaults to 3.
+            return_object (bool): If True, returns bin labels as strings. Defaults to False.
+            return_boundaries (bool): Return interval boundaries as labels. Defaults to False.
+            precision (int, optional): Rounding precision for bin boundaries. Defaults to 3.
         """
         self.variables = variables
         self.bins = bins
@@ -67,14 +61,14 @@ class EqualWidthDiscretiserWithOriginal(_WithOriginalBase):
         )
 
     def _fit_inner(
-        self, inner: EqualWidthDiscretiser, X: pd.DataFrame, y: Any
+        self, inner: EqualWidthDiscretiser, X: pd.DataFrame, y: object
     ) -> EqualWidthDiscretiser:
         """Fit the discretiser on X.
 
         Args:
             inner (EqualWidthDiscretiser): Unfitted discretiser.
             X (pd.DataFrame): Training features.
-            y (Any): Unused; accepted for API consistency.
+            y (object): Unused; accepted for API consistency.
 
         Returns:
             EqualWidthDiscretiser: Fitted discretiser.

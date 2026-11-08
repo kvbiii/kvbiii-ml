@@ -1,5 +1,3 @@
-from typing import Any
-
 import pandas as pd
 from feature_engine.transformation import PowerTransformer
 
@@ -24,10 +22,8 @@ class PowerTransformerWithOriginal(_WithOriginalBase):
         Initialize PowerTransformerWithOriginal.
 
         Args:
-            variables (list[str] | None, optional): Numerical columns to transform.
-                Defaults to None (auto-detect).
-            exp (float | int, optional): Exponent applied to each value. ``0.5``
-                gives the square-root transform. Defaults to 0.5.
+            variables (list[str] | None): Numerical columns to transform. Defaults to auto-detect.
+            exp (float | int): Exponent applied to each value (0.5 = square root). Defaults to 0.5.
         """
         self.variables = variables
         self.exp = exp
@@ -40,13 +36,13 @@ class PowerTransformerWithOriginal(_WithOriginalBase):
         """
         return PowerTransformer(variables=self.variables, exp=self.exp)
 
-    def _fit_inner(self, inner: PowerTransformer, X: pd.DataFrame, y: Any) -> PowerTransformer:
+    def _fit_inner(self, inner: PowerTransformer, X: pd.DataFrame, y: object) -> PowerTransformer:
         """Fit the transformer on X.
 
         Args:
             inner (PowerTransformer): Unfitted transformer.
             X (pd.DataFrame): Training features.
-            y (Any): Unused; accepted for API consistency.
+            y (object): Unused; accepted for API consistency.
 
         Returns:
             PowerTransformer: Fitted transformer.

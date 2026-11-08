@@ -1,4 +1,4 @@
-from typing import Any, Literal
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -38,16 +38,11 @@ class _NaNIgnoringKBinsDiscretizer:
 
         Args:
             n_bins (int): Number of bins to produce for every variable.
-            strategy (Literal["uniform", "quantile", "kmeans"]): Binning strategy
-                forwarded to each per-variable KBinsDiscretizer.
-            quantile_method (str): Quantile interpolation method forwarded to each
-                per-variable KBinsDiscretizer.
-            dtype (type | None): Output dtype forwarded to each per-variable
-                KBinsDiscretizer.
-            subsample (int | None): Maximum number of samples used to fit the
-                "quantile"/"kmeans" strategies.
-            random_state (int | None): Random seed for the "kmeans" strategy and
-                for subsampling.
+            strategy (Literal["uniform", "quantile", "kmeans"]): Binning strategy.
+            quantile_method (str): Interpolation method for each per-variable KBinsDiscretizer.
+            dtype (type | None): Output dtype forwarded to each per-variable KBinsDiscretizer.
+            subsample (int | None): Max samples used to fit "quantile"/"kmeans".
+            random_state (int | None): Random seed for the "kmeans" strategy and for subsampling.
         """
         self.n_bins = n_bins
         self.strategy = strategy
@@ -56,12 +51,12 @@ class _NaNIgnoringKBinsDiscretizer:
         self.subsample = subsample
         self.random_state = random_state
 
-    def fit(self, X: pd.DataFrame, _y: Any = None) -> "_NaNIgnoringKBinsDiscretizer":
+    def fit(self, X: pd.DataFrame, _y: object = None) -> "_NaNIgnoringKBinsDiscretizer":
         """Fit one KBinsDiscretizer per column, using only that column's non-null rows.
 
         Args:
             X (pd.DataFrame): Training features, one column per variable to discretise.
-            _y (Any, optional): Unused; accepted for API consistency. Defaults to None.
+            _y (object, optional): Unused; accepted for API consistency. Defaults to None.
 
         Columns with no non-null values are fitted to ``None`` instead of raising,
         so their derived column is entirely NaN on transform.
@@ -160,29 +155,14 @@ class KBinsDiscretiserWithOriginal(_WithOriginalSubsetBase):
         Initialize KBinsDiscretiserWithOriginal.
 
         Args:
-            n_bins (int, optional): Number of bins to produce for every selected
-                variable. Also drives the derived column suffix. Defaults to 5.
-            strategy (Literal["uniform", "quantile", "kmeans"], optional): Binning
-                strategy - equal-width, equal-frequency, or 1D k-means cluster
-                edges. Defaults to "quantile".
-            quantile_method (str, optional): Quantile interpolation method used
-                when ``strategy="quantile"``. Defaults to "averaged_inverted_cdf"
-                (scikit-learn's forthcoming default; avoids its deprecation
-                FutureWarning).
-            dtype (type | None, optional): Output dtype forwarded to
-                KBinsDiscretizer. Defaults to None (inferred from input).
-            subsample (int | None, optional): Maximum number of samples used to
-                fit the "quantile"/"kmeans" strategies. Defaults to 200_000.
-            random_state (int | None, optional): Random seed for the "kmeans"
-                strategy and for subsampling. Defaults to None.
-            variables (list[str] | None, optional): Numeric columns to discretise.
-                Defaults to None (auto-detect all numeric columns).
-            missing_values (Literal["raise", "ignore"], optional): How to handle
-                NaN - ``"raise"`` lets KBinsDiscretizer raise its own ValueError
-                on NaN input (scikit-learn's native behavior), ``"ignore"`` bins
-                each variable's non-null rows and leaves NaN rows as NaN in the
-                derived column (an entirely-NaN variable still fits and yields
-                an all-NaN derived column). Defaults to "raise".
+            n_bins (int): Bins per variable; also sets the derived column suffix. Defaults to 5.
+            strategy (Literal["uniform", "quantile", "kmeans"]): Bin edges. Defaults to "quantile".
+            quantile_method (str): For strategy="quantile". Defaults to "averaged_inverted_cdf".
+            dtype (type | None): Output dtype for KBinsDiscretizer. Defaults to the input dtype.
+            subsample (int | None): Max samples to fit "quantile"/"kmeans". Defaults to 200_000.
+            random_state (int | None): Seed for "kmeans" and subsampling. Defaults to None.
+            variables (list[str] | None): Numeric columns to discretise. Defaults to auto-detect.
+            missing_values (Literal["raise", "ignore"]): "raise" errors on NaN; "ignore" keeps NaN.
         """
         self.n_bins = n_bins
         self.strategy = strategy

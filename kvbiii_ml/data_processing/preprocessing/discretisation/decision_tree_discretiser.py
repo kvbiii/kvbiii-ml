@@ -31,19 +31,13 @@ class DecisionTreeDiscretiserWithOriginal(_WithOriginalBase):
         Initialize DecisionTreeDiscretiserWithOriginal.
 
         Args:
-            variables (list[str] | None, optional): Numerical columns to discretise.
-                Defaults to None (auto-detect).
-            bin_output (str, optional): What the tree leaf value represents -
-                ``"prediction"`` or ``"bin_number"``. Defaults to ``"prediction"``.
+            variables (list[str] | None): Numerical columns to discretise. Defaults to auto-detect.
+            bin_output (str): "prediction" or "bin_number" leaf value. Defaults to "prediction".
             precision (int | None, optional): Decimal places for rounding. Defaults to None.
-            cv (int, optional): Cross-validation folds used for tree depth tuning.
-                Defaults to 3.
-            scoring (str, optional): sklearn scoring metric for CV. Defaults to
-                ``"neg_mean_squared_error"``.
-            param_grid (dict | None, optional): Grid of tree parameters to search.
-                Defaults to None.
-            regression (bool, optional): If True, fits a regression tree; if False,
-                a classification tree. Defaults to True.
+            cv (int, optional): Cross-validation folds used for tree depth tuning. Defaults to 3.
+            scoring (str): sklearn scoring metric for CV. Defaults to ``"neg_mean_squared_error"``.
+            param_grid (dict | None, optional): Grid of tree parameters to search. Defaults to None.
+            regression (bool): Regression tree if True, else classification. Defaults to True.
             random_state (int | None, optional): Random seed. Defaults to None.
         """
         self.variables = variables
@@ -73,7 +67,10 @@ class DecisionTreeDiscretiserWithOriginal(_WithOriginalBase):
         )
 
     def _fit_inner(
-        self, inner: DecisionTreeDiscretiser, X: pd.DataFrame, y: Any
+        self,
+        inner: DecisionTreeDiscretiser,
+        X: pd.DataFrame,
+        y: Any,  # noqa: ANN401
     ) -> DecisionTreeDiscretiser:
         """Fit the discretiser on X and y.
 
@@ -111,13 +108,14 @@ if __name__ == "__main__":
         """Run DecisionTreeDiscretiser and its original-preserving variant."""
         rng = np.random.default_rng(42)
         n_rows = 300
+        income_scale = 50_000
         df = pd.DataFrame(
             {
                 "age": rng.integers(18, 80, n_rows).astype(float),
-                "income": rng.exponential(50_000, n_rows),
+                "income": rng.exponential(income_scale, n_rows),
             }
         )
-        y = pd.Series((df["income"] > 50_000).astype(int), name="target")
+        y = pd.Series((df["income"] > income_scale).astype(int), name="target")
 
         enc = DecisionTreeDiscretiser(variables=["age", "income"], regression=False, cv=3)
         print("=== DecisionTreeDiscretiser (replace) ===")

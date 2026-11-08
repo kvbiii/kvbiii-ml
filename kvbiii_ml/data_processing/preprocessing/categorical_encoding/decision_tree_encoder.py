@@ -35,29 +35,17 @@ class DecisionTreeEncoderWithOriginal(_WithOriginalBase):
         Initialize DecisionTreeEncoderWithOriginal.
 
         Args:
-            encoding_method (str, optional): How to derive the numeric encoding from
-                the tree - ``"arbitrary"`` uses the leaf node prediction directly.
-                Defaults to ``"arbitrary"``.
-            cv (int, optional): Number of cross-validation folds used to tune tree
-                depth. Defaults to 3.
-            scoring (str, optional): sklearn scoring metric used during CV.
-                Defaults to ``"neg_mean_squared_error"``.
-            param_grid (dict | None, optional): Grid of tree parameters to search.
-                Defaults to None (uses feature_engine's default grid).
-            regression (bool, optional): When True fits a regression tree; when
-                False fits a classification tree. Defaults to True.
-            random_state (int | None, optional): Random seed for reproducibility.
-                Defaults to None.
-            variables (list[str] | None, optional): Categorical columns to encode.
-                Defaults to None (auto-detect all object/categorical columns).
-            ignore_format (bool, optional): If True, also encode numeric columns.
-                Defaults to False.
-            precision (int | None, optional): Decimal places to round encoded values.
-                Defaults to None (no rounding).
-            unseen (str, optional): Strategy for unseen categories at transform time -
-                ``"ignore"`` or ``"raise"``. Defaults to ``"ignore"``.
-            fill_value (float | None, optional): Value used for unseen categories when
-                ``unseen="ignore"``. Defaults to None.
+            encoding_method (str): "arbitrary" uses the leaf prediction. Defaults to "arbitrary".
+            cv (int): Number of cross-validation folds used to tune tree depth. Defaults to 3.
+            scoring (str): sklearn scoring metric used in CV. Defaults to "neg_mean_squared_error".
+            param_grid (dict | None): Tree parameter grid. Defaults to feature_engine's grid.
+            regression (bool): Regression tree if True, else classification. Defaults to True.
+            random_state (int | None, optional): Random seed for reproducibility. Defaults to None.
+            variables (list[str] | None): Categorical columns to encode. Defaults to auto-detect.
+            ignore_format (bool, optional): If True, also encode numeric columns. Defaults to False.
+            precision (int | None): Decimal places to round encoded values. Defaults to no rounding.
+            unseen (str): "ignore" or "raise" for unseen categories. Defaults to "ignore".
+            fill_value (float | None): Unseen-category value when unseen="ignore". Defaults to None.
         """
         self.encoding_method = encoding_method
         self.cv = cv
@@ -92,7 +80,10 @@ class DecisionTreeEncoderWithOriginal(_WithOriginalBase):
         )
 
     def _fit_inner(
-        self, inner: DecisionTreeEncoder, X: pd.DataFrame, y: Any
+        self,
+        inner: DecisionTreeEncoder,
+        X: pd.DataFrame,
+        y: Any,  # noqa: ANN401
     ) -> DecisionTreeEncoder:
         """Fit the encoder on X and y.
 

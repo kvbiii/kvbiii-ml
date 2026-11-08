@@ -1,5 +1,3 @@
-from typing import Any
-
 import pandas as pd
 from feature_engine.discretisation import ArbitraryDiscretiser
 
@@ -28,16 +26,11 @@ class ArbitraryDiscretiserWithOriginal(_WithOriginalBase):
         Initialize ArbitraryDiscretiserWithOriginal.
 
         Args:
-            binning_dict (dict[str, list]): Mapping from variable name to a list of
-                cut-points, e.g. ``{"age": [0, 18, 35, 60, np.inf]}``.
-            return_object (bool, optional): If True, returns bin labels as strings.
-                Defaults to False.
-            return_boundaries (bool, optional): If True, returns interval boundaries
-                as labels. Defaults to False.
-            precision (int, optional): Rounding precision for bin boundaries.
-                Defaults to 3.
-            errors (str, optional): How to handle values outside defined bins -
-                ``"ignore"`` or ``"raise"``. Defaults to ``"ignore"``.
+            binning_dict (dict[str, list]): Variable to cut-points, e.g. {"age": [0, 18, np.inf]}.
+            return_object (bool): If True, returns bin labels as strings. Defaults to False.
+            return_boundaries (bool): Return interval boundaries as labels. Defaults to False.
+            precision (int, optional): Rounding precision for bin boundaries. Defaults to 3.
+            errors (str): Values outside the bins: "ignore" or "raise". Defaults to "ignore".
         """
         self.binning_dict = binning_dict
         self.return_object = return_object
@@ -60,14 +53,14 @@ class ArbitraryDiscretiserWithOriginal(_WithOriginalBase):
         )
 
     def _fit_inner(
-        self, inner: ArbitraryDiscretiser, X: pd.DataFrame, y: Any
+        self, inner: ArbitraryDiscretiser, X: pd.DataFrame, y: object
     ) -> ArbitraryDiscretiser:
         """Fit the discretiser on X (stores the binning dict internally).
 
         Args:
             inner (ArbitraryDiscretiser): Unfitted discretiser.
             X (pd.DataFrame): Training features.
-            y (Any): Unused; accepted for API consistency.
+            y (object): Unused; accepted for API consistency.
 
         Returns:
             ArbitraryDiscretiser: Fitted discretiser.

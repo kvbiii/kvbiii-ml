@@ -1,5 +1,3 @@
-from typing import Any
-
 import pandas as pd
 from feature_engine.discretisation import GeometricWidthDiscretiser
 
@@ -28,15 +26,11 @@ class GeometricWidthDiscretiserWithOriginal(_WithOriginalBase):
         Initialize GeometricWidthDiscretiserWithOriginal.
 
         Args:
-            variables (list[str] | None, optional): Numerical columns to discretise.
-                Defaults to None (auto-detect).
+            variables (list[str] | None): Numerical columns to discretise. Defaults to auto-detect.
             bins (int, optional): Number of geometric-width bins. Defaults to 10.
-            return_object (bool, optional): If True, returns bin labels as strings.
-                Defaults to False.
-            return_boundaries (bool, optional): If True, returns interval boundaries
-                as labels. Defaults to False.
-            precision (int, optional): Rounding precision for bin boundaries.
-                Defaults to 7.
+            return_object (bool): If True, returns bin labels as strings. Defaults to False.
+            return_boundaries (bool): Return interval boundaries as labels. Defaults to False.
+            precision (int, optional): Rounding precision for bin boundaries. Defaults to 7.
         """
         self.variables = variables
         self.bins = bins
@@ -59,14 +53,14 @@ class GeometricWidthDiscretiserWithOriginal(_WithOriginalBase):
         )
 
     def _fit_inner(
-        self, inner: GeometricWidthDiscretiser, X: pd.DataFrame, y: Any
+        self, inner: GeometricWidthDiscretiser, X: pd.DataFrame, y: object
     ) -> GeometricWidthDiscretiser:
         """Fit the discretiser on X.
 
         Args:
             inner (GeometricWidthDiscretiser): Unfitted discretiser.
             X (pd.DataFrame): Training features.
-            y (Any): Unused; accepted for API consistency.
+            y (object): Unused; accepted for API consistency.
 
         Returns:
             GeometricWidthDiscretiser: Fitted discretiser.

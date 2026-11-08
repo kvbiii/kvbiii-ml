@@ -75,7 +75,7 @@ def test_countfrequencyencoderwithoriginal_fit_missing_values_raise_rejects_nan(
     data_with_nan = city_revenue_data.copy()
     data_with_nan.loc[0, "city"] = None
     encoder = CountFrequencyEncoderWithOriginal(variables=["city"], missing_values="raise")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="contain NaN"):
         encoder.fit(data_with_nan)
 
 
@@ -113,7 +113,7 @@ def test_countfrequencyencoderwithoriginal_transform_unseen_raise_raises_valueer
     encoder = CountFrequencyEncoderWithOriginal(variables=["city"], unseen="raise")
     encoder.fit(city_revenue_data)
     unseen_data = pd.DataFrame({"city": ["Poznan"], "revenue": [90]})
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="NaN values were introduced"):
         encoder.transform(unseen_data)
 
 
