@@ -173,7 +173,7 @@ def test_optimize_memory_verbose_output(sample_mixed_dataframe, capsys):
     if "reduction" not in captured.out:
         raise AssertionError()
 
-    # Date feature generation and other advanced transformations not implemented; skip related assertions
+    # Date features and other advanced transformations are not implemented; skip those assertions
 
 
 def test_encode_target_feature_raises_error_for_missing_target():
@@ -189,8 +189,9 @@ def test_encode_target_feature_raises_error_for_missing_target():
 
 
 def test_encode_target_feature_returns_correct_id2label_mapping():
-    """Tests encode_target_feature returns an id2label mapping matching the categorical
-    codes actually assigned to the target column.
+    """Test encode_target_feature returns an id2label mapping matching the assigned codes.
+
+    The codes are the categorical codes actually assigned to the target column.
 
     Asserts:
         - id2label maps each assigned integer code to its original string label
@@ -208,8 +209,9 @@ def test_encode_target_feature_returns_correct_id2label_mapping():
 
 
 def test_encode_target_feature_replaces_target_with_integer_codes():
-    """Tests encode_target_feature replaces the target column with integer codes that
-    correctly reconstruct the original labels via the returned id2label mapping.
+    """Test encode_target_feature replaces the target with codes that map back via id2label.
+
+    The integer codes correctly reconstruct the original labels.
 
     Asserts:
         - The target column dtype is integer after encoding

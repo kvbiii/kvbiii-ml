@@ -120,7 +120,8 @@ def test_get_categorical_features_identifies_correct_features(sample_dataframe):
     categorical_features_high = DataAnalyzer.get_categorical_features(
         sample_dataframe, unique_threshold=200
     )
-    # Implementation filters strictly by threshold on categorical/object columns; high_cardinality is numeric so won't appear
+    # Implementation filters strictly by threshold on categorical/object columns;
+    # high_cardinality is numeric so won't appear
     # Relax expectation accordingly
     if not isinstance(categorical_features_high, list):
         raise AssertionError()
@@ -144,7 +145,7 @@ def test_extract_unique_items_handles_various_inputs():
         - Whitespace is stripped
     """
     # Test string representation of list
-    # The current implementation uses eval and returns set order; ensure content match ignoring order
+    # The implementation uses eval and returns set order; compare ignoring order
     string_list = "['apple', 'banana', 'apple', ' Orange ']"
     result = DataAnalyzer.extract_unique_items(string_list)
     if set(result) != {"apple", "banana", "orange"}:

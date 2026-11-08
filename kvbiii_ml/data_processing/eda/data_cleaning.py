@@ -23,8 +23,7 @@ class DataCleaner:
 
         Args:
             df (pd.DataFrame): The input DataFrame.
-            threshold (int, optional): Maximum number of unique values for a feature
-                to be considered categorical. Defaults to 100.
+            threshold (int): Max unique values for a categorical feature. Defaults to 100.
 
         Returns:
             list[str]: List of categorical feature names.
@@ -144,10 +143,8 @@ class DataCleaner:
 
         Args:
             df (pd.DataFrame): The input DataFrame.
-            features_to_investigate (list[str]): List of categorical features
-                to investigate.
-            threshold (float, optional): The threshold for skewness in the
-                distribution. Defaults to 0.99.
+            features_to_investigate (list[str]): List of categorical features to investigate.
+            threshold (float): The threshold for skewness in the distribution. Defaults to 0.99.
 
         Returns:
             pd.DataFrame: The DataFrame with highly skewed categorical features dropped.

@@ -78,16 +78,15 @@ class DataAnalyzer:
         threshold: int | None = None,
     ) -> list[str]:
         """
-        Gets categorical features from the DataFrame.
-        Identifies features as categorical based on data type and number of unique values.
-        Binary features (2 unique values) are always included regardless of dtype.
+        Get categorical features from the DataFrame.
+
+        - Identify features as categorical based on data type and number of unique values.
+        - Always include binary features (2 unique values) regardless of dtype.
 
         Args:
             df (pd.DataFrame): The input DataFrame.
-            unique_threshold (int, optional): Maximum number of unique values for a
-                feature to be considered categorical. Defaults to 100.
-            threshold (int | None, optional): Backward-compatible alias for
-                ``unique_threshold``. If provided, this value is used.
+            unique_threshold (int): Max unique values for a categorical feature. Defaults to 100.
+            threshold (int | None): Alias for unique_threshold; used when provided.
 
         Returns:
             list[str]: List of categorical feature names.
@@ -297,8 +296,7 @@ class DataAnalyzer:
         Args:
             data (pd.DataFrame): The input DataFrame.
             feature (str): The time series feature name to analyze.
-            agg_freq (str, optional): Aggregation frequency ('ME', 'YE', 'D', 'W', 'H').
-                Defaults to "ME".
+            agg_freq (str): Aggregation frequency ('ME', 'YE', 'D', 'W', 'H'). Defaults to "ME".
 
         Returns:
             pd.DataFrame: A styled DataFrame with temporal distribution analysis.
@@ -380,7 +378,10 @@ class DataAnalyzer:
             b = 7
         else:
             r, g, b = 198, 40, 40
-        return f"background-color: rgb({r},{g},{b}); color: white; font-weight: bold; text-align: center"
+        return (
+            f"background-color: rgb({r},{g},{b}); "
+            "color: white; font-weight: bold; text-align: center"
+        )
 
     @staticmethod
     def numerical_feature_statistics(
@@ -402,12 +403,9 @@ class DataAnalyzer:
         Args:
             data (pd.DataFrame): The input DataFrame to analyse.
             numerical_features (list[str]): List of numerical feature names to analyze.
-            skew_threshold (float, optional): Absolute skewness above which the
-                ``HIGH SKEW`` flag is raised. Defaults to 1.0.
-            kurtosis_threshold (float, optional): Excess kurtosis above which the
-                ``HEAVY TAILS`` flag is raised. Defaults to 3.0.
-            zero_pct_threshold (float, optional): Percentage of zeros above which the
-                ``ZERO-INFLATED`` flag is raised. Defaults to 5.0.
+            skew_threshold (float): Absolute skewness threshold for HIGH SKEW. Defaults to 1.0.
+            kurtosis_threshold (float): Excess kurtosis threshold for HEAVY TAILS. Defaults to 3.0.
+            zero_pct_threshold (float): Percent zeros threshold for ZERO-INFLATED. Defaults to 5.0.
 
         Returns:
             pd.DataFrame: A styled DataFrame with one row per numerical feature.
@@ -557,7 +555,10 @@ class DataAnalyzer:
             r, g, b = 230, 81, 0
         else:
             r, g, b = 56, 142, 60
-        return f"background-color: rgb({r},{g},{b}); color: white; font-weight: bold; text-align: center"
+        return (
+            f"background-color: rgb({r},{g},{b}); "
+            "color: white; font-weight: bold; text-align: center"
+        )
 
     @staticmethod
     def _pvalue_cell_color(val: float) -> str:
@@ -572,7 +573,10 @@ class DataAnalyzer:
             r, g, b = 245, 127, 23
         else:
             r, g, b = 198, 40, 40
-        return f"background-color: rgb({r},{g},{b}); color: white; font-weight: bold; text-align: center"
+        return (
+            f"background-color: rgb({r},{g},{b}); "
+            "color: white; font-weight: bold; text-align: center"
+        )
 
     @staticmethod
     def _bin_regression_target(
@@ -634,15 +638,13 @@ class DataAnalyzer:
             feature (str): Numerical feature to analyse.
             target (str): Target column name.
             problem_type (str): Either ``"classification"`` or ``"regression"``.
-            n_quantiles (int, optional): Number of equal-frequency quantile bands used
-                when ``problem_type="regression"``. Defaults to 4.
+            n_quantiles (int): Quantile bands when problem_type="regression". Defaults to 4.
 
         Returns:
             pd.DataFrame: A styled DataFrame with one row per group plus Overall.
 
         Raises:
-            ValueError: If ``problem_type`` is not ``"classification"`` or
-                ``"regression"``.
+            ValueError: If ``problem_type`` is not ``"classification"`` or ``"regression"``.
         """
         if problem_type not in {"classification", "regression"}:
             raise ValueError("problem_type must be either 'classification' or 'regression'.")
@@ -841,8 +843,7 @@ class DataAnalyzer:
             numerical_features (list[str]): List of numerical feature names to analyze.
             target (str): Target column name.
             problem_type (str): Either ``"classification"`` or ``"regression"``.
-            n_quantiles (int, optional): Number of quantile bands used when
-                ``problem_type="regression"``. Defaults to 4.
+            n_quantiles (int): Quantile bands when problem_type="regression". Defaults to 4.
 
         Returns:
             pd.DataFrame: A styled DataFrame sorted by η² descending.
@@ -1009,7 +1010,10 @@ class DataAnalyzer:
             r, g, b = 230, 81, 0
         else:
             r, g, b = 56, 142, 60
-        return f"background-color: rgb({r},{g},{b}); color: white; font-weight: bold; text-align: center"
+        return (
+            f"background-color: rgb({r},{g},{b}); "
+            "color: white; font-weight: bold; text-align: center"
+        )
 
     @staticmethod
     def _entropy_cell_color(val: float) -> str:
@@ -1023,11 +1027,14 @@ class DataAnalyzer:
             r, g, b = 230, 81, 0
         else:
             r, g, b = 198, 40, 40
-        return f"background-color: rgb({r},{g},{b}); color: white; font-weight: bold; text-align: center"
+        return (
+            f"background-color: rgb({r},{g},{b}); "
+            "color: white; font-weight: bold; text-align: center"
+        )
 
     @staticmethod
     def _compute_theil_u(feature: pd.Series, target: pd.Series) -> float:
-        """Uncertainty coefficient U(target|feature): fraction of target entropy explained by feature."""
+        """Return Theil's U(target|feature): the share of target entropy explained by feature."""
         contingency = pd.crosstab(feature, target).values.astype(float)
         n = contingency.sum()
         if n == 0:
@@ -1080,8 +1087,7 @@ class DataAnalyzer:
         Args:
             data (pd.DataFrame): The input DataFrame to analyse.
             categorical_features (list[str]): List of categorical feature names to analyze.
-            rare_threshold (float, optional): A category is labelled "rare" when its
-                frequency is below this percentage of total rows. Defaults to 5.0.
+            rare_threshold (float): Percent of rows below which a category is rare. Defaults to 5.0.
 
         Returns:
             pd.DataFrame: A styled DataFrame with one row per categorical feature.
@@ -1232,10 +1238,8 @@ class DataAnalyzer:
             feature (str): Categorical feature to analyse.
             target (str): Target column name.
             problem_type (str): Either ``"classification"`` or ``"regression"``.
-            n_quantiles (int, optional): Number of quantile bands used when
-                ``problem_type="regression"``. Defaults to 4.
-            top_n (int, optional): Max categories before collapsing into "Other".
-                Defaults to 15.
+            n_quantiles (int): Quantile bands when problem_type="regression". Defaults to 4.
+            top_n (int, optional): Max categories before collapsing into "Other". Defaults to 15.
 
         Returns:
             pd.DataFrame: A styled cross-distribution table.
@@ -1413,8 +1417,7 @@ class DataAnalyzer:
             categorical_features (list[str]): List of categorical feature names to analyze.
             target (str): Target column name.
             problem_type (str): Either ``"classification"`` or ``"regression"``.
-            n_quantiles (int, optional): Number of quantile bands used when
-                ``problem_type="regression"``. Defaults to 4.
+            n_quantiles (int): Quantile bands when problem_type="regression". Defaults to 4.
 
         Returns:
             pd.DataFrame: A styled DataFrame sorted by Cramér's V descending.
@@ -1546,7 +1549,10 @@ class DataAnalyzer:
             r, g, b = 230, 81, 0
         else:
             r, g, b = 198, 40, 40
-        return f"background-color: rgb({r},{g},{b}); color: white; font-weight: bold; text-align: center"
+        return (
+            f"background-color: rgb({r},{g},{b}); "
+            "color: white; font-weight: bold; text-align: center"
+        )
 
     @staticmethod
     def _drift_pvalue_cell_color(val: float) -> str:
@@ -1561,7 +1567,10 @@ class DataAnalyzer:
             r, g, b = 104, 159, 56
         else:
             r, g, b = 56, 142, 60
-        return f"background-color: rgb({r},{g},{b}); color: white; font-weight: bold; text-align: center"
+        return (
+            f"background-color: rgb({r},{g},{b}); "
+            "color: white; font-weight: bold; text-align: center"
+        )
 
     @staticmethod
     def _drift_flag_cell_color(flag: str) -> str:
@@ -1573,7 +1582,10 @@ class DataAnalyzer:
             "SIGNIFICANT DRIFT": (198, 40, 40),
         }
         r, g, b = palette.get(flag, (189, 189, 189))
-        return f"background-color: rgb({r},{g},{b}); color: white; font-weight: bold; text-align: center"
+        return (
+            f"background-color: rgb({r},{g},{b}); "
+            "color: white; font-weight: bold; text-align: center"
+        )
 
     @staticmethod
     def _compute_numerical_psi(train: np.ndarray, test: np.ndarray, n_bins: int = 10) -> float:
@@ -1643,11 +1655,8 @@ class DataAnalyzer:
         Args:
             train_data (pd.DataFrame): Reference (training) dataset.
             test_data (pd.DataFrame): Evaluation (test / production) dataset.
-            numerical_features (list[str] | None, optional): Subset of numerical
-                columns to analyse.  Auto-detects all shared numeric columns when
-                ``None``. Defaults to None.
-            n_bins (int, optional): Number of equal-frequency bins used for PSI.
-                Defaults to 10.
+            numerical_features (list[str] | None): Columns to analyse; None auto-detects.
+            n_bins (int, optional): Number of equal-frequency bins used for PSI. Defaults to 10.
 
         Returns:
             pd.DataFrame: A styled DataFrame sorted by KS Stat descending.
@@ -1822,9 +1831,7 @@ class DataAnalyzer:
         Args:
             train_data (pd.DataFrame): Reference (training) dataset.
             test_data (pd.DataFrame): Evaluation (test / production) dataset.
-            categorical_features (list[str] | None, optional): Subset of categorical
-                columns to analyse.  Auto-detects all shared object/category/bool
-                columns when ``None``. Defaults to None.
+            categorical_features (list[str] | None): Columns to analyse; None auto-detects.
 
         Returns:
             pd.DataFrame: A styled DataFrame sorted by JS Distance descending.
@@ -1978,7 +1985,11 @@ class DataAnalyzer:
     def _prepare_features_for_mutual_information(
         X: pd.DataFrame,
     ) -> tuple[pd.DataFrame, np.ndarray | None]:
-        """Prepare feature matrix for mutual information computation."""
+        """Prepare feature matrix for mutual information computation.
+
+        Raises:
+            ValueError: If X is not a pandas DataFrame.
+        """
         if not isinstance(X, pd.DataFrame):
             raise ValueError("X must be a pandas DataFrame.")
 
@@ -2007,10 +2018,8 @@ class DataAnalyzer:
             X (pd.DataFrame): Feature matrix.
             y (pd.Series | np.ndarray): Target variable aligned with X.
             problem_type (str): Problem type, either "classification" or "regression".
-            n_neighbors (int, optional): Number of neighbors used by MI estimators.
-                Defaults to 3.
-            random_state (int | None, optional): Random state for reproducibility.
-                Defaults to 17.
+            n_neighbors (int, optional): Number of neighbors used by MI estimators. Defaults to 3.
+            random_state (int | None, optional): Random state for reproducibility. Defaults to 17.
 
         Returns:
             dict[str, float]: Ordered mapping from feature name to MI score sorted
