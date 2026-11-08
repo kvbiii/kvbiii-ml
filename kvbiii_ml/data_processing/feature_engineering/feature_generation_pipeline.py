@@ -110,7 +110,7 @@ class FeatureGenerationPipeline:
 
         return pd.DataFrame(result_array, index=x_before.index, columns=columns)
 
-    def fit(self, X: pd.DataFrame, y: pd.Series = None) -> "FeatureGenerationPipeline":
+    def fit(self, X: pd.DataFrame, y: pd.Series | None = None) -> "FeatureGenerationPipeline":
         """
         Fit the feature generation process on the DataFrame.
 
@@ -193,7 +193,7 @@ class FeatureGenerationPipeline:
 
         return X
 
-    def fit_transform(self, X: pd.DataFrame, y: pd.Series = None) -> pd.DataFrame:
+    def fit_transform(self, X: pd.DataFrame, y: pd.Series | None = None) -> pd.DataFrame:
         """
         Fit and transform the DataFrame with the feature generation process.
 
