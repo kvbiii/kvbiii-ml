@@ -1,6 +1,8 @@
 # ruff: noqa: ANN401
 from collections.abc import Callable
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, TypedDict
+
+import pandas as pd
 
 
 class Estimator(Protocol):
@@ -26,3 +28,11 @@ class Estimator(Protocol):
 StylerFormat = dict[Any, str | Callable[..., Any] | None]
 
 Direction = Literal["maximize", "minimize"]
+
+
+class RfeSummary(TypedDict):
+    """Result of a recursive feature elimination run."""
+
+    selected_features: list[str]
+    selected_features_names: list[str]
+    history: pd.DataFrame

@@ -386,14 +386,18 @@ class ModelImportanceFiltering:
         all_raw_features: list[str] = sorted(X.columns.tolist())
 
         pipeline = self.cross_validator.preprocessing_pipeline
-        dependency_graph = PipelineDependencyGraph.build(pipeline, X[all_raw_features], y)
+        dependency_graph = PipelineDependencyGraph.build(
+            pipeline, X[all_raw_features], cast("pd.Series", y)
+        )
 
         baseline_estimator = self._restrict_catboost_cat_features(
             self.estimator,
             set(dependency_graph.processed_columns),
             dependency_graph.processed_dtypes,
         )
-        _, valid_scores, _ = self.cross_validator.fit(baseline_estimator, X[all_raw_features], y)
+        _, valid_scores, _ = self.cross_validator.fit(
+            baseline_estimator, X[all_raw_features], cast("pd.Series", y)
+        )
         baseline_metric = float(np.mean(valid_scores))
         baseline_std = float(np.std(valid_scores))
 
@@ -432,7 +436,7 @@ class ModelImportanceFiltering:
 
             importance_scores, fold_metric, fold_std = self._cross_val_model_importance(
                 X[current_raw_features],
-                y,
+                cast("pd.Series", y),
                 current_processed_features,
                 step_estimator,
                 restricted_pipeline,
