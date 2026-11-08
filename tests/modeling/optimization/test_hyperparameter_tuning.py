@@ -13,6 +13,7 @@ from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 
 from kvbiii_ml.modeling.optimization.hyperparameter_tuning import (
+    ParamsGrid,
     RandomSearchCV,
     _FoldMedianPruner,
 )
@@ -132,7 +133,7 @@ def test_randomsearchcv_tune_uses_holdout_when_valid_data_provided(
         X, y, test_size=0.3, random_state=17, stratify=y
     )
     tuner = RandomSearchCV(cross_validator=hyperparam_cv_trainer, n_trials=3, seed=17)
-    params_grid = {"C": ("float", [0.01, 1.0], {"log": True})}
+    params_grid: ParamsGrid = {"C": ("float", [0.01, 1.0], {"log": True})}
 
     study = tuner.tune(
         logistic_regression_estimator,
@@ -165,7 +166,7 @@ def test_randomsearchcv_tune_uses_cross_validation_when_no_valid_data(
     """
     X, y = hyperparam_classification_data
     tuner = RandomSearchCV(cross_validator=hyperparam_cv_trainer, n_trials=3, seed=17)
-    params_grid = {"C": ("float", [0.01, 1.0], {"log": True})}
+    params_grid: ParamsGrid = {"C": ("float", [0.01, 1.0], {"log": True})}
 
     study = tuner.tune(logistic_regression_estimator, X, y, params_grid)
 
@@ -191,7 +192,7 @@ def test_randomsearchcv_tune_runs_single_stage_on_small_data(
     """
     X, y = hyperparam_classification_data
     tuner = RandomSearchCV(cross_validator=hyperparam_cv_trainer, n_trials=3, seed=17)
-    params_grid = {"C": ("float", [0.01, 1.0], {"log": True})}
+    params_grid: ParamsGrid = {"C": ("float", [0.01, 1.0], {"log": True})}
 
     study = tuner.tune(logistic_regression_estimator, X, y, params_grid)
 
@@ -225,7 +226,7 @@ def test_randomsearchcv_tune_runs_two_stage_when_data_exceeds_explore_threshold(
         explore_min_rows=20,
         top_k=2,
     )
-    params_grid = {"C": ("float", [0.01, 1.0], {"log": True})}
+    params_grid: ParamsGrid = {"C": ("float", [0.01, 1.0], {"log": True})}
 
     study = tuner.tune(logistic_regression_estimator, X, y, params_grid)
 
@@ -234,6 +235,8 @@ def test_randomsearchcv_tune_runs_two_stage_when_data_exceeds_explore_threshold(
     if len(tuner.explore_study_.trials) != 4:
         raise AssertionError()
     if len(study.trials) != 2:
+        raise AssertionError()
+    if tuner.best_params_ is None:
         raise AssertionError()
     if "C" not in tuner.best_params_:
         raise AssertionError()
@@ -262,7 +265,7 @@ def test_randomsearchcv_tune_fits_preprocessing_once_per_fold_not_per_trial(
         verbose=False,
     )
     tuner = RandomSearchCV(cross_validator=trainer, n_trials=5, seed=17, verbose=False)
-    params_grid = {"C": ("float", [0.01, 1.0], {"log": True})}
+    params_grid: ParamsGrid = {"C": ("float", [0.01, 1.0], {"log": True})}
 
     tuner.tune(logistic_regression_estimator, X, y, params_grid)
 
@@ -285,7 +288,7 @@ def test_randomsearchcv_tune_evaluates_estimator_defaults_as_first_trial(
     """
     X, y = hyperparam_classification_data
     tuner = RandomSearchCV(cross_validator=hyperparam_cv_trainer, n_trials=3, seed=17)
-    params_grid = {"C": ("float", [0.01, 1.0], {"log": True})}
+    params_grid: ParamsGrid = {"C": ("float", [0.01, 1.0], {"log": True})}
 
     study = tuner.tune(logistic_regression_estimator, X, y, params_grid)
 
@@ -313,11 +316,13 @@ def test_randomsearchcv_tune_keeps_defaults_when_search_gains_are_noise_sized(
     """
     X, y = hyperparam_classification_data
     tuner = RandomSearchCV(cross_validator=hyperparam_cv_trainer, n_trials=2, seed=17)
-    params_grid = {"C": ("constant", [0.5])}
+    params_grid: ParamsGrid = {"C": ("constant", [0.5])}
 
     tuner.tune(logistic_regression_estimator, X, y, params_grid)
 
     if tuner.selection_source_ != "baseline":
+        raise AssertionError()
+    if tuner.best_params_ is None:
         raise AssertionError()
     if tuner.best_params_["C"] != 0.5:
         raise AssertionError()
@@ -348,13 +353,15 @@ def test_randomsearchcv_tune_returns_refit_ready_n_estimators_without_early_stop
     estimator = LGBMClassifier(
         n_estimators=60, early_stopping_round=10, verbose=-1, random_state=17
     )
-    params_grid = {
+    params_grid: ParamsGrid = {
         "verbose": ("constant", [-1]),
         "num_leaves": ("int", [4, 16]),
     }
 
     tuner.tune(estimator, X, y, params_grid)
 
+    if tuner.best_params_ is None:
+        raise AssertionError()
     if tuner.best_params_.get("n_estimators", 0) <= 0:
         raise AssertionError()
     if "early_stopping_round" in tuner.best_params_:
@@ -380,7 +387,7 @@ def test_randomsearchcv_tune_supports_regression_problems():
         verbose=False,
     )
     tuner = RandomSearchCV(cross_validator=trainer, n_trials=3, seed=17, verbose=False)
-    params_grid = {
+    params_grid: ParamsGrid = {
         "verbose": ("constant", [-1]),
         "num_leaves": ("int", [4, 16]),
     }
@@ -390,6 +397,8 @@ def test_randomsearchcv_tune_supports_regression_problems():
     tuner.tune(estimator, X, y, params_grid)
 
     if tuner.selection_source_ not in {"tuned", "baseline"}:
+        raise AssertionError()
+    if tuner.best_params_ is None:
         raise AssertionError()
     if "num_leaves" not in tuner.best_params_:
         raise AssertionError()
@@ -775,7 +784,7 @@ def test_randomsearchcv_tune_prints_trial_and_summary_lines_when_verbose(
     """
     X, y = hyperparam_classification_data
     tuner = RandomSearchCV(cross_validator=hyperparam_cv_trainer, n_trials=3, seed=17, verbose=True)
-    params_grid = {"C": ("float", [0.01, 1.0], {"log": True})}
+    params_grid: ParamsGrid = {"C": ("float", [0.01, 1.0], {"log": True})}
 
     tuner.tune(logistic_regression_estimator, X, y, params_grid)
 
@@ -810,7 +819,7 @@ def test_randomsearchcv_tune_is_silent_and_restores_verbosity_when_not_verbose(
     tuner = RandomSearchCV(
         cross_validator=hyperparam_cv_trainer, n_trials=3, seed=17, verbose=False
     )
-    params_grid = {"C": ("float", [0.01, 1.0], {"log": True})}
+    params_grid: ParamsGrid = {"C": ("float", [0.01, 1.0], {"log": True})}
     previous_verbosity = optuna.logging.get_verbosity()
 
     tuner.tune(logistic_regression_estimator, X, y, params_grid)
@@ -1279,7 +1288,7 @@ def test_randomsearchcv_tune_runs_trials_in_parallel(
         n_parallel_trials=4,
         es_holdout_size=0.0,
     )
-    params_grid = {
+    params_grid: ParamsGrid = {
         "n_estimators": ("constant", [20]),
         "verbose": ("constant", [-1]),
         "n_jobs": ("constant", [1]),
@@ -1294,7 +1303,9 @@ def test_randomsearchcv_tune_runs_trials_in_parallel(
         raise AssertionError()
     if len(finished) != len(study.trials):
         raise AssertionError()
-    if study.sampler._constant_liar is not True:
+    if study.sampler._constant_liar is not True:  # ty: ignore[unresolved-attribute]
+        raise AssertionError()
+    if tuner.best_params_ is None:
         raise AssertionError()
     if not 0.05 <= tuner.best_params_["learning_rate"] <= 0.3:
         raise AssertionError()
@@ -1346,7 +1357,7 @@ def test_randomsearchcv_prints_parallel_trials_in_trial_number_order(
         seed=17,
         n_parallel_trials=4,
     )
-    params_grid = {
+    params_grid: ParamsGrid = {
         "n_estimators": ("constant", [20]),
         "verbose": ("constant", [-1]),
         "n_jobs": ("constant", [1]),

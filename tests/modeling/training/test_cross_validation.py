@@ -83,7 +83,7 @@ def test_crossvalidationtrainer_init_raises_typeerror_for_non_pipeline_preproces
         CrossValidationTrainer(
             problem_type="classification",
             metric_name="Accuracy",
-            preprocessing_pipeline=StandardScaler(),
+            preprocessing_pipeline=StandardScaler(),  # ty: ignore[invalid-argument-type]
         )
 
 
@@ -466,7 +466,7 @@ def test_crossvalidationtrainer_fit_in_parallel_matches_sequential_fit(
             random_forest_estimator, X, y, X_test=X_test
         )
         fold_probas = [
-            estimator.predict_proba(fitted_pipeline.transform(X_test))
+            estimator.predict_proba(fitted_pipeline.transform(X_test))  # ty: ignore[unresolved-attribute]
             for estimator, fitted_pipeline in zip(
                 trainer.fitted_estimators_, trainer.fitted_pipelines_, strict=False
             )
@@ -541,7 +541,7 @@ def test_crossvalidationtrainer_fit_computes_sample_weights_per_fold(
         if not seen.equals(expected):
             raise AssertionError()
     for estimator in trainer.fitted_estimators_:
-        if not np.allclose(estimator.class_prior_, [0.0, 1.0]):
+        if not np.allclose(estimator.class_prior_, [0.0, 1.0]):  # ty: ignore[unresolved-attribute]
             raise AssertionError()
 
 
@@ -579,7 +579,7 @@ def test_crossvalidationtrainer_init_rejects_non_callable_sample_weight_fn():
         CrossValidationTrainer(
             problem_type="classification",
             metric_name="Accuracy",
-            sample_weight_fn=np.ones(10),
+            sample_weight_fn=np.ones(10),  # ty: ignore[invalid-argument-type]
         )
 
 
@@ -618,6 +618,8 @@ def test_crossvalidationtrainer_binary_preds_metric_averages_test_probabilities(
     )
     _, _, test_pred = trainer.fit(LogisticRegression(), X, y, X_test=X.iloc[:20])
 
+    if test_pred is None:
+        raise AssertionError()
     assert_valid_binary_proba_matrix(test_pred, 20)
     fold_label_fractions = {0.0, 1 / 3, 2 / 3, 1.0}
     if all(round(v, 6) in {round(f, 6) for f in fold_label_fractions} for v in test_pred[:, 1]):
@@ -687,10 +689,10 @@ def test_crossvalidationtrainer_early_stopping_holdout_keeps_validation_fold_out
     for (train_idx, valid_idx), est in zip(splits, trainer.fitted_estimators_, strict=False):
         train_index = list(X.index[train_idx])
         n_holdout = round(len(train_index) * 0.25)
-        if est.eval_index_ != train_index[-n_holdout:]:
+        if est.eval_index_ != train_index[-n_holdout:]:  # ty: ignore[unresolved-attribute]
             raise AssertionError("eval set is not the tail of the training fold")
-        if set(est.eval_index_) & set(X.index[valid_idx]) or set(est.eval_index_) & set(
-            est.fit_index_
+        if set(est.eval_index_) & set(X.index[valid_idx]) or set(est.eval_index_) & set(  # ty: ignore[unresolved-attribute]
+            est.fit_index_  # ty: ignore[unresolved-attribute]
         ):
             raise AssertionError("eval set overlaps validation or fit rows")
 
@@ -698,7 +700,7 @@ def test_crossvalidationtrainer_early_stopping_holdout_keeps_validation_fold_out
         problem_type="regression", metric_name="RMSE", cv=cv, verbose=False
     )
     default.fit(_EvalSetRecordingRegressor(), X, y)  # ty: ignore[invalid-argument-type]
-    if default.fitted_estimators_[0].eval_index_ != list(X.index[splits[0][1]]):
+    if default.fitted_estimators_[0].eval_index_ != list(X.index[splits[0][1]]):  # ty: ignore[unresolved-attribute]
         raise AssertionError()
 
     with pytest.raises(ValueError, match="early_stopping_holdout"):

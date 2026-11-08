@@ -229,7 +229,10 @@ class TestEnsembleWeightTunerCV:
             estimators=[logistic_regression_estimator], cross_validator=cross_validator
         )
 
-        preds_list = [pd.Series([1.0, 2.0, 3.0]), pd.Series([2.0, 4.0, 6.0])]
+        preds_list: list[pd.Series | pd.DataFrame] = [
+            pd.Series([1.0, 2.0, 3.0]),
+            pd.Series([2.0, 4.0, 6.0]),
+        ]
         weights = np.array([0.3, 0.7])
 
         result = tuner._blend_predictions(preds_list, weights)
@@ -258,7 +261,7 @@ class TestEnsembleWeightTunerCV:
             estimators=[logistic_regression_estimator], cross_validator=cross_validator
         )
 
-        preds_list = [
+        preds_list: list[pd.Series | pd.DataFrame] = [
             pd.DataFrame([[0.2, 0.8], [0.6, 0.4]]),
             pd.DataFrame([[0.3, 0.7], [0.5, 0.5]]),
         ]
@@ -295,7 +298,10 @@ class TestEnsembleWeightTunerCV:
         mock_trial = _mock_trial(0.3, 0.7)
 
         y_true = pd.Series([1.0, 2.0, 3.0])
-        preds_list = [pd.Series([1.1, 2.1, 3.1]), pd.Series([0.9, 1.9, 2.9])]
+        preds_list: list[pd.Series | pd.DataFrame] = [
+            pd.Series([1.1, 2.1, 3.1]),
+            pd.Series([0.9, 1.9, 2.9]),
+        ]
         fold_boundaries = [0, 3]
 
         result = tuner._objective(mock_trial, y_true, preds_list, fold_boundaries)
@@ -330,7 +336,7 @@ class TestEnsembleWeightTunerCV:
         mock_trial = _mock_trial(0.4, 0.6)
 
         y_true = pd.Series([0, 1, 0])
-        preds_list = [
+        preds_list: list[pd.Series | pd.DataFrame] = [
             pd.Series([0.2, 0.8, 0.3]),
             pd.Series([0.1, 0.9, 0.2]),
         ]
@@ -367,7 +373,10 @@ class TestEnsembleWeightTunerCV:
         mock_trial = _mock_trial(-0.3, 0.7)
 
         y_true = pd.Series([1.0, 2.0, 3.0])
-        preds_list = [pd.Series([1.1, 2.1, 3.1]), pd.Series([0.9, 1.9, 2.9])]
+        preds_list: list[pd.Series | pd.DataFrame] = [
+            pd.Series([1.1, 2.1, 3.1]),
+            pd.Series([0.9, 1.9, 2.9]),
+        ]
         fold_boundaries = [0, 3]
 
         result = tuner._objective(mock_trial, y_true, preds_list, fold_boundaries)
@@ -400,7 +409,10 @@ class TestEnsembleWeightTunerCV:
         mock_trial = _mock_trial(0.5, -0.5)
 
         y_true = pd.Series([1.0, 2.0, 3.0])
-        preds_list = [pd.Series([1.1, 2.1, 3.1]), pd.Series([0.9, 1.9, 2.9])]
+        preds_list: list[pd.Series | pd.DataFrame] = [
+            pd.Series([1.1, 2.1, 3.1]),
+            pd.Series([0.9, 1.9, 2.9]),
+        ]
         fold_boundaries = [0, 3]
 
         try:
@@ -802,6 +814,8 @@ def test_tuner_best_score_describes_selected_weights_even_when_a_baseline_wins()
     ):
         raise AssertionError()
     if tuner.selection_source_ != "optimized":
+        if tuner.selection_source_ is None:
+            raise AssertionError()
         expected = tuner._baseline_candidates(2)[tuner.selection_source_]
         if not np.allclose(tuner.best_weights, expected):
             raise AssertionError()

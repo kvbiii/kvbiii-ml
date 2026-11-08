@@ -23,7 +23,7 @@ warnings.filterwarnings(
     message=".*(multivariate|group|constant_liar).*",
 )
 
-GridEntry = tuple[str, list[object]] | tuple[str, list[object], dict[str, Any]]
+GridEntry = tuple[str, list[Any]] | tuple[str, list[Any], dict[str, Any]]
 ParamsGrid = dict[str, GridEntry]
 GRID_ENTRY_WITH_OPTIONS = 3
 
