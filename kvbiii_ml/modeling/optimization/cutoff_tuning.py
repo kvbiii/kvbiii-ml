@@ -75,7 +75,7 @@ class CutoffTunerCV:
         self.metric_direction = cross_validator.metric_direction
         self.metric_name = cross_validator.metric_name
         self.fitted_estimators_: list[BaseEstimator] = []
-        self.best_cutoffs: np.ndarray | None = None
+        self.best_cutoffs: np.ndarray = None  # ty: ignore[invalid-assignment]
         self.best_score_: float | None = None
         self.selection_source_: str | None = None
         self.baseline_score_: float | None = None

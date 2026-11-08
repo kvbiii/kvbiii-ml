@@ -307,7 +307,7 @@ class ClassificationCalibrator:
 
         self._oof_probas_by_method: dict[str, np.ndarray] = {}
         self._y_oof: np.ndarray | None = None
-        self._classes: np.ndarray | None = None
+        self._classes: np.ndarray = None  # ty: ignore[invalid-assignment]
         self._fitted_full_estimator: BaseEstimator | None = None
         self._fitted_full_pipeline = None
 
@@ -378,7 +378,10 @@ class ClassificationCalibrator:
         if self.best_method_ == _UNCALIBRATED:
             return raw
         return _apply_calibrator(
-            self.best_calibrator_, raw, self._classes, self.best_method_.lower()
+            self.best_calibrator_,  # ty: ignore[invalid-argument-type]
+            raw,
+            self._classes,
+            self.best_method_.lower(),
         )
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:

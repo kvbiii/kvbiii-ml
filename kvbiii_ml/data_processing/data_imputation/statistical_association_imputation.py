@@ -45,7 +45,7 @@ class StatisticalAssociationImputer:
         self.verbose = verbose
         self.rankings = None
         self.bin_edges = {}
-        self.categorical_columns = None
+        self.categorical_columns: list[str] = None  # ty: ignore[invalid-assignment]
         self.impute_stats = None
 
     def fit(self, df: pd.DataFrame) -> StatisticalAssociationImputer:

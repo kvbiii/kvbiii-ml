@@ -105,12 +105,12 @@ class PseudoLabelGenerator:
         self.top_k_pct = top_k_pct
         self.fixed_threshold = fixed_threshold
 
-        self.classes_: np.ndarray | None = None
+        self.classes_: np.ndarray = None  # ty: ignore[invalid-assignment]
         self.thresholds_: dict[int | str, float] = {}
         self.pseudo_labels_df_: pd.DataFrame = pd.DataFrame()
         self._x_train: pd.DataFrame | None = None
-        self._y_train: pd.Series | None = None
-        self._unlabeled_probas: np.ndarray | None = None
+        self._y_train: pd.Series = None  # ty: ignore[invalid-assignment]
+        self._unlabeled_probas: np.ndarray = None  # ty: ignore[invalid-assignment]
 
     def fit(
         self,

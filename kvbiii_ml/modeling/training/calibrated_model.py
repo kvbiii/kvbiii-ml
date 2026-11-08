@@ -76,8 +76,8 @@ class CalibratedModel:
         self.calibration_size = calibration_size
         self.seed = seed
 
-        self.classes_: np.ndarray | None = None
-        self.calibrator_: IsotonicRegression | LogisticRegression | list | None = None
+        self.classes_: np.ndarray = None  # ty: ignore[invalid-assignment]
+        self.calibrator_: IsotonicRegression | LogisticRegression | list = None  # ty: ignore[invalid-assignment]
         self.fitted_estimator_: BaseEstimator | None = None
 
     def fit(

@@ -85,7 +85,7 @@ class EnsembleWeightTunerCV:
         self.metric_type = cross_validator.metric_type
         self.metric_direction = cross_validator.metric_direction
         self.metric_name = cross_validator.metric_name
-        self.best_weights: np.ndarray | None = None
+        self.best_weights: np.ndarray = None  # ty: ignore[invalid-assignment]
         self.best_score_: float | None = None
         self.selection_source_: str | None = None
         self.baseline_name_: str | None = None
