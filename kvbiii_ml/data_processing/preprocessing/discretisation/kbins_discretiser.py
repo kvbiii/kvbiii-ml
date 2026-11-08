@@ -174,7 +174,7 @@ class KBinsDiscretiserWithOriginal(_WithOriginalSubsetBase):
         self.missing_values = missing_values
 
     @property
-    def _suffix(self) -> str:
+    def _suffix(self) -> str:  # ty: ignore[invalid-property-type-override]
         """Derived-column suffix, dynamically keyed on ``n_bins``.
 
         Returns:

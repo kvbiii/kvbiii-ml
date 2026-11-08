@@ -2,6 +2,7 @@ import warnings
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -308,7 +309,7 @@ class EnsembleModel(BaseEstimator):
                     "stratified splitter as cv."
                 )
             meta_features[valid_idx] = fold_features
-        return meta_features
+        return cast("np.ndarray", meta_features)
 
     def _generate_meta_features(self, X: pd.DataFrame) -> np.ndarray:
         """Generate meta-features from the fitted base estimators' predictions."""

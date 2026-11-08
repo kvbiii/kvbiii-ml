@@ -72,7 +72,7 @@ def _resolve_new_column_sources(
 
     declared: dict[str, list[str]] = {}
     if hasattr(step, "get_derived_column_dependencies"):
-        declared = step.get_derived_column_dependencies()
+        declared = step.get_derived_column_dependencies()  # ty: ignore[call-non-callable]
 
     return {
         column: declared[column] if column in declared else list(cols_before)

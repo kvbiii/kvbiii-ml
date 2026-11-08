@@ -477,15 +477,15 @@ class ShapRecursiveFeatureElimination:
 
         finally:
             if "total" in locals():
-                del total
+                del total  # ty: ignore[possibly-unresolved-reference]
             if "reduced_vals_matrix" in locals():
-                del reduced_vals_matrix
+                del reduced_vals_matrix  # ty: ignore[possibly-unresolved-reference]
             if "pred_matrix" in locals():
-                del pred_matrix
+                del pred_matrix  # ty: ignore[possibly-unresolved-reference]
             if "pred_prob_matrix" in locals():
-                del pred_prob_matrix
+                del pred_prob_matrix  # ty: ignore[possibly-unresolved-reference]
             if "final_pred_matrix" in locals():
-                del final_pred_matrix
+                del final_pred_matrix  # ty: ignore[possibly-unresolved-reference]
             gc.collect()
 
     def _process_3d_shap(
@@ -553,15 +553,15 @@ class ShapRecursiveFeatureElimination:
 
         finally:
             if "total" in locals():
-                del total
+                del total  # ty: ignore[possibly-unresolved-reference]
             if "reduced_vals_matrix" in locals():
-                del reduced_vals_matrix
+                del reduced_vals_matrix  # ty: ignore[possibly-unresolved-reference]
             if "pred_matrix" in locals():
-                del pred_matrix
+                del pred_matrix  # ty: ignore[possibly-unresolved-reference]
             if "pred_prob_matrix" in locals():
-                del pred_prob_matrix
+                del pred_prob_matrix  # ty: ignore[possibly-unresolved-reference]
             if "final_pred_matrix" in locals():
-                del final_pred_matrix
+                del final_pred_matrix  # ty: ignore[possibly-unresolved-reference]
             gc.collect()
 
     def _log_step(
