@@ -9,11 +9,11 @@ DEFAULT_FILL_VALUE = "Unknown"
 FILL_STRATEGIES = ("mode", "constant")
 
 
+MAX_UNKNOWN_PREVIEW = 5
+
+
 class CategoricalAligner(BaseEstimator, TransformerMixin):
-    """
-    Transformer to align categorical features between train and test sets.
-    Stores train categories and applies them to test data during transform.
-    """
+    """Align categorical features between train and test sets using stored train categories."""
 
     def __init__(
         self,
@@ -23,33 +23,19 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
         default_value: str = DEFAULT_FILL_VALUE,
         warn_on_unknown: bool = True,
         categorical_features: list[str] | None = None,
-    ):
+    ) -> None:
         """
         Initialize the CategoricalAligner.
 
+        ``variables`` lets ``build_restricted_pipeline`` narrow the aligned columns.
+
         Args:
-            variables (list[str] | None, optional):
-                List of categorical features names. If None, auto-detects object,
-                string and category columns during fit (stored in
-                ``categorical_features_``). Named ``variables`` so
-                ``build_restricted_pipeline`` can narrow it. Defaults to None.
-            fill_values (dict[str, str] | None, optional):
-                Feature-specific fill values for unknown categories, keyed by feature
-                name (e.g. {"color": "Puste"}). Features listed here always use their
-                configured value, regardless of fill_strategy. Defaults to None.
-            fill_strategy (Literal["mode", "constant"], optional):
-                Strategy used for features not present in fill_values. "mode" fills
-                with each feature's training-data mode; "constant" fills with
-                default_value. Defaults to "constant".
-            default_value (str, optional):
-                Constant fill value used by the "constant" fill_strategy, and as the
-                fallback for "mode" when a feature has no observed mode (e.g. all-NaN
-                training column). Defaults to "Unknown".
-            warn_on_unknown (bool, optional):
-                Whether to raise warnings when unknown categories are found.
-                Defaults to True.
-            categorical_features (list[str] | None, optional): Deprecated alias of
-                ``variables``, used only when ``variables`` is None. Defaults to None.
+            variables (list[str] | None): Columns to align. None auto-detects them during fit.
+            fill_values (dict[str, str] | None): Per-feature fills that override fill_strategy.
+            fill_strategy (Literal["mode", "constant"]): Mode of training data, or default_value.
+            default_value (str): Constant fill and no-mode fallback. Defaults to "Unknown".
+            warn_on_unknown (bool): Warn when unknown categories are found. Defaults to True.
+            categorical_features (list[str] | None): Deprecated alias of variables.
         """
         self.variables = variables
         self.fill_values = fill_values
@@ -71,12 +57,9 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
 
         Args:
             df (pd.DataFrame): DataFrame to analyze.
-            categorical_features (list[str] | None, optional): Categorical features.
-                If None, auto-detects category dtype features. Defaults to None.
-            custom_fills (dict[str, str] | None, optional): Custom fill values for specific
-                features. Defaults to None.
-            default_value (str, optional): Default fill value for features not in custom_fills.
-                Defaults to "Unknown".
+            categorical_features (list[str] | None): Features to align. None detects category dtype.
+            custom_fills (dict[str, str] | None): Fill values per feature. Defaults to None.
+            default_value (str): Fill value for features not in custom_fills. Defaults to "Unknown".
 
         Returns:
             dict[str, str]: Dictionary mapping feature names to fill values.
@@ -136,22 +119,19 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
             df[feature] = self._fillna_as_str(df[feature], fill_value).astype("category")
             cats = df[feature].cat.categories.tolist()
             if fill_value not in cats:
-                cats = sorted(cats + [fill_value])
+                cats = sorted([*cats, fill_value])
             self.categories_[feature] = cats
         return self
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Transform data by aligning categories with fitted training categories.
+        Align categories with the fitted ones, raising NotFittedError before fit.
 
         Args:
             df (pd.DataFrame): Data to transform.
 
         Returns:
             pd.DataFrame: Transformed data with aligned categories.
-
-        Raises:
-            NotFittedError: If called before fit.
         """
         check_is_fitted(self, "categories_")
         df = df.copy()
@@ -166,8 +146,8 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
                 unknown_values = df.loc[unknown_mask, feature].unique()
                 n_unique_unknown = len(unknown_values)
                 pct_unknown = unknown_count / len(df) * 100
-                unknown_preview = list(unknown_values[:5])
-                suffix = "..." if n_unique_unknown > 5 else ""
+                unknown_preview = list(unknown_values[:MAX_UNKNOWN_PREVIEW])
+                suffix = "..." if n_unique_unknown > MAX_UNKNOWN_PREVIEW else ""
                 category_word = "y" if n_unique_unknown == 1 else "ies"
                 warnings.warn(
                     (

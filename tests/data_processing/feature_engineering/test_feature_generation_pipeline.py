@@ -15,6 +15,7 @@ class DummyAdder:
     """Minimal fit/transform stub that appends a constant ADDED column."""
 
     def __init__(self):
+        """Initialize the stub as not fitted."""
         self.fitted = False
 
     def fit(self, _x, _y=None):

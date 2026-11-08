@@ -113,7 +113,7 @@ def test_targetencodingfeaturegenerator_validate_init_params_raises_error_for_in
     """
     features = ["category"]
 
-    with pytest.raises(ValueError, match="Unsupported aggregation method.*Supported methods are"):
+    with pytest.raises(ValueError, match=r"Unsupported aggregation method.*Supported methods are"):
         TargetEncodingFeatureGenerator(features_names=features, aggregation="invalid_method")
 
     # Test valid aggregations don't raise errors
@@ -421,9 +421,9 @@ def test_targetencodingfeaturegenerator_different_aggregations_produce_different
 
     # Results should be different between aggregation methods
     # (At least some values should differ)
-    mean_values = results["mean"]["TE_MEAN_category_a"].values
-    median_values = results["median"]["TE_MEDIAN_category_a"].values
-    nunique_values = results["nunique"]["TE_NUNIQUE_category_a"].values
+    mean_values = results["mean"]["TE_MEAN_category_a"].to_numpy()
+    median_values = results["median"]["TE_MEDIAN_category_a"].to_numpy()
+    nunique_values = results["nunique"]["TE_NUNIQUE_category_a"].to_numpy()
 
     # At least one pair should be different
     different_mean_median = not np.allclose(mean_values, median_values, equal_nan=True)
@@ -466,8 +466,9 @@ def test_targetencodingfeaturegenerator_handles_missing_feature_names(
 def test_targetencodingfeaturegenerator_transform_uses_cached_cv_encodings_for_same_index(
     target_encoding_data,
 ):
-    """Tests transform returns the cached CV-computed encodings when called with the exact
-    same DataFrame index used during fit, instead of recomputing via group_stats_.
+    """Test transform returns the cached CV-computed encodings for the fit-time index.
+
+    The encodings are not recomputed via group_stats_.
 
     Args:
         target_encoding_data (tuple): Feature data and target for encoding
@@ -499,8 +500,9 @@ def test_targetencodingfeaturegenerator_transform_uses_cached_cv_encodings_for_s
 
 
 def test_targetencodingfeaturegenerator_handles_continuous_target_with_float_feature():
-    """Tests fit and transform succeed with a continuous target and a float feature,
-    exercising the target-binning and float-feature-binning code paths.
+    """Test fit and transform succeed with a continuous target and a float feature.
+
+    Exercises the target-binning and float-feature-binning code paths.
 
     Asserts:
         - Fit and transform run without errors for is_continuous_target=True

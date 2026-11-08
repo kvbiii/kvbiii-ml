@@ -95,9 +95,8 @@ def test_countencoder_fit_computes_count_maps(categorical_data):
         value_counts = categorical_data[feature].value_counts(dropna=False)
 
         for category, count in encoder.count_maps_[feature].items():
-            if category != np.nan and pd.notna(category):
-                if count != value_counts[category]:
-                    raise AssertionError()
+            if pd.notna(category) and count != value_counts[category]:
+                raise AssertionError()
 
 
 def test_countencoder_transform_replaces_categories_with_counts(categorical_data):
@@ -207,6 +206,16 @@ def test_countencoder_get_feature_names_returns_new_columns(categorical_data):
     enc.fit(categorical_data)
     names = enc.get_feature_names()
     if names != ["CE_high_cardinality", "CE_medium_cardinality"]:
+        raise AssertionError()
+
+
+def test_countencoder_transform_counts_timezone_aware_datetimes():
+    """Tests that tz-aware datetime values are count encoded instead of mapped to fill_value."""
+    timestamps = pd.to_datetime(["2024-01-01", "2024-01-01", "2024-01-02"]).tz_localize("UTC")
+    frame = pd.DataFrame({"ts": timestamps})
+    enc = CountEncoder(features_names=["ts"])
+    enc.fit(frame)
+    if enc.transform(frame)["CE_ts"].tolist() != [2, 2, 1]:
         raise AssertionError()
 
 

@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 
 class CountEncodingFeatureGenerator:
-    """Class for generating count encoded features."""
+    """Generate count encoded features."""
 
     def __init__(
         self,
@@ -14,19 +14,15 @@ class CountEncodingFeatureGenerator:
         fill_value: int = 0,
         batch_size: int = 20,
         chunk_size: int = 50000,
-    ):
+    ) -> None:
         """
         Initialize the CountEncodingFeatureGenerator.
 
         Args:
-            features_names (list[str] | None, optional): List of feature names to
-                be count encoded. If None, all columns will be used. Defaults to None.
-            fill_value (int, optional): Value for unseen categories during transform.
-                Defaults to 0.
-            batch_size (int, optional): Number of features to process at once.
-                Defaults to 20.
-            chunk_size (int, optional): Number of rows to process at once during
-                transform. Defaults to 50000.
+            features_names (list[str] | None): Columns to count encode. Defaults to all columns.
+            fill_value (int, optional): Value for unseen categories during transform. Defaults to 0.
+            batch_size (int, optional): Number of features to process at once. Defaults to 20.
+            chunk_size (int): Rows processed at once during transform. Defaults to 50000.
         """
         self.features_names = features_names if features_names is not None else []
         self.fill_value = fill_value
@@ -35,7 +31,7 @@ class CountEncodingFeatureGenerator:
         self.count_maps_: dict[str, dict] = {}
         self._validate_init_params()
 
-    def _validate_init_params(self):
+    def _validate_init_params(self) -> None:
         """
         Validate the initialization parameters.
 
@@ -104,7 +100,7 @@ class CountEncodingFeatureGenerator:
             np.ndarray: Array of count-encoded values.
         """
         count_map = self.count_maps_[feature_name]
-        values = chunk[feature_name].values
+        values = chunk[feature_name].to_numpy()
 
         result = np.array(
             [count_map.get(val, self.fill_value) for val in values],
@@ -167,7 +163,7 @@ class CountEncodingFeatureGenerator:
         batch_features: list[str],
         batch_context: tuple[int, int, dict[str, np.ndarray]],
     ) -> None:
-        """Transforms one feature batch and writes encoded values in-place."""
+        """Transform one feature batch and write encoded values in place."""
         n_chunks, n_rows, new_columns_dict = batch_context
         for chunk_idx in range(n_chunks):
             start_idx = chunk_idx * self.chunk_size

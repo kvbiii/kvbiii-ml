@@ -1,14 +1,14 @@
+from typing import ClassVar
+
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils.validation import check_is_fitted
 
 
 class CaseNormalizer(BaseEstimator, TransformerMixin):
-    """
-    Transformer that normalizes case for object, string, or category features.
-    """
+    """Normalize the case of object, string or category features."""
 
-    _NORMALIZATIONS = {"lower", "upper", "title", "capitalize", "casefold"}
+    _NORMALIZATIONS: ClassVar[set[str]] = {"lower", "upper", "title", "capitalize", "casefold"}
 
     def __init__(
         self,
@@ -19,10 +19,8 @@ class CaseNormalizer(BaseEstimator, TransformerMixin):
         Initialize the CaseNormalizer.
 
         Args:
-            features_names (list[str] | None, optional): Feature names to normalize.
-                If None, object, string, and category columns are auto-detected.
-            normalization (str, optional): Case normalization strategy. Supported values
-                are: "lower", "upper", "title", "capitalize", and "casefold".
+            features_names (list[str] | None): Columns to normalize. None auto-detects text columns.
+            normalization (str): One of "lower", "upper", "title", "capitalize", "casefold".
         """
         self.features_names = features_names
         self.normalization = normalization
@@ -71,16 +69,13 @@ class CaseNormalizer(BaseEstimator, TransformerMixin):
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Transform data by normalizing case for configured features.
+        Normalize case for configured features, raising NotFittedError before fit.
 
         Args:
             df (pd.DataFrame): Data to transform.
 
         Returns:
             pd.DataFrame: Transformed data with normalized case.
-
-        Raises:
-            NotFittedError: If the transformer has not been fitted (a ValueError).
         """
         check_is_fitted(self, "features_names_")
 
