@@ -204,6 +204,7 @@ class _WithOriginalSubsetBase(BaseEstimator, TransformerMixin, abc.ABC):
 
     _suffix: str = ""
     _suppress_warnings: bool = False
+    variables: list[str] | None
 
     @abc.abstractmethod
     def _build_inner(self) -> Any:  # noqa: ANN401
