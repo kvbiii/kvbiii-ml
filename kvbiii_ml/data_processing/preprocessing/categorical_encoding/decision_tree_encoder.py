@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 from feature_engine.encoding import DecisionTreeEncoder
@@ -72,7 +72,7 @@ class DecisionTreeEncoderWithOriginal(_WithOriginalBase):
             param_grid=self.param_grid,
             regression=self.regression,
             random_state=self.random_state,
-            variables=self.variables,
+            variables=cast("list[str | int] | None", self.variables),
             ignore_format=self.ignore_format,
             precision=self.precision,
             unseen=self.unseen,

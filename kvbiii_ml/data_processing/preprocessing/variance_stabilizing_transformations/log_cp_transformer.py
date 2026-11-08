@@ -1,3 +1,5 @@
+from typing import cast
+
 import pandas as pd
 from feature_engine.transformation import LogCpTransformer
 
@@ -38,7 +40,9 @@ class LogCpTransformerWithOriginal(_WithOriginalBase):
         Returns:
             LogCpTransformer: Unfitted instance.
         """
-        return LogCpTransformer(variables=self.variables, base=self.base, C=self.C)
+        return LogCpTransformer(
+            variables=cast("list[str | int] | None", self.variables), base=self.base, C=self.C
+        )
 
     def _fit_inner(self, inner: LogCpTransformer, X: pd.DataFrame, y: object) -> LogCpTransformer:
         """Fit the transformer on X (learns C per variable if C='auto').

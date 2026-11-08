@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 from feature_engine.encoding import MeanEncoder
@@ -61,7 +61,7 @@ class MeanEncoderWithOriginal(_WithOriginalBase):
             MeanEncoder: Unfitted encoder instance.
         """
         return MeanEncoder(
-            variables=self.variables,
+            variables=cast("list[str | int] | None", self.variables),
             missing_values=self.missing_values,
             ignore_format=self.ignore_format,
             unseen=self.unseen,

@@ -1,3 +1,5 @@
+from typing import Literal, cast
+
 import pandas as pd
 from feature_engine.outliers import OutlierTrimmer
 
@@ -47,8 +49,8 @@ class OutlierTrimmerWithOriginal(_WithOriginalBase):
         return OutlierTrimmer(
             capping_method=self.capping_method,
             tail=self.tail,
-            fold=self.fold,
-            variables=self.variables,
+            fold=cast("float | Literal['auto']", self.fold),
+            variables=cast("list[str | int] | None", self.variables),
             missing_values=self.missing_values,
         )
 

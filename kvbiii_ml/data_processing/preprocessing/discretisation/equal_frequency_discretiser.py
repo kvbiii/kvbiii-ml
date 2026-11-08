@@ -1,3 +1,5 @@
+from typing import cast
+
 import pandas as pd
 from feature_engine.discretisation import EqualFrequencyDiscretiser
 
@@ -53,7 +55,7 @@ class EqualFrequencyDiscretiserWithOriginal(_WithOriginalBase):
             EqualFrequencyDiscretiser: Unfitted instance.
         """
         return EqualFrequencyDiscretiser(
-            variables=self.variables,
+            variables=cast("list[str | int] | None", self.variables),
             q=self.q,
             return_object=self.return_object,
             return_boundaries=self.return_boundaries,
