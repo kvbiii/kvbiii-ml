@@ -3,7 +3,6 @@ import gc
 import numpy as np
 import pandas as pd
 import shap
-from sklearn.base import BaseEstimator
 
 MAX_NESTED_ENSEMBLE_SIZE = 10
 
@@ -64,12 +63,12 @@ def _compute_single_model_shap(model: object, X: pd.DataFrame) -> shap.Explanati
         gc.collect()
 
 
-def _order_x_for_estimator(X: pd.DataFrame, estimator: BaseEstimator) -> pd.DataFrame:
+def _order_x_for_estimator(X: pd.DataFrame, estimator: object) -> pd.DataFrame:
     """Reorder columns to match the estimator's expected feature order.
 
     Args:
         X (pd.DataFrame): Input features.
-        estimator (BaseEstimator): Trained estimator.
+        estimator (object): Trained estimator (any model, e.g. CatBoost or a sklearn estimator).
 
     Returns:
         pd.DataFrame: X in the estimator's feature order, or unchanged if it exposes no names.

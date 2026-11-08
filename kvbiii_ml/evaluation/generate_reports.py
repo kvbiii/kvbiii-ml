@@ -180,7 +180,7 @@ def _per_class_roc_auc(
 
 def _build_per_class_split(
     y_true: pd.Series | np.ndarray,
-    y_pred: np.ndarray,
+    y_pred: pd.Series | np.ndarray,
     y_proba: np.ndarray | None,
     classes: np.ndarray,
     split_label: str,
@@ -267,9 +267,9 @@ def _apply_cutoff(
 
 def _build_overall_table(
     y_train_true: pd.Series | np.ndarray,
-    y_train_pred: np.ndarray,
+    y_train_pred: pd.Series | np.ndarray,
     y_test_true: pd.Series | np.ndarray,
-    y_test_pred: np.ndarray,
+    y_test_pred: pd.Series | np.ndarray,
     y_train_proba: np.ndarray | None,
     y_test_proba: np.ndarray | None,
     average: str,
@@ -280,9 +280,9 @@ def _build_overall_table(
 
     Args:
         y_train_true (pd.Series | np.ndarray): True training labels.
-        y_train_pred (np.ndarray): Predicted training labels.
+        y_train_pred (pd.Series | np.ndarray): Predicted training labels.
         y_test_true (pd.Series | np.ndarray): True test labels.
-        y_test_pred (np.ndarray): Predicted test labels.
+        y_test_pred (pd.Series | np.ndarray): Predicted test labels.
         y_train_proba (np.ndarray | None): Training probabilities for ROC-AUC/Log Loss.
         y_test_proba (np.ndarray | None): Test probabilities for ROC-AUC/Log Loss.
         average (str): Averaging strategy for multi-class metrics.
@@ -325,9 +325,9 @@ def _build_overall_table(
 
 def _build_per_class_table(
     y_train_true: pd.Series | np.ndarray,
-    y_train_pred: np.ndarray,
+    y_train_pred: pd.Series | np.ndarray,
     y_test_true: pd.Series | np.ndarray,
-    y_test_pred: np.ndarray,
+    y_test_pred: pd.Series | np.ndarray,
     y_train_proba: np.ndarray | None,
     y_test_proba: np.ndarray | None,
     classes: np.ndarray,
@@ -338,9 +338,9 @@ def _build_per_class_table(
 
     Args:
         y_train_true (pd.Series | np.ndarray): True training labels.
-        y_train_pred (np.ndarray): Predicted training labels.
+        y_train_pred (pd.Series | np.ndarray): Predicted training labels.
         y_test_true (pd.Series | np.ndarray): True test labels.
-        y_test_pred (np.ndarray): Predicted test labels.
+        y_test_pred (pd.Series | np.ndarray): Predicted test labels.
         y_train_proba (np.ndarray | None): Training probabilities for per-class ROC-AUC.
         y_test_proba (np.ndarray | None): Test probabilities for per-class ROC-AUC.
         classes (np.ndarray): Unique class labels.
