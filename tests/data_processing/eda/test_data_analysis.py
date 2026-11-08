@@ -386,5 +386,23 @@ def test_numerical_drift_analysis_is_the_same_for_nullable_and_plain_floats():
     pd.testing.assert_frame_equal(result, expected)
 
 
+def test_numerical_drift_analysis_treats_boolean_columns_like_integers():
+    """Tests numerical_drift_analysis accepts a boolean column and matches the 0/1 integer result.
+
+    Asserts:
+        - A bool column no longer raises and gives the same statistics as the same data as int
+    """
+    rng = np.random.default_rng(0)
+    as_int = pd.DataFrame({"x": rng.integers(0, 2, 200)})
+    as_bool = as_int.astype(bool)
+    expected = DataAnalyzer.numerical_drift_analysis(
+        as_int.iloc[:120], as_int.iloc[120:], ["x"]
+    ).data
+    result = DataAnalyzer.numerical_drift_analysis(
+        as_bool.iloc[:120], as_bool.iloc[120:], ["x"]
+    ).data
+    pd.testing.assert_frame_equal(result, expected)
+
+
 if __name__ == "__main__":
     print("Run this file with pytest to execute tests.")
