@@ -198,15 +198,17 @@ def _eval_calibrator_oof(
     fold, repeating for every fold. This avoids the in-sample optimism that occurs
     when fitting and evaluating a calibrator on the same OOF predictions.
 
+    Notes:
+    - fold_splits: Cached (train_idx, val_idx) pairs - reusing the outer CV's own fold boundaries as
+      the inner split (rather than re-deriving them) guarantees every OOF row is scored by a
+      calibrator that never saw it, without a second, independently-shuffled CV.
+
     Args:
         oof_probas (np.ndarray): OOF probabilities of shape (n_samples, n_classes).
         y_oof (np.ndarray): OOF true labels of shape (n_samples,).
         method (str): Calibration method, either "isotonic" or "sigmoid".
         classes (np.ndarray): Unique class labels.
-        fold_splits (list[tuple[np.ndarray, np.ndarray]]): Cached (train_idx, val_idx)
-            pairs - reusing the outer CV's own fold boundaries as the inner split
-            (rather than re-deriving them) guarantees every OOF row is scored by a
-            calibrator that never saw it, without a second, independently-shuffled CV.
+        fold_splits (list[tuple[np.ndarray, np.ndarray]]): Cached (train_idx, val_idx) folds.
 
     Returns:
         np.ndarray: Calibrated probabilities of shape (n_samples, n_classes) where
@@ -251,29 +253,30 @@ class ClassificationCalibrator:
     ) -> None:
         """Initialize the calibrator.
 
+        Notes:
+        - cross_validator: Configured CV trainer. Its cv splitter is inherited by the inner OOFModel
+          for calibration loops.
+        - methods: Calibration methods to evaluate. Accepts "isotonic" and/or "sigmoid". Defaults to
+          ("isotonic", "sigmoid").
+        - selection_metric_name: Metric used to choose the best calibration method. Accepts "ECE",
+          "Brier"/"Brier Score" (all always computed internally), None (falls back to the
+          cross_validator's metric), or any key from METRICS (computed on OOF probabilities and
+          added as an extra column). Defaults to "Brier Score".
+        - calibration_holdout_size: Fraction of the training data the winning CalibratedModel holds
+          out to fit its calibrator. Defaults to 0.2.
+
         Args:
             estimator (BaseEstimator): Unfitted estimator or EnsembleModel to calibrate.
-            cross_validator (CrossValidationTrainer): Configured CV trainer. Its cv
-                splitter is inherited by the inner OOFModel for calibration loops.
-            methods (Iterable[str] | None): Calibration methods to evaluate. Accepts
-                "isotonic" and/or "sigmoid". Defaults to ("isotonic", "sigmoid").
-            n_bins (int): Number of bins for ECE computation and calibration curves.
-                Defaults to 10.
-            seed (int): Random seed forwarded to the winning CalibratedModel's
-                hold-out split. Defaults to 17.
-            id2label (dict[int, str] | None): Optional class-index to label mapping
-                for plot titles. Defaults to None.
-            selection_metric_name (str | None): Metric used to choose the best
-                calibration method. Accepts "ECE", "Brier"/"Brier Score" (all always
-                computed internally), None (falls back to the cross_validator's
-                metric), or any key from METRICS (computed on OOF probabilities and
-                added as an extra column). Defaults to "Brier Score".
-            calibration_holdout_size (float): Fraction of the training data the winning
-                CalibratedModel holds out to fit its calibrator. Defaults to 0.2.
+            cross_validator (CrossValidationTrainer): Configured CV trainer.
+            methods (Iterable[str] | None): "isotonic" and/or "sigmoid". Defaults to both.
+            n_bins (int): Number of bins for ECE computation and calibration curves. Defaults to 10.
+            seed (int): Seed for the winning CalibratedModel's hold-out split. Defaults to 17.
+            id2label (dict[int, str] | None): Class labels for plot titles. Defaults to None.
+            selection_metric_name (str | None): Metric choosing the best method (ECE, Brier, ...).
+            calibration_holdout_size (float): Held-out share for the calibrator. Defaults to 0.2.
 
         Raises:
-            ValueError: If selection_metric_name is not None, a built-in name, or a
-                valid METRICS key.
+            ValueError: If selection_metric_name is not None, a built-in name or a METRICS key.
         """
         if (
             selection_metric_name is not None
@@ -315,14 +318,16 @@ class ClassificationCalibrator:
     ) -> ClassificationCalibrator:
         """Run CV calibration, evaluate methods, and store the best strategy.
 
+        Notes:
+        - eval_set: Validation data for early stopping during the final full-data refit. Accepts the
+          same format as EnsembleModel: [(X_train, y_train), (X_valid, y_valid)] or [(X_valid,
+          y_valid)]. X values are expected raw (unprocessed); the pipeline from cross_validator is
+          applied automatically. Defaults to None.
+
         Args:
             X (pd.DataFrame): Full training feature matrix.
             y (pd.Series): Full training target vector.
-            eval_set (list[tuple[pd.DataFrame, pd.Series]] | None): Validation data for
-                early stopping during the final full-data refit. Accepts the same format
-                as EnsembleModel: [(X_train, y_train), (X_valid, y_valid)] or
-                [(X_valid, y_valid)]. X values are expected raw (unprocessed); the
-                pipeline from cross_validator is applied automatically. Defaults to None.
+            eval_set (list[tuple[pd.DataFrame, pd.Series]] | None): Data for early stopping.
 
         Returns:
             ClassificationCalibrator: Fitted self. After fitting, ``calibrated_valid_scores_``
@@ -516,13 +521,16 @@ class ClassificationCalibrator:
     ) -> Axes:
         """Draw one reliability curve with a miscalibration-gap fill and bin-density inset.
 
+        Notes:
+        - method_name: Calibration method this panel belongs to, used only to decide whether to
+          apply the "best method" highlight treatment.
+
         Args:
             ax (Axes): Axes to draw the reliability curve into.
             y_bin (np.ndarray): Binary indicator (0/1) for the positive class shown.
             p (np.ndarray): Predicted probability of that positive class.
             title (str): Panel title (method name, or class label in a multiclass grid).
-            method_name (str): Calibration method this panel belongs to, used only to
-                decide whether to apply the "best method" highlight treatment.
+            method_name (str): Calibration method of this panel (best-method highlight).
 
         Returns:
             Axes: The bin-density inset axes, so callers can attach the shared
@@ -659,12 +667,14 @@ class ClassificationCalibrator:
     ) -> tuple[list[dict], dict[str, IsotonicRegression | LogisticRegression | list]]:
         """Score the uncalibrated baseline and every configured calibration method.
 
+        Notes:
+        - fold_splits: Cached outer-CV fold (train_idx, val_idx) pairs, reused as the inner CV for
+          honest per-method calibrator evaluation.
+
         Args:
             y_oof (np.ndarray): OOF true labels of shape (n_samples,).
             oof_probas (np.ndarray): OOF probabilities from the base estimator.
-            fold_splits (list[tuple[np.ndarray, np.ndarray]]): Cached outer-CV fold
-                (train_idx, val_idx) pairs, reused as the inner CV for honest
-                per-method calibrator evaluation.
+            fold_splits (list[tuple[np.ndarray, np.ndarray]]): Cached (train_idx, val_idx) folds.
 
         Returns:
             tuple[list[dict], dict[str, IsotonicRegression | LogisticRegression | list]]:
@@ -746,11 +756,13 @@ class ClassificationCalibrator:
     ) -> None:
         """Pick the winning method and populate every best_* attribute.
 
+        Notes:
+        - calibrators: Method name to its calibrator fitted on the full OOF set.
+
         Args:
             sel_col (str): calibration_scores_df_ column to select the winner by.
             sel_direction (str): "minimize" or "maximize".
-            calibrators (dict[str, IsotonicRegression | LogisticRegression | list]):
-                Method name to its calibrator fitted on the full OOF set.
+            calibrators (dict[str, IsotonicRegression | LogisticRegression | list]): By method.
             y (pd.Series): Full training target, used to score calibrated_valid_scores_.
             fold_splits (list[tuple[np.ndarray, np.ndarray]]): Cached outer-CV folds.
         """
@@ -799,11 +811,14 @@ class ClassificationCalibrator:
         then refits the estimator using the average iteration count from OOF folds.
         When eval_set is provided, early stopping is preserved for the refit.
 
+        Notes:
+        - eval_set: Validation data for early stopping. X values are raw and are transformed through
+          the pipeline automatically. Defaults to None.
+
         Args:
             X (pd.DataFrame): Full raw feature matrix.
             y (pd.Series): Full training target.
-            eval_set (list[tuple] | None): Validation data for early stopping. X values
-                are raw and are transformed through the pipeline automatically. Defaults to None.
+            eval_set (list[tuple] | None): Early-stopping data; X is raw. Defaults to None.
         """
         pipeline = self.cross_validator.preprocessing_pipeline
         fitted_pipeline = clone(pipeline) if pipeline is not None else None
@@ -847,13 +862,15 @@ class ClassificationCalibrator:
     ) -> np.ndarray:
         """Convert probability matrix to the format expected by the metric function.
 
+        Notes:
+        - classes: Unique class labels, ordered to match probas' columns - required to map an argmax
+          column index back to the actual label value for "preds" metrics (e.g. "Accuracy", "F1"),
+          since class labels are not guaranteed to be 0..n_classes-1.
+
         Args:
             probas (np.ndarray): Probabilities of shape (n_samples, n_classes).
             metric_type (str): Either "probs" or "preds".
-            classes (np.ndarray): Unique class labels, ordered to match probas'
-                columns - required to map an argmax column index back to the
-                actual label value for "preds" metrics (e.g. "Accuracy", "F1"),
-                since class labels are not guaranteed to be 0..n_classes-1.
+            classes (np.ndarray): Unique class labels, ordered like the probas columns.
 
         Returns:
             np.ndarray: Positive-class column for binary "probs", full matrix for
@@ -1035,7 +1052,8 @@ if __name__ == "__main__":
         cal_3.fit(x_bin, y_bin)
         print(f"  best_method_: {cal_3.best_method_}")
         print(
-            f"  best_estimator_ is CalibratedModel: {isinstance(cal_3.best_estimator_, CalibratedModel)}"
+            "  best_estimator_ is CalibratedModel: "
+            f"{isinstance(cal_3.best_estimator_, CalibratedModel)}"
         )
         print(cal_3.calibration_scores_df_)
 

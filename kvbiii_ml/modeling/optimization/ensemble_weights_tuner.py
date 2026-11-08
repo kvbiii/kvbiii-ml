@@ -56,16 +56,18 @@ class EnsembleWeightTunerCV:
     ) -> None:
         """Initialize the tuner.
 
+        Notes:
+        - verbose: Whether to print the tuner's own start, per-trial, and finish logs. Independent
+          of ``cross_validator.verbose``: the tuner fits on a private silent copy of the trainer, so
+          the trainer passed in is never modified. Defaults to True.
+
         Args:
             estimators (list[BaseEstimator]): Base estimators to blend.
             cross_validator (CrossValidationTrainer): Cross-validation trainer to use.
             n_trials (int): Number of Optuna trials. Defaults to 50.
             seed (int): Random seed for the TPE sampler. Defaults to 17.
-            allow_negative_weights (bool): Whether to allow negative blending weights. Defaults to False.
-            verbose (bool): Whether to print the tuner's own start, per-trial, and
-                finish logs. Independent of ``cross_validator.verbose``: the tuner
-                fits on a private silent copy of the trainer, so the trainer passed
-                in is never modified. Defaults to True.
+            allow_negative_weights (bool): Allow negative blending weights. Defaults to False.
+            verbose (bool): Print the tuner's own per-trial and summary logs. Defaults to True.
         """
         self.estimators = list(estimators)
         self.cross_validator = cross_validator
@@ -88,7 +90,9 @@ class EnsembleWeightTunerCV:
         self.optimized_score_: float | None = None
 
     def tune(self, X: pd.DataFrame, y: pd.Series) -> optuna.study.Study:
-        """Run Optuna to find blending weights that beat naive baselines on cross-validated evidence.
+        """Run Optuna to find blending weights that beat naive baselines.
+
+        The comparison uses cross-validated evidence.
 
         Args:
             X (pd.DataFrame): Feature matrix.
@@ -236,8 +240,7 @@ class EnsembleWeightTunerCV:
         Args:
             X (pd.DataFrame): Full feature matrix.
             splits (list[tuple[np.ndarray, np.ndarray]]): CV train/validation index pairs.
-            cross_validator (CrossValidationTrainer): Trainer copy just fitted on
-                this estimator.
+            cross_validator (CrossValidationTrainer): Trainer copy just fitted on this estimator.
 
         Returns:
             pd.Series | pd.DataFrame: This estimator's pooled OOF predictions, in fold
@@ -456,8 +459,7 @@ class EnsembleWeightTunerCV:
             float: Mean-minus-std metric across folds for the sampled weight vector.
 
         Raises:
-            optuna.TrialPruned: When the sampled weights are degenerate (near-zero
-                signed sum) or when no fold yields a valid metric value.
+            optuna.TrialPruned: If the weights are degenerate or no fold gives a valid metric.
         """
         n = len(self.estimators)
         lo, hi = (-1.0, 1.0) if self.allow_negative_weights else (0.0, 1.0)
@@ -541,13 +543,16 @@ class EnsembleWeightTunerCV:
         how the base estimators themselves are already validated (mean +/-
         std per fold).
 
+        Notes:
+        - return_fold_scores: When True, also return the raw (unpenalized) per-fold metric values
+          alongside the aggregate score. Defaults to False.
+
         Args:
             weights (np.ndarray): Normalized blending weights.
             y_true (pd.Series): OOF targets with preserved fold order.
             preds_list (list[pd.Series | pd.DataFrame]): Per-estimator OOF predictions.
             fold_boundaries (list[int]): Cumulative per-fold row counts for slicing.
-            return_fold_scores (bool): When True, also return the raw (unpenalized)
-                per-fold metric values alongside the aggregate score. Defaults to False.
+            return_fold_scores (bool): Also return raw per-fold metric values. Defaults to False.
 
         Returns:
             float | None | tuple[float | None, list[float]]: Penalized aggregate
@@ -607,8 +612,7 @@ class EnsembleWeightTunerCV:
                 a label identifying whether the search result or a baseline was chosen.
 
         Raises:
-            RuntimeError: If no weight vector, including every baseline,
-                produced a valid metric on any fold.
+            RuntimeError: If no weight vector, baselines included, gave a valid metric on any fold.
 
         Note:
             Also records ``baseline_name_``, ``baseline_score_``, and

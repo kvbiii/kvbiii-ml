@@ -65,19 +65,19 @@ class PseudoLabelGenerator:
     ) -> None:
         """Initialize the pseudo-label generator.
 
+        Notes:
+        - cross_validator: Configured CV trainer. Its fitted pipelines are reused when predicting on
+          unlabeled data.
+        - threshold_percentile: Used by "auto". Percentile (0–100) of the OOF class-specific
+          probability distribution for each class used to set the threshold. Higher = stricter =
+          fewer but more reliable pseudo labels. Defaults to 80.
+
         Args:
-            cross_validator (CrossValidationTrainer): Configured CV trainer. Its
-                fitted pipelines are reused when predicting on unlabeled data.
-            threshold_method (str): One of "auto", "top_k", or "fixed".
-                Defaults to "auto".
-            threshold_percentile (float): Used by "auto". Percentile (0–100) of the
-                OOF class-specific probability distribution for each class used to set
-                the threshold. Higher = stricter = fewer but more reliable pseudo labels.
-                Defaults to 80.
-            top_k_pct (float): Used by "top_k". Fraction of unlabeled samples to
-                keep per class (e.g. 0.2 = top-20%). Defaults to 0.20.
-            fixed_threshold (float): Used by "fixed". Confidence cutoff applied to
-                all classes. Defaults to 0.90.
+            cross_validator (CrossValidationTrainer): Configured CV trainer; pipelines reused.
+            threshold_method (str): One of "auto", "top_k", or "fixed". Defaults to "auto".
+            threshold_percentile (float): OOF percentile for the "auto" threshold. Defaults to 80.
+            top_k_pct (float): Used by "top_k": share kept per class (0.2 = 20%). Defaults to 0.20.
+            fixed_threshold (float): Used by "fixed": cutoff for all classes. Defaults to 0.90.
 
         Raises:
             ValueError: If threshold_method is not one of the supported values.
@@ -644,7 +644,8 @@ if __name__ == "__main__":
         )
         _, valid_aug, _ = cv_retrain.fit(lgbm_retrain, x_aug, y_aug)
         print(
-            f"  Baseline CV valid   : {np.mean(cv.valid_scores_):.4f} ± {np.std(cv.valid_scores_):.4f}"
+            f"  Baseline CV valid   : {np.mean(cv.valid_scores_):.4f} "
+            f"± {np.std(cv.valid_scores_):.4f}"
         )
         print(f"  Augmented CV valid  : {np.mean(valid_aug):.4f} ± {np.std(valid_aug):.4f}")
         print()
