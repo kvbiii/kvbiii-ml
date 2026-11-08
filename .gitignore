@@ -4,6 +4,7 @@ __pycache__/
 
 !/.github
 !.gitignore
+!.git-blame-ignore-revs
 !/kvbiii_ml
 !/tests
 !/scripts
