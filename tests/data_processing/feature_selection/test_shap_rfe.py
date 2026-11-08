@@ -51,9 +51,6 @@ def patch_compute_shap_values(monkeypatch: pytest.MonkeyPatch):
 
     Args:
         monkeypatch (MonkeyPatch): Pytest monkeypatch fixture.
-
-    Yields:
-        None: Control back to the test after patching is applied.
     """
 
     def _fake_compute(
@@ -66,7 +63,6 @@ def patch_compute_shap_values(monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setenv("SHAP_DISABLE_PROG_BAR", "1")
     monkeypatch.setattr(shap_rfe_module, "compute_shap_values", _fake_compute)
-    yield
 
 
 def _build_cv():

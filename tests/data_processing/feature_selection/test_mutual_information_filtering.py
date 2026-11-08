@@ -309,9 +309,7 @@ def test_mutualinformationfiltering_transform_raises_error_when_not_fitted():
     X = pd.DataFrame({"feature": [1, 2, 3]})
     mif = MutualInformationFiltering(problem_type="classification")
 
-    with pytest.raises(
-        ValueError, match="The filter has not been fitted yet. Call fit\\(\\) first"
-    ):
+    with pytest.raises(ValueError, match=r"The filter has not been fitted yet. Call fit\(\) first"):
         mif.transform(X)
 
 
@@ -384,9 +382,9 @@ def test_mutualinformationfiltering_prepare_x_y_for_mi_handles_categorical_featu
     # discrete_features should be set for MI computation
     if "discrete_features" not in mif.mi_kwargs:
         raise AssertionError()
-    if mif.mi_kwargs["discrete_features"][1] != True:
+    if not mif.mi_kwargs["discrete_features"][1]:
         raise AssertionError()
-    if mif.mi_kwargs["discrete_features"][0] != False:
+    if mif.mi_kwargs["discrete_features"][0]:
         raise AssertionError()
 
 

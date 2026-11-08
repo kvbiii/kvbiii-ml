@@ -355,7 +355,8 @@ class ModelImportanceRecursiveFeatureElimination:
 
         avg_importances = np.nan_to_num(np.mean(importances, axis=0), nan=0.0)
         avg_importance_map = {
-            feature: float(imp) for feature, imp in zip(current_processed_features, avg_importances)
+            feature: float(imp)
+            for feature, imp in zip(current_processed_features, avg_importances, strict=False)
         }
         gc.collect()
         return (

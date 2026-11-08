@@ -149,7 +149,7 @@ class MutualInformationFiltering:
         if not isinstance(y, (pd.Series, np.ndarray)):
             raise ValueError("y must be a pandas Series or numpy array.")
 
-        x_prepared, discrete_features_mask = DataAnalyzer._prepare_features_for_mutual_information(
+        x_prepared, discrete_features_mask = DataAnalyzer._prepare_features_for_mutual_information(  # noqa: SLF001
             X
         )
 

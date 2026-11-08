@@ -237,7 +237,7 @@ class MutualInformationRecursiveFeatureElimination:
         if not isinstance(y, (pd.Series, np.ndarray)):
             raise ValueError("y must be a pandas Series or numpy array.")
 
-        x_prepared, discrete_features_mask = DataAnalyzer._prepare_features_for_mutual_information(
+        x_prepared, discrete_features_mask = DataAnalyzer._prepare_features_for_mutual_information(  # noqa: SLF001
             X
         )
 
@@ -327,7 +327,6 @@ if __name__ == "__main__":
         steps=10,
         alpha=0.85,
         verbose=True,
-        # protected_features=["mean radius", "mean texture"],
     )
 
     summary = selector.run(X_df, y_ser)

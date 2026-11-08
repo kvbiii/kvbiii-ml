@@ -168,7 +168,7 @@ class PermutationRecursiveFeatureElimination:
         fold_data = [
             (
                 est,
-                CrossValidationTrainer._transform_with_pipeline(
+                CrossValidationTrainer._transform_with_pipeline(  # noqa: SLF001
                     pipe, X[all_raw_features].iloc[val_idx].copy()
                 ),
                 y.iloc[val_idx],
@@ -177,6 +177,7 @@ class PermutationRecursiveFeatureElimination:
                 fold_splits,
                 self.cross_validator.fitted_estimators_,
                 self.cross_validator.fitted_pipelines_,
+                strict=False,
             )
         ]
 

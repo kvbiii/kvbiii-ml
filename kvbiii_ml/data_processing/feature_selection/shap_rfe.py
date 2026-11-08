@@ -2,10 +2,16 @@ import gc
 
 import numpy as np
 import pandas as pd
+import shap
 from sklearn.base import BaseEstimator
 
 from kvbiii_ml.evaluation.shap_values import compute_shap_values
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
+
+NDIM_2D = 2
+NDIM_3D = 3
+BINARY_N_CLASSES = 2
+PROBABILITY_THRESHOLD = 0.5
 
 
 class ShapRecursiveFeatureElimination:
@@ -335,7 +341,7 @@ class ShapRecursiveFeatureElimination:
         fold_features_metric_monitor = {f: [] for f in current_features}
 
         for fold_idx, ((_train_idx, valid_idx), fitted) in enumerate(
-            zip(self.cv.split(X[current_features], y), fitted_estimators)
+            zip(self.cv.split(X[current_features], y), fitted_estimators, strict=False)
         ):
             try:
                 X_valid = X.iloc[valid_idx][current_features]
@@ -375,17 +381,17 @@ class ShapRecursiveFeatureElimination:
 
     def _process_shap_fold(
         self,
-        shap_values,
+        shap_values: shap.Explanation,
         y_valid: pd.Series,
         current_features: list[str],
         fold_features_metric_monitor: dict,
     ) -> None:
         """Process SHAP values for a single fold with improved memory management."""
-        vals = shap_values.values
+        vals = shap_values.values  # noqa: PD011
         base = shap_values.base_values
 
         try:
-            if vals.ndim == 2:
+            if vals.ndim == NDIM_2D:
                 self._process_2d_shap(
                     vals,
                     base,
@@ -393,7 +399,7 @@ class ShapRecursiveFeatureElimination:
                     current_features,
                     fold_features_metric_monitor,
                 )
-            elif vals.ndim == 3:
+            elif vals.ndim == NDIM_3D:
                 self._process_3d_shap(
                     vals,
                     base,
@@ -411,12 +417,12 @@ class ShapRecursiveFeatureElimination:
 
     def _process_2d_shap(
         self,
-        vals,
-        base,
-        y_valid,
-        current_features,
-        fold_features_metric_monitor,
-    ):
+        vals: np.ndarray,
+        base: np.ndarray | float,
+        y_valid: pd.Series,
+        current_features: list[str],
+        fold_features_metric_monitor: dict,
+    ) -> None:
         """Process 2D SHAP values with vectorized operations for efficiency."""
         try:
             total = vals.sum(axis=1, keepdims=True)
@@ -430,9 +436,9 @@ class ShapRecursiveFeatureElimination:
 
             if self.problem_type == "classification":
                 pred_prob_matrix = 1 / (1 + np.exp(-np.clip(pred_matrix, -500, 500)))
-                if pred_prob_matrix.ndim == 3 and y_valid.ndim == 1:
+                if pred_prob_matrix.ndim == NDIM_3D and y_valid.ndim == 1:
                     pred_prob_matrix = pred_prob_matrix[:, :, 1]
-                elif pred_prob_matrix.ndim == 2 and pred_prob_matrix.shape[1] != len(
+                elif pred_prob_matrix.ndim == NDIM_2D and pred_prob_matrix.shape[1] != len(
                     current_features
                 ):
                     pred_prob_matrix = (
@@ -442,17 +448,17 @@ class ShapRecursiveFeatureElimination:
                     )
                 if self.metric_type == "probs":
                     final_pred_matrix = pred_prob_matrix
-                elif pred_prob_matrix.ndim == 2 and pred_prob_matrix.shape[1] == len(
+                elif pred_prob_matrix.ndim == NDIM_2D and pred_prob_matrix.shape[1] == len(
                     current_features
                 ):
-                    final_pred_matrix = (pred_prob_matrix >= 0.5).astype(int)
+                    final_pred_matrix = (pred_prob_matrix >= PROBABILITY_THRESHOLD).astype(int)
                 else:
                     final_pred_matrix = np.argmax(pred_prob_matrix, axis=-1).astype(int)
             else:
                 final_pred_matrix = pred_matrix
             for feat_idx, feature in enumerate(current_features):
                 try:
-                    if final_pred_matrix.ndim == 2:
+                    if final_pred_matrix.ndim == NDIM_2D:
                         final_pred = final_pred_matrix[:, feat_idx]
                     else:
                         final_pred = final_pred_matrix[feat_idx]
@@ -482,7 +488,14 @@ class ShapRecursiveFeatureElimination:
                 del final_pred_matrix
             gc.collect()
 
-    def _process_3d_shap(self, vals, base, y_valid, current_features, fold_features_metric_monitor):
+    def _process_3d_shap(
+        self,
+        vals: np.ndarray,
+        base: np.ndarray | float,
+        y_valid: pd.Series,
+        current_features: list[str],
+        fold_features_metric_monitor: dict,
+    ) -> None:
         """Process 3D SHAP values with vectorized operations for efficiency."""
         try:
             total = vals.sum(axis=1)
@@ -492,31 +505,31 @@ class ShapRecursiveFeatureElimination:
 
             if scalar_base:
                 pred_matrix = base_arr.item() + reduced_vals_matrix
-            elif base_arr.ndim == 1 and reduced_vals_matrix.ndim == 3:
+            elif base_arr.ndim == 1 and reduced_vals_matrix.ndim == NDIM_3D:
                 pred_matrix = base_arr[:, np.newaxis, np.newaxis] + reduced_vals_matrix
             else:
                 pred_matrix = base_arr[:, np.newaxis, :] + reduced_vals_matrix
             if self.problem_type == "classification":
                 pred_prob_matrix = 1 / (1 + np.exp(-np.clip(pred_matrix, -500, 500)))
-                if pred_prob_matrix.ndim == 3 and y_valid.ndim == 1:
-                    if pred_prob_matrix.shape[2] == 2:
+                if pred_prob_matrix.ndim == NDIM_3D and y_valid.ndim == 1:
+                    if pred_prob_matrix.shape[2] == BINARY_N_CLASSES:
                         pred_prob_matrix = pred_prob_matrix[:, :, 1]
                     elif pred_prob_matrix.shape[2] == 1:
                         pred_prob_matrix = pred_prob_matrix[:, :, 0]
                 if self.metric_type == "probs":
                     final_pred_matrix = pred_prob_matrix
-                elif pred_prob_matrix.ndim == 3:
+                elif pred_prob_matrix.ndim == NDIM_3D:
                     final_pred_matrix = np.argmax(pred_prob_matrix, axis=-1).astype(int)
                 else:
-                    final_pred_matrix = (pred_prob_matrix >= 0.5).astype(int)
-            elif pred_matrix.ndim == 3:
+                    final_pred_matrix = (pred_prob_matrix >= PROBABILITY_THRESHOLD).astype(int)
+            elif pred_matrix.ndim == NDIM_3D:
                 final_pred_matrix = pred_matrix[:, :, 0]
             else:
                 final_pred_matrix = pred_matrix
             n = len(y_valid)
             for feat_idx, feature in enumerate(current_features):
                 try:
-                    if final_pred_matrix.ndim == 2:
+                    if final_pred_matrix.ndim == NDIM_2D:
                         final_pred = final_pred_matrix[:, feat_idx]
                     else:
                         final_pred = final_pred_matrix[feat_idx]
