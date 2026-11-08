@@ -814,7 +814,8 @@ def test_tuner_best_score_describes_selected_weights_even_when_a_baseline_wins()
     ):
         raise AssertionError()
     if tuner.selection_source_ != "optimized":
-        assert tuner.selection_source_ is not None
+        if tuner.selection_source_ is None:
+            raise AssertionError()
         expected = tuner._baseline_candidates(2)[tuner.selection_source_]
         if not np.allclose(tuner.best_weights, expected):
             raise AssertionError()

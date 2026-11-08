@@ -618,7 +618,8 @@ def test_crossvalidationtrainer_binary_preds_metric_averages_test_probabilities(
     )
     _, _, test_pred = trainer.fit(LogisticRegression(), X, y, X_test=X.iloc[:20])
 
-    assert test_pred is not None
+    if test_pred is None:
+        raise AssertionError()
     assert_valid_binary_proba_matrix(test_pred, 20)
     fold_label_fractions = {0.0, 1 / 3, 2 / 3, 1.0}
     if all(round(v, 6) in {round(f, 6) for f in fold_label_fractions} for v in test_pred[:, 1]):

@@ -265,7 +265,8 @@ def test_restrict_drops_step_when_filtered_variables_list_is_empty():
 
     if raw_needed != ["f1"]:
         raise AssertionError(raw_needed)
-    assert restricted is not None
+    if restricted is None:
+        raise AssertionError()
     step_names = [name for name, _ in restricted.steps]
     if "winsor" in step_names:
         raise AssertionError("expected the winsorizer step to be dropped entirely")
@@ -283,7 +284,8 @@ def test_restrict_leaves_variables_none_step_unchanged():
 
     _, restricted = graph.restrict(["f1"])
 
-    assert restricted is not None
+    if restricted is None:
+        raise AssertionError()
     imputer_step = dict(restricted.steps)["imputer"]
     if imputer_step.get_params()["variables"] is not None:
         raise AssertionError("expected variables=None to be left unmodified")
@@ -325,7 +327,8 @@ def test_restrict_never_drops_a_raw_column_still_needed_transitively():
 
     if raw_needed != ["age"]:
         raise AssertionError(raw_needed)
-    assert restricted is not None
+    if restricted is None:
+        raise AssertionError()
     result = restricted.fit_transform(X[raw_needed])
     if "age_PREPROCESS_WINSORIZER" not in result.columns:
         raise AssertionError("restricted pipeline failed to produce the still-needed column")
@@ -369,7 +372,8 @@ def test_restrict_narrows_a_steps_variables_to_only_its_own_still_needed_derived
 
     if set(raw_needed) != {"cat_a", "cat_b", "cat_c"}:
         raise AssertionError(raw_needed)
-    assert restricted is not None
+    if restricted is None:
+        raise AssertionError()
     count_freq_step = dict(restricted.steps)["count_freq"]
     if count_freq_step.get_params()["variables"] != ["cat_a"]:
         raise AssertionError(count_freq_step.get_params()["variables"])
@@ -411,7 +415,8 @@ def test_restrict_narrows_a_variables_none_steps_own_survivors():
 
     if raw_needed != ["shared"]:
         raise AssertionError(raw_needed)
-    assert restricted is not None
+    if restricted is None:
+        raise AssertionError()
     step_names = [name for name, _ in restricted.steps]
     if "target_enc" in step_names:
         raise AssertionError("expected the auto-detect target encoder step to be dropped entirely")
@@ -448,7 +453,8 @@ def test_restrict_pipeline_is_self_sufficient_on_the_full_raw_x():
     graph = PipelineDependencyGraph.build(pipeline, X)
 
     _, restricted = graph.restrict(["f0_PREPROCESS_WINSORIZER"])
-    assert restricted is not None
+    if restricted is None:
+        raise AssertionError()
     result = restricted.fit_transform(X)
 
     if "f0_PREPROCESS_WINSORIZER" not in result.columns:
@@ -528,7 +534,8 @@ def test_build_restricted_pipeline_matches_manual_build_and_restrict():
 
     manual_graph = PipelineDependencyGraph.build(pipeline, X)
     _, manual_restricted = manual_graph.restrict(selected_features)
-    assert manual_restricted is not None
+    if manual_restricted is None:
+        raise AssertionError()
     manual_result = manual_restricted.fit_transform(X)
 
     convenience_result = build_restricted_pipeline(pipeline, X, selected_features).fit_transform(X)

@@ -236,7 +236,8 @@ def test_randomsearchcv_tune_runs_two_stage_when_data_exceeds_explore_threshold(
         raise AssertionError()
     if len(study.trials) != 2:
         raise AssertionError()
-    assert tuner.best_params_ is not None
+    if tuner.best_params_ is None:
+        raise AssertionError()
     if "C" not in tuner.best_params_:
         raise AssertionError()
 
@@ -321,7 +322,8 @@ def test_randomsearchcv_tune_keeps_defaults_when_search_gains_are_noise_sized(
 
     if tuner.selection_source_ != "baseline":
         raise AssertionError()
-    assert tuner.best_params_ is not None
+    if tuner.best_params_ is None:
+        raise AssertionError()
     if tuner.best_params_["C"] != 0.5:
         raise AssertionError()
 
@@ -358,7 +360,8 @@ def test_randomsearchcv_tune_returns_refit_ready_n_estimators_without_early_stop
 
     tuner.tune(estimator, X, y, params_grid)
 
-    assert tuner.best_params_ is not None
+    if tuner.best_params_ is None:
+        raise AssertionError()
     if tuner.best_params_.get("n_estimators", 0) <= 0:
         raise AssertionError()
     if "early_stopping_round" in tuner.best_params_:
@@ -395,7 +398,8 @@ def test_randomsearchcv_tune_supports_regression_problems():
 
     if tuner.selection_source_ not in {"tuned", "baseline"}:
         raise AssertionError()
-    assert tuner.best_params_ is not None
+    if tuner.best_params_ is None:
+        raise AssertionError()
     if "num_leaves" not in tuner.best_params_:
         raise AssertionError()
 
@@ -1301,7 +1305,8 @@ def test_randomsearchcv_tune_runs_trials_in_parallel(
         raise AssertionError()
     if study.sampler._constant_liar is not True:  # ty: ignore[unresolved-attribute]
         raise AssertionError()
-    assert tuner.best_params_ is not None
+    if tuner.best_params_ is None:
+        raise AssertionError()
     if not 0.05 <= tuner.best_params_["learning_rate"] <= 0.3:
         raise AssertionError()
 

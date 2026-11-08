@@ -163,8 +163,10 @@ def test_tune_never_selects_weights_worse_than_uniform(small_classification_data
     n = len(estimators)
     uniform_score = tuner._score_weights(np.full(n, 1.0 / n), y_true, preds_list, fold_boundaries)
 
-    assert uniform_score is not None
-    assert tuner.best_score_ is not None
+    if uniform_score is None:
+        raise AssertionError()
+    if tuner.best_score_ is None:
+        raise AssertionError()
     if tuner.best_score_ < uniform_score - 1e-9:
         raise AssertionError()
 
