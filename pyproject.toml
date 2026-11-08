@@ -46,6 +46,8 @@ cache_dir = ".cache/pytest"
 
 [tool.uv]
 cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }]
+# Resolution only (not published metadata): without it uv picks numba 0.53.1 for shap 0.51 on Python 3.11, which cannot build.
+constraint-dependencies = ["numba>=0.60"]
 
 # Lint and type-check settings live in ruff.toml and ty.toml next to this file.
 # Both are discovered automatically and take precedence over pyproject.toml.
