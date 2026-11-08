@@ -178,7 +178,7 @@ def get_top_classification_errors(
 
     Raises:
         TypeError: If y_true is not a pandas Series.
-        ValueError: If sample counts, class_id or the number of cutoffs do not match.
+        ValueError: If sample counts or cutoffs do not match, or class_id is out of bounds.
     """
     if not isinstance(y_true, pd.Series):
         raise TypeError("y_true must be a pandas Series aligned to predictions.")

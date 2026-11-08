@@ -52,9 +52,6 @@ def patch_tree_explainer(monkeypatch: pytest.MonkeyPatch):
 
     Args:
         monkeypatch (pytest.MonkeyPatch): Pytest monkeypatch fixture.
-
-    Yields:
-        None: Control back to the test after patching is applied.
     """
     monkeypatch.setattr(
         shap_module,
