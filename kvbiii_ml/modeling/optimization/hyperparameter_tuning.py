@@ -9,7 +9,7 @@ import numpy as np
 import optuna
 import pandas as pd
 from sklearn.base import BaseEstimator, clone
-from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
+from sklearn.model_selection import BaseCrossValidator, KFold, StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 
 from kvbiii_ml.modeling.training.base_trainer import BaseTrainer, to_metric_proba
@@ -24,6 +24,7 @@ warnings.filterwarnings(
 
 GridEntry = tuple[str, list[object]] | tuple[str, list[object], dict[str, Any]]
 ParamsGrid = dict[str, GridEntry]
+GRID_ENTRY_WITH_OPTIONS = 3
 
 CATBOOST_PREFIX = "CatBoost"
 CATBOOST_ITERATIONS_PARAM = "iterations"
@@ -274,34 +275,34 @@ class RandomSearchCV:
         es_holdout_size: float = 0.1,
         top_k: int = 15,
     ) -> None:
-        """Initialize the tuner.
+        """Initialize the tuner, raising ValueError for out-of-range staging options.
+
+        Notes:
+        - cross_validator: Configured trainer supplying the metric, its direction, the splitter, and
+          the preprocessing pipeline.
+        - n_trials: Trial budget of the explore stage, or of the single search when no explore stage
+          runs. The confirm stage adds max(top_k, n_trials // 4) trials. Defaults to 100.
+        - verbose: Print one line per trial plus start and finish reports. Optuna's own logging is
+          muted during tune() either way. Defaults to True.
+        - n_parallel_trials: Trials evaluated concurrently as Optuna threads. Boosting libraries
+          release the GIL while training, so keep n_parallel_trials times the estimator's own thread
+          count within the physical cores. Above 1 the sampler uses a constant liar and completion
+          order depends on timing, so a seed no longer reproduces the study exactly. Defaults to 1.
+        - explore_fraction: Row fraction of the explore subsample. The explore stage runs only when
+          this fraction exceeds explore_min_rows, and 1.0 disables it. Defaults to 0.25.
+        - es_holdout_size: Fraction of each training fold carved out for early stopping; 0.0
+          disables the carve-out. Defaults to 0.1.
 
         Args:
-            cross_validator (CrossValidationTrainer): Configured trainer supplying the
-                metric, its direction, the splitter, and the preprocessing pipeline.
-            n_trials (int): Trial budget of the explore stage, or of the single search
-                when no explore stage runs. The confirm stage adds
-                max(top_k, n_trials // 4) trials. Defaults to 100.
+            cross_validator (CrossValidationTrainer): Trainer for metric, splitter and pipeline.
+            n_trials (int): Explore-stage trial budget (or single search). Defaults to 100.
             seed (int): Random seed for the sampler and every internal split. Defaults to 17.
-            verbose (bool): Print one line per trial plus start and finish reports.
-                Optuna's own logging is muted during tune() either way. Defaults to True.
-            n_parallel_trials (int): Trials evaluated concurrently as Optuna threads.
-                Boosting libraries release the GIL while training, so keep
-                n_parallel_trials times the estimator's own thread count within the
-                physical cores. Above 1 the sampler uses a constant liar and completion
-                order depends on timing, so a seed no longer reproduces the study
-                exactly. Defaults to 1.
-            explore_fraction (float): Row fraction of the explore subsample. The
-                explore stage runs only when this fraction exceeds explore_min_rows,
-                and 1.0 disables it. Defaults to 0.25.
+            verbose (bool): Print a line per trial plus start and finish reports. Defaults to True.
+            n_parallel_trials (int): Trials evaluated concurrently, as Optuna threads.
+            explore_fraction (float): Explore subsample row share; 1.0 disables. Defaults to 0.25.
             explore_min_rows (int): Row floor of the explore subsample. Defaults to 100_000.
-            es_holdout_size (float): Fraction of each training fold carved out for early
-                stopping; 0.0 disables the carve-out. Defaults to 0.1.
-            top_k (int): Explore configurations that define the confirm-stage box and
-                warm-start it. Defaults to 15.
-
-        Raises:
-            ValueError: If any staging option lies outside its valid range.
+            es_holdout_size (float): Fold share for early stopping; 0.0 disables. Defaults to 0.1.
+            top_k (int): Explore configs defining the confirm-stage box. Defaults to 15.
         """
         self.cross_validator = cross_validator
         self.n_trials = n_trials
@@ -353,8 +354,7 @@ class RandomSearchCV:
         """Create an Optuna study with a seeded multivariate TPE sampler.
 
         Args:
-            pruner (optuna.pruners.BasePruner | None): Pruner to attach. Defaults to
-                None, which disables pruning via NopPruner.
+            pruner (optuna.pruners.BasePruner | None): Pruner; None uses NopPruner (no pruning).
             n_startup_trials (int): Random trials before TPE takes over. Defaults to 25.
 
         Returns:
@@ -409,14 +409,16 @@ class RandomSearchCV:
     ) -> object:
         """Sample a single hyperparameter from the provided search space.
 
+        Notes:
+        - param_values: Tuple of (type, values) with an optional third element carrying keyword
+          options. Supported types: "int", "float", "categorical", "constant". Numeric types accept
+          {"log": True} for geometric spacing and {"step": ...} for a lattice; Optuna forbids
+          combining the two, so "step" is ignored on a log scale.
+
         Args:
             trial (optuna.Trial): Active Optuna trial.
             param_name (str): Name of the hyperparameter.
-            param_values (GridEntry): Tuple of (type, values) with an optional third
-                element carrying keyword options. Supported types: "int", "float",
-                "categorical", "constant". Numeric types accept {"log": True} for
-                geometric spacing and {"step": ...} for a lattice; Optuna forbids
-                combining the two, so "step" is ignored on a log scale.
+            param_values (GridEntry): (type, values[, options]) tuple.
 
         Returns:
             object: Sampled value compatible with the estimator.
@@ -452,8 +454,7 @@ class RandomSearchCV:
             trial (optuna.Trial): Active Optuna trial.
             plan (_EvaluationPlan): Fidelity level to score the configuration at.
             estimator (BaseEstimator): Estimator template to clone per fold.
-            space (ParamsGrid | None): Search space to sample from. Defaults to None,
-                which uses the caller's full grid.
+            space (ParamsGrid | None): Search space; None uses the caller's full grid.
 
         Returns:
             float: Penalised cross-validated score for this trial.
@@ -477,14 +478,16 @@ class RandomSearchCV:
     ) -> optuna.study.Study:
         """Run the search and select parameters that provably beat the estimator's own.
 
+        Notes:
+        - X_valid: Optional validation features. Together with y_valid, a single hold-out split
+          replaces cross-validation and the search runs single-stage. Defaults to None.
+
         Args:
             estimator (BaseEstimator): Estimator to tune.
             X (pd.DataFrame): Training features.
             y (pd.Series): Training target.
             params_grid (ParamsGrid): Parameter search space.
-            X_valid (pd.DataFrame | None): Optional validation features. Together with
-                y_valid, a single hold-out split replaces cross-validation and the
-                search runs single-stage. Defaults to None.
+            X_valid (pd.DataFrame | None): Hold-out features (with y_valid, replaces CV).
             y_valid (pd.Series | None): Optional validation target. Defaults to None.
 
         Returns:
@@ -520,11 +523,14 @@ class RandomSearchCV:
         Parameters the estimator does not expose through get_params are omitted so the
         library default applies rather than an invented value.
 
+        Notes:
+        - snap: Whether values are clamped into the grid. Required to enqueue the baseline as a
+          trial, but wrong when scoring it for the guard, which must compare against the estimator
+          exactly as configured. Defaults to True.
+
         Args:
             estimator (BaseEstimator): Estimator template supplying current values.
-            snap (bool): Whether values are clamped into the grid. Required to enqueue
-                the baseline as a trial, but wrong when scoring it for the guard, which
-                must compare against the estimator exactly as configured. Defaults to True.
+            snap (bool): Clamp values into the grid (see notes). Defaults to True.
 
         Returns:
             dict[str, Any]: Baseline configuration, possibly a subset of the grid.
@@ -649,7 +655,9 @@ class RandomSearchCV:
         plan.cached = [self._build_fold(plan, 0, train_idx, valid_idx)]
         return plan
 
-    def _build_plan(self, X: pd.DataFrame, y: pd.Series, cv: Any, label: str) -> _EvaluationPlan:
+    def _build_plan(
+        self, X: pd.DataFrame, y: pd.Series, cv: BaseCrossValidator, label: str
+    ) -> _EvaluationPlan:
         """Build an evaluation plan, caching its folds when they fit the memory budget.
 
         The first fold is always built so its footprint can be measured; the rest are
@@ -763,8 +771,7 @@ class RandomSearchCV:
             plan (_EvaluationPlan): Fidelity level to evaluate at.
             estimator (BaseEstimator): Estimator template to clone per fold.
             params (dict[str, Any]): Parameters in full-data units.
-            trial (optuna.Trial | None): Trial receiving intermediate values for
-                pruning. Defaults to None, which disables reporting.
+            trial (optuna.Trial | None): Trial receiving pruning reports. None disables reporting.
 
         Returns:
             tuple[list[float], list[int]]: Per-fold validation scores and the boosting
@@ -784,7 +791,7 @@ class RandomSearchCV:
         fold_scores: list[float] = []
         best_iterations: list[int] = []
         for step, fold in enumerate(self._iter_folds(plan)):
-            fold_estimator = CrossValidationTrainer._clone_estimator(estimator)
+            fold_estimator = CrossValidationTrainer._clone_estimator(estimator)  # noqa: SLF001
             fold_estimator.set_params(**fold_params)
             fitted = BaseTrainer.fit_estimator(
                 fold_estimator,
@@ -795,7 +802,7 @@ class RandomSearchCV:
                 verbose=False,
                 eval_on_train=False,
             )
-            x_valid = CrossValidationTrainer._order_x_for_estimator(fold.x_valid, fitted)
+            x_valid = CrossValidationTrainer._order_x_for_estimator(fold.x_valid, fitted)  # noqa: SLF001
             fold_scores.append(float(self.metric_fn(fold.y_valid, predict(fitted, x_valid))))
             n_iterations = _get_n_iterations(fitted)
             if n_iterations is not None:
@@ -803,7 +810,7 @@ class RandomSearchCV:
             if trial is not None:
                 trial.report(float(np.mean(fold_scores)), step)
                 if trial.should_prune():
-                    raise optuna.TrialPruned()
+                    raise optuna.TrialPruned
         return fold_scores, best_iterations
 
     @staticmethod
@@ -958,7 +965,8 @@ class RandomSearchCV:
         ]
         if changed:
             print(
-                f"🎯 Confirm stage searches a box narrowed around the top {self.top_k} explore configs:"
+                "🎯 Confirm stage searches a box narrowed around the top "
+                f"{self.top_k} explore configs:"
             )
             for name, before, after in changed:
                 print(f"    {name}: {self._format_bounds(before)} -> {self._format_bounds(after)}")
@@ -981,7 +989,7 @@ class RandomSearchCV:
             f"🎛️  Search space: {tunable} ({len(tunable)} tunable dimensions)"
         )
 
-    def _make_explore_splitter(self) -> Any:
+    def _make_explore_splitter(self) -> BaseCrossValidator:
         """Build the explore-stage splitter, seeded apart from the caller's own.
 
         A different seed keeps the confirm stage independent evidence rather than a
@@ -1284,7 +1292,7 @@ class RandomSearchCV:
         self.n_estimators_censored_ = self._is_censored(
             median_iterations, estimator, params, param_name
         )
-        return {param_name: max(1, int(round(median_iterations * refit_scale)))}
+        return {param_name: max(1, round(median_iterations * refit_scale))}
 
     def _run_confirm_stage(
         self,
@@ -1422,8 +1430,7 @@ class RandomSearchCV:
 
         Args:
             params (dict[str, Any]): Parameters in full-data units.
-            fidelity (float): Training rows at this fidelity divided by training rows
-                at full fidelity. 1.0 leaves the parameters untouched.
+            fidelity (float): Training-row share vs full fidelity; 1.0 leaves parameters untouched.
 
         Returns:
             dict[str, Any]: Parameters adjusted for this fidelity.
@@ -1436,7 +1443,7 @@ class RandomSearchCV:
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 continue
             if isinstance(value, int):
-                scaled[name] = max(1, int(round(value * fidelity)))
+                scaled[name] = max(1, round(value * fidelity))
             else:
                 scaled[name] = max(1e-6, float(value * fidelity))
         return scaled
@@ -1552,8 +1559,8 @@ class RandomSearchCV:
         param_type: str,
         values: list[object],
         options: dict[str, Any],
-        value: Any,
-    ) -> Any:
+        value: Any,  # noqa: ANN401
+    ) -> Any:  # noqa: ANN401
         """Clamp and snap a value onto one grid entry.
 
         Library defaults routinely sit outside a hand-written grid (LightGBM's reg_alpha
@@ -1578,7 +1585,7 @@ class RandomSearchCV:
         snapped = min(max(float(value), low), high)
         if step:
             snapped = min(max(low + round((snapped - low) / step) * step, low), high)
-        return int(round(snapped)) if param_type == "int" else float(snapped)
+        return round(snapped) if param_type == "int" else float(snapped)
 
     def _split_early_stopping(
         self, y: pd.Series, train_idx: np.ndarray, fold_idx: int
@@ -1661,7 +1668,7 @@ class RandomSearchCV:
         param_values: GridEntry,
     ) -> tuple[str, list[object], dict[str, Any]]:
         """Split a grid entry into its type, values, and keyword options."""
-        options = param_values[2] if len(param_values) == 3 else {}
+        options = param_values[2] if len(param_values) == GRID_ENTRY_WITH_OPTIONS else {}
         return param_values[0], param_values[1], options
 
     def _validate_settings(self) -> None:

@@ -13,6 +13,8 @@ _VALID_THRESHOLD_METHODS = frozenset({"auto", "top_k", "fixed"})
 _DEFAULT_PERCENTILE = 80.0
 _DEFAULT_TOP_K_PCT = 0.20
 _DEFAULT_FIXED_THRESHOLD = 0.90
+_PERCENT_MAX = 100.0
+_MIN_CLASS_SAMPLES = 10
 _CANDIDATE_COLOR = "#5dade2"
 _SELECTED_COLOR = "#2ecc71"
 _THRESHOLD_COLOR = "#2c3e50"
@@ -65,19 +67,19 @@ class PseudoLabelGenerator:
     ) -> None:
         """Initialize the pseudo-label generator.
 
+        Notes:
+        - cross_validator: Configured CV trainer. Its fitted pipelines are reused when predicting on
+          unlabeled data.
+        - threshold_percentile: Used by "auto". Percentile (0–100) of the OOF class-specific
+          probability distribution for each class used to set the threshold. Higher = stricter =
+          fewer but more reliable pseudo labels. Defaults to 80.
+
         Args:
-            cross_validator (CrossValidationTrainer): Configured CV trainer. Its
-                fitted pipelines are reused when predicting on unlabeled data.
-            threshold_method (str): One of "auto", "top_k", or "fixed".
-                Defaults to "auto".
-            threshold_percentile (float): Used by "auto". Percentile (0–100) of the
-                OOF class-specific probability distribution for each class used to set
-                the threshold. Higher = stricter = fewer but more reliable pseudo labels.
-                Defaults to 80.
-            top_k_pct (float): Used by "top_k". Fraction of unlabeled samples to
-                keep per class (e.g. 0.2 = top-20%). Defaults to 0.20.
-            fixed_threshold (float): Used by "fixed". Confidence cutoff applied to
-                all classes. Defaults to 0.90.
+            cross_validator (CrossValidationTrainer): Configured CV trainer; pipelines reused.
+            threshold_method (str): One of "auto", "top_k", or "fixed". Defaults to "auto".
+            threshold_percentile (float): OOF percentile for the "auto" threshold. Defaults to 80.
+            top_k_pct (float): Used by "top_k": share kept per class (0.2 = 20%). Defaults to 0.20.
+            fixed_threshold (float): Used by "fixed": cutoff for all classes. Defaults to 0.90.
 
         Raises:
             ValueError: If threshold_method is not one of the supported values.
@@ -90,7 +92,7 @@ class PseudoLabelGenerator:
                 f"threshold_method must be one of {sorted(_VALID_THRESHOLD_METHODS)}, "
                 f"got '{threshold_method}'."
             )
-        if not 0.0 <= threshold_percentile <= 100.0:
+        if not 0.0 <= threshold_percentile <= _PERCENT_MAX:
             raise ValueError("threshold_percentile must be in [0, 100].")
         if not 0.0 < top_k_pct <= 1.0:
             raise ValueError("top_k_pct must be in (0, 1].")
@@ -265,7 +267,7 @@ class PseudoLabelGenerator:
 
         for i, cls in enumerate(self.classes_):
             tp_mask = y_oof == cls
-            if tp_mask.sum() >= 10:
+            if tp_mask.sum() >= _MIN_CLASS_SAMPLES:
                 oof_class_probs = oof_probas[tp_mask, i]
             else:
                 pred_mask = argmax_oof == i
@@ -482,8 +484,8 @@ class PseudoLabelGenerator:
             linewidth=1.2,
         )
         for bars, counts in (
-            (bars_original, train_counts.values),
-            (bars_pseudo, pseudo_counts.values),
+            (bars_original, train_counts.to_numpy()),
+            (bars_pseudo, pseudo_counts.to_numpy()),
         ):
             ax.bar_label(
                 bars,
@@ -618,7 +620,7 @@ if __name__ == "__main__":
         threshold_method: str,
         metric: str,
         pipeline: Pipeline | None = None,
-        **kwargs,
+        **kwargs: float,
     ) -> None:
         """Run one pseudo-labeling scenario and report augmentation results."""
         print("=" * 75)
@@ -644,7 +646,8 @@ if __name__ == "__main__":
         )
         _, valid_aug, _ = cv_retrain.fit(lgbm_retrain, x_aug, y_aug)
         print(
-            f"  Baseline CV valid   : {np.mean(cv.valid_scores_):.4f} ± {np.std(cv.valid_scores_):.4f}"
+            f"  Baseline CV valid   : {np.mean(cv.valid_scores_):.4f} "
+            f"± {np.std(cv.valid_scores_):.4f}"
         )
         print(f"  Augmented CV valid  : {np.mean(valid_aug):.4f} ± {np.std(valid_aug):.4f}")
         print()
@@ -659,15 +662,8 @@ if __name__ == "__main__":
             random_state=RANDOM_STATE,
         )
 
-        # print("\n>>> Scenario 1: Binary + auto threshold + preprocessing pipeline")
         x_tr, y_tr = _make_data(N_LABELED, n_classes=2, seed=RANDOM_STATE)
         x_unl, _ = _make_data(N_UNLABELED, n_classes=2, seed=RANDOM_STATE + 99)
-        # _run_scenario(
-        #     "Binary + LightGBM + auto threshold + pipeline",
-        #     lgbm, x_tr, y_tr, x_unl,
-        #     threshold_method="auto", metric="Log Loss",
-        #     pipeline=_build_pipeline(), threshold_percentile=80.0,
-        # )
 
         print("\n>>> Scenario 2: Binary + top_k threshold (top 20%)")
         _run_scenario(
@@ -680,19 +676,5 @@ if __name__ == "__main__":
             metric="Log Loss",
             top_k_pct=0.20,
         )
-
-        # print("\n>>> Scenario 3: Multiclass + auto threshold")
-        # x_tr_mc, y_tr_mc = _make_data(N_LABELED, n_classes=3, seed=RANDOM_STATE)
-        # x_unl_mc, _ = _make_data(N_UNLABELED, n_classes=3, seed=RANDOM_STATE + 99)
-        # _run_scenario(
-        #     "Multiclass (3 classes) + LightGBM + auto threshold",
-        #     lgbm,
-        #     x_tr_mc,
-        #     y_tr_mc,
-        #     x_unl_mc,
-        #     threshold_method="auto",
-        #     metric="Log Loss",
-        #     threshold_percentile=75.0,
-        # )
 
     _run_demo()

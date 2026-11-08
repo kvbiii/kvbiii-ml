@@ -63,7 +63,7 @@ class TestEnsembleWeightTunerCV:
             raise AssertionError()
         if tuner.seed != 17:
             raise AssertionError()
-        if tuner.allow_negative_weights != False:
+        if tuner.allow_negative_weights:
             raise AssertionError()
         if tuner.best_weights is not None:
             raise AssertionError()
@@ -104,7 +104,7 @@ class TestEnsembleWeightTunerCV:
             raise AssertionError()
         if tuner.seed != 42:
             raise AssertionError()
-        if tuner.allow_negative_weights != True:
+        if not tuner.allow_negative_weights:
             raise AssertionError()
 
     def test_ensembleweighttuner_check_x_dataframe_passthrough(self, sample_dataframe):

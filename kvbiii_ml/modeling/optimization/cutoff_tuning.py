@@ -1,3 +1,4 @@
+import itertools
 import warnings
 from typing import ClassVar
 
@@ -13,6 +14,9 @@ warnings.filterwarnings(
     category=optuna.exceptions.ExperimentalWarning,
     message=".*multivariate.*",
 )
+
+
+BINARY_N_CLASSES = 2
 
 
 class CutoffTunerCV:
@@ -49,15 +53,17 @@ class CutoffTunerCV:
     ) -> None:
         """Initialize the tuner.
 
+        Notes:
+        - verbose: Whether to print the tuner's own start, per-trial, and finish logs. Independent
+          of ``cross_validator.verbose``, which this tuner temporarily forces off during the
+          estimator's cross-validation fit regardless. Defaults to True.
+
         Args:
             estimator (BaseEstimator): Unfitted estimator to train during CV.
             cross_validator (CrossValidationTrainer): Configured CV trainer.
             n_trials (int): Number of Optuna trials. Defaults to 100.
             seed (int): Random seed for the TPE sampler. Defaults to 17.
-            verbose (bool): Whether to print the tuner's own start, per-trial, and
-                finish logs. Independent of ``cross_validator.verbose``, which this
-                tuner temporarily forces off during the estimator's cross-validation
-                fit regardless. Defaults to True.
+            verbose (bool): Print the tuner's own per-trial and summary logs. Defaults to True.
         """
         self.estimator = estimator
         self.cross_validator = cross_validator
@@ -120,10 +126,13 @@ class CutoffTunerCV:
         estimator when you want to use a model trained on the full dataset -
         pipeline transformation is then your responsibility.
 
+        Notes:
+        - estimator: Fitted estimator to use. Defaults to the first fold estimator with its pipeline
+          applied.
+
         Args:
             X (pd.DataFrame): Feature matrix.
-            estimator (BaseEstimator | None): Fitted estimator to use. Defaults to the
-                first fold estimator with its pipeline applied.
+            estimator (BaseEstimator | None): Fitted estimator. Defaults to the first fold's.
 
         Returns:
             np.ndarray: Predicted class labels.
@@ -137,7 +146,7 @@ class CutoffTunerCV:
             y_proba = estimator.predict_proba(X)
         else:
             fold_pipeline = self.cross_validator.fitted_pipelines_[0]
-            x_proc = CrossValidationTrainer._transform_with_pipeline(fold_pipeline, X)
+            x_proc = CrossValidationTrainer._transform_with_pipeline(fold_pipeline, X)  # noqa: SLF001
             y_proba = self.fitted_estimators_[0].predict_proba(x_proc)
         return self._apply_cutoffs(y_proba, self.best_cutoffs, self._is_binary)
 
@@ -145,12 +154,15 @@ class CutoffTunerCV:
     def _apply_cutoffs(y_proba: np.ndarray, cutoffs: np.ndarray, is_binary: bool) -> np.ndarray:
         """Convert probabilities and cutoffs into class predictions.
 
+        Notes:
+        - cutoffs: Per-class cutoff values. For binary targets this may be a single-element
+          ``[cutoff]`` (the internal search representation) or a two-element ``[1 - cutoff,
+          cutoff]`` (``best_cutoffs``'s public shape); the last element is always the positive-class
+          threshold.
+
         Args:
             y_proba (np.ndarray): (n_samples,) for binary or (n_samples, n_classes).
-            cutoffs (np.ndarray): Per-class cutoff values. For binary targets this may
-                be a single-element ``[cutoff]`` (the internal search representation)
-                or a two-element ``[1 - cutoff, cutoff]`` (``best_cutoffs``'s public
-                shape); the last element is always the positive-class threshold.
+            cutoffs (np.ndarray): Per-class cutoffs; binary accepts [c] or [1 - c, c].
             is_binary (bool): Whether to use scalar binary thresholding.
 
         Returns:
@@ -239,8 +251,7 @@ class CutoffTunerCV:
         ``n_classes`` regardless of target cardinality.
 
         Args:
-            cutoffs (np.ndarray): Internal cutoff vector; length 1 for binary
-                targets, already length ``n_classes`` for multiclass targets.
+            cutoffs (np.ndarray): Internal cutoff vector (length 1 for binary, n_classes otherwise).
 
         Returns:
             np.ndarray: ``[1 - cutoff, cutoff]`` for binary targets; unchanged
@@ -281,7 +292,10 @@ class CutoffTunerCV:
         labels = (
             self.fitted_estimators_[0].classes_ if self.fitted_estimators_ else range(len(cutoffs))
         )
-        return {str(label): round(float(cutoff), 4) for label, cutoff in zip(labels, cutoffs)}
+        return {
+            str(label): round(float(cutoff), 4)
+            for label, cutoff in zip(labels, cutoffs, strict=False)
+        }
 
     def _log_finish(self) -> None:
         """Prints the final cutoff-selection summary when verbose mode is enabled."""
@@ -359,8 +373,7 @@ class CutoffTunerCV:
             float: Mean-minus-std metric across folds for the sampled cutoffs.
 
         Raises:
-            optuna.TrialPruned: When no fold yields a valid metric value for the
-                sampled cutoffs.
+            optuna.TrialPruned: When no fold yields a valid metric value for the sampled cutoffs.
         """
         if self._is_binary:
             low, high = self.BINARY_CUTOFF_BOUNDS
@@ -432,8 +445,9 @@ class CutoffTunerCV:
             splits,
             self.cross_validator.fitted_estimators_,
             self.cross_validator.fitted_pipelines_,
+            strict=False,
         ):
-            X_valid = CrossValidationTrainer._transform_with_pipeline(
+            X_valid = CrossValidationTrainer._transform_with_pipeline(  # noqa: SLF001
                 fold_pipeline, X.iloc[val_idx]
             )
             oof_proba.append(est.predict_proba(X_valid))
@@ -441,7 +455,7 @@ class CutoffTunerCV:
 
         y_true = np.concatenate(oof_true)
         y_proba_full = np.concatenate(oof_proba, axis=0)
-        self._is_binary = y_proba_full.shape[1] == 2
+        self._is_binary = y_proba_full.shape[1] == BINARY_N_CLASSES
         y_proba = y_proba_full[:, 1] if self._is_binary else y_proba_full
 
         if self.verbose:
@@ -473,7 +487,7 @@ class CutoffTunerCV:
         """
         y_pred = self._apply_cutoffs(y_proba, cutoffs, self._is_binary)
         fold_scores: list[float] = []
-        for start, end in zip(fold_boundaries[:-1], fold_boundaries[1:]):
+        for start, end in itertools.pairwise(fold_boundaries):
             try:
                 fold_scores.append(float(self.metric_fn(y_true[start:end], y_pred[start:end])))
             except ValueError:
@@ -517,8 +531,7 @@ class CutoffTunerCV:
                 ("optimized") or the default ("default") was chosen.
 
         Raises:
-            RuntimeError: If even the default cutoff fails to produce a valid metric
-                on any fold.
+            RuntimeError: If even the default cutoff fails to produce a valid metric on any fold.
 
         Note:
             Also records ``baseline_score_`` and ``optimized_score_`` on ``self`` so
@@ -577,7 +590,7 @@ class CutoffTunerCV:
         default_cutoffs = self._default_cutoffs(y_proba)
         y_pred = self._apply_cutoffs(y_proba, default_cutoffs, self._is_binary)
         fold_scores = []
-        for start, end in zip(fold_boundaries[:-1], fold_boundaries[1:]):
+        for start, end in itertools.pairwise(fold_boundaries):
             try:
                 fold_scores.append(float(self.metric_fn(y_true[start:end], y_pred[start:end])))
             except ValueError:

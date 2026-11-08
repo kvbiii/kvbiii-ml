@@ -229,7 +229,7 @@ def test_score_weights_aggregates_per_fold_not_pooled():
 
 
 def test_blend_predictions_shapes_classification_logits():
-    """Directly tests _blend_predictions for binary prob case with negative weights (logit averaging).
+    """Test _blend_predictions on binary probabilities with negative weights (logit averaging).
 
     Asserts:
         - Blended output preserves the (n_samples,) shape

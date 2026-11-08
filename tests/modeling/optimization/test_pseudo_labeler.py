@@ -360,7 +360,7 @@ def test_pseudolabelgenerator_compute_thresholds_auto_falls_back_to_predicted_pr
         raise AssertionError()
 
 
-def test_pseudolabelgenerator_compute_thresholds_auto_uses_degenerate_fallback_when_class_never_predicted(
+def test_pseudolabelgenerator_thresholds_auto_degenerate_fallback_when_class_never_predicted(
     pseudo_cv_trainer,
 ):
     """Tests _compute_thresholds_auto falls back to a neutral 0.5 confidence.

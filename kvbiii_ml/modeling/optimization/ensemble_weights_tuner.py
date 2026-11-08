@@ -1,4 +1,5 @@
 import copy
+import itertools
 import warnings
 from typing import ClassVar
 
@@ -20,6 +21,9 @@ warnings.filterwarnings(
     category=optuna.exceptions.ExperimentalWarning,
     message=".*multivariate.*",
 )
+
+
+PROBABILITY_THRESHOLD = 0.5
 
 
 class EnsembleWeightTunerCV:
@@ -56,16 +60,18 @@ class EnsembleWeightTunerCV:
     ) -> None:
         """Initialize the tuner.
 
+        Notes:
+        - verbose: Whether to print the tuner's own start, per-trial, and finish logs. Independent
+          of ``cross_validator.verbose``: the tuner fits on a private silent copy of the trainer, so
+          the trainer passed in is never modified. Defaults to True.
+
         Args:
             estimators (list[BaseEstimator]): Base estimators to blend.
             cross_validator (CrossValidationTrainer): Cross-validation trainer to use.
             n_trials (int): Number of Optuna trials. Defaults to 50.
             seed (int): Random seed for the TPE sampler. Defaults to 17.
-            allow_negative_weights (bool): Whether to allow negative blending weights. Defaults to False.
-            verbose (bool): Whether to print the tuner's own start, per-trial, and
-                finish logs. Independent of ``cross_validator.verbose``: the tuner
-                fits on a private silent copy of the trainer, so the trainer passed
-                in is never modified. Defaults to True.
+            allow_negative_weights (bool): Allow negative blending weights. Defaults to False.
+            verbose (bool): Print the tuner's own per-trial and summary logs. Defaults to True.
         """
         self.estimators = list(estimators)
         self.cross_validator = cross_validator
@@ -88,7 +94,9 @@ class EnsembleWeightTunerCV:
         self.optimized_score_: float | None = None
 
     def tune(self, X: pd.DataFrame, y: pd.Series) -> optuna.study.Study:
-        """Run Optuna to find blending weights that beat naive baselines on cross-validated evidence.
+        """Run Optuna to find blending weights that beat naive baselines.
+
+        The comparison uses cross-validated evidence.
 
         Args:
             X (pd.DataFrame): Feature matrix.
@@ -201,7 +209,7 @@ class EnsembleWeightTunerCV:
         is_df = isinstance(first, pd.DataFrame)
         has_negative = bool(np.any(weights < 0.0))
         neg_clf = self.problem_type == "classification" and has_negative
-        stacked = np.stack([p.values for p in preds_list])
+        stacked = np.stack([p.to_numpy() for p in preds_list])
 
         if neg_clf and not is_df:
             eps = 1e-9
@@ -236,8 +244,7 @@ class EnsembleWeightTunerCV:
         Args:
             X (pd.DataFrame): Full feature matrix.
             splits (list[tuple[np.ndarray, np.ndarray]]): CV train/validation index pairs.
-            cross_validator (CrossValidationTrainer): Trainer copy just fitted on
-                this estimator.
+            cross_validator (CrossValidationTrainer): Trainer copy just fitted on this estimator.
 
         Returns:
             pd.Series | pd.DataFrame: This estimator's pooled OOF predictions, in fold
@@ -249,16 +256,17 @@ class EnsembleWeightTunerCV:
             splits,
             cross_validator.fitted_estimators_,
             cross_validator.fitted_pipelines_,
+            strict=False,
         ):
             index = X.index[val_idx]
             x_raw, offset = split_offset(X.iloc[val_idx], cross_validator.offset_column)
             X_valid = order_x_for_estimator(
-                CrossValidationTrainer._transform_with_pipeline(fold_pipeline, x_raw),
+                CrossValidationTrainer._transform_with_pipeline(fold_pipeline, x_raw),  # noqa: SLF001
                 fitted_est,
             )
             if self.problem_type == "classification":
                 proba = to_metric_proba(
-                    CrossValidationTrainer._estimator_output(
+                    CrossValidationTrainer._estimator_output(  # noqa: SLF001
                         fitted_est, X_valid, offset, proba=True
                     )
                 )
@@ -269,7 +277,7 @@ class EnsembleWeightTunerCV:
                 )
             else:
                 pred = pd.Series(
-                    CrossValidationTrainer._estimator_output(
+                    CrossValidationTrainer._estimator_output(  # noqa: SLF001
                         fitted_est, X_valid, offset, proba=False
                     ),
                     index=index,
@@ -345,7 +353,7 @@ class EnsembleWeightTunerCV:
         """
         return {
             f"{i} ({type(estimator).__name__})": round(float(weight), 4)
-            for i, (estimator, weight) in enumerate(zip(self.estimators, weights))
+            for i, (estimator, weight) in enumerate(zip(self.estimators, weights, strict=False))
         }
 
     def _log_finish(self) -> None:
@@ -456,8 +464,7 @@ class EnsembleWeightTunerCV:
             float: Mean-minus-std metric across folds for the sampled weight vector.
 
         Raises:
-            optuna.TrialPruned: When the sampled weights are degenerate (near-zero
-                signed sum) or when no fold yields a valid metric value.
+            optuna.TrialPruned: If the weights are degenerate or no fold gives a valid metric.
         """
         n = len(self.estimators)
         lo, hi = (-1.0, 1.0) if self.allow_negative_weights else (0.0, 1.0)
@@ -533,7 +540,7 @@ class EnsembleWeightTunerCV:
         preds_list: list[pd.Series | pd.DataFrame],
         fold_boundaries: list[int],
         return_fold_scores: bool = False,
-    ) -> float | None | tuple[float | None, list[float]]:
+    ) -> float | tuple[float | None, list[float]] | None:
         """Scores one weight vector as mean-minus-std across cross-validation folds.
 
         Evaluating per fold instead of on the pooled OOF set discourages
@@ -541,13 +548,16 @@ class EnsembleWeightTunerCV:
         how the base estimators themselves are already validated (mean +/-
         std per fold).
 
+        Notes:
+        - return_fold_scores: When True, also return the raw (unpenalized) per-fold metric values
+          alongside the aggregate score. Defaults to False.
+
         Args:
             weights (np.ndarray): Normalized blending weights.
             y_true (pd.Series): OOF targets with preserved fold order.
             preds_list (list[pd.Series | pd.DataFrame]): Per-estimator OOF predictions.
             fold_boundaries (list[int]): Cumulative per-fold row counts for slicing.
-            return_fold_scores (bool): When True, also return the raw (unpenalized)
-                per-fold metric values alongside the aggregate score. Defaults to False.
+            return_fold_scores (bool): Also return raw per-fold metric values. Defaults to False.
 
         Returns:
             float | None | tuple[float | None, list[float]]: Penalized aggregate
@@ -560,7 +570,7 @@ class EnsembleWeightTunerCV:
             blended = self._threshold_predictions(blended)
 
         fold_scores: list[float] = []
-        for start, end in zip(fold_boundaries[:-1], fold_boundaries[1:]):
+        for start, end in itertools.pairwise(fold_boundaries):
             fold_y_true = y_true.iloc[start:end]
             fold_pred = blended.iloc[start:end]
             try:
@@ -607,8 +617,7 @@ class EnsembleWeightTunerCV:
                 a label identifying whether the search result or a baseline was chosen.
 
         Raises:
-            RuntimeError: If no weight vector, including every baseline,
-                produced a valid metric on any fold.
+            RuntimeError: If no weight vector, baselines included, gave a valid metric on any fold.
 
         Note:
             Also records ``baseline_name_``, ``baseline_score_``, and
@@ -694,7 +703,7 @@ class EnsembleWeightTunerCV:
             fold_pred = self._threshold_predictions(preds)
 
         fold_scores = []
-        for start, end in zip(fold_boundaries[:-1], fold_boundaries[1:]):
+        for start, end in itertools.pairwise(fold_boundaries):
             try:
                 fold_scores.append(
                     float(
@@ -724,7 +733,7 @@ class EnsembleWeightTunerCV:
         """
         if isinstance(blended, pd.DataFrame):
             return blended.idxmax(axis=1)
-        return (blended >= 0.5).astype(int)
+        return (blended >= PROBABILITY_THRESHOLD).astype(int)
 
     def _trial_weights(self, trial: optuna.trial.FrozenTrial) -> np.ndarray:
         """Recovers a trial's normalized blending weights for logging.
