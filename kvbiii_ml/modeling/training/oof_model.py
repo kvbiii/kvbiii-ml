@@ -405,7 +405,7 @@ class OOFModel:
             raw = self.fitted_estimator_.predict_proba(x_ord)
             if raw.ndim == 1:
                 raw = np.column_stack([1 - raw, raw])
-            return _apply_calibrator(self.calibrator_, raw, self.classes_, self.calibration_method)
+            return _apply_calibrator(self.calibrator_, raw, self.classes_, self.calibration_method)  # ty: ignore[invalid-argument-type]
 
         probs = [
             est.predict_proba(CrossValidationTrainer._order_x_for_estimator(X, est))  # noqa: SLF001

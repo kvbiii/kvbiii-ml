@@ -16,7 +16,7 @@ class DtypesConverter(BaseEstimator, TransformerMixin):
             dtype_map (dict[str, Any] | None): Column to dtype mapping. None learns dtypes at fit.
         """
         self.dtype_map = dtype_map
-        self.dtype_map_ = None
+        self.dtype_map_: dict[str, Any] = None  # ty: ignore[invalid-assignment]
 
     def fit(self, df: pd.DataFrame, _y: pd.Series | None = None) -> "DtypesConverter":
         """
