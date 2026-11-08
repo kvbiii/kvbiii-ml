@@ -2,7 +2,7 @@ from ast import literal_eval
 
 import numpy as np
 import pandas as pd
-from scipy.stats import chi2_contingency, ks_2samp, kruskal, wasserstein_distance
+from scipy.stats import chi2_contingency, kruskal, ks_2samp, wasserstein_distance
 from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
 
 

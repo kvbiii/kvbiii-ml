@@ -2,7 +2,6 @@ import itertools
 
 import numpy as np
 import pandas as pd
-
 from kvbiii_plots.eda.multivariate_plots import MultivariatePlots
 
 multivariate_plots = MultivariatePlots()

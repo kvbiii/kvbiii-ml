@@ -88,9 +88,8 @@ def test_outliertrimmerwithoriginal_transform_nans_expected_tail_across_tail_var
         if position in outlier_positions:
             if not pd.isna(derived.iloc[position]):
                 raise AssertionError(f"Row {position} should be NaN for tail={tail}.")
-        else:
-            if pd.isna(derived.iloc[position]):
-                raise AssertionError(f"Row {position} should not be NaN for tail={tail}.")
+        elif pd.isna(derived.iloc[position]):
+            raise AssertionError(f"Row {position} should not be NaN for tail={tail}.")
     pd.testing.assert_series_equal(result["salary"], salary_with_both_tail_outliers["salary"])
 
 

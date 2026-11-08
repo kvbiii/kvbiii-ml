@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import importlib
 from importlib.metadata import PackageNotFoundError, version
+
 from . import data_processing, evaluation, modeling
 
 __version__ = "0+unknown"

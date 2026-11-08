@@ -1,7 +1,7 @@
+import warnings
 from collections.abc import Generator
 from contextlib import contextmanager
 from copy import deepcopy
-import warnings
 
 import joblib.parallel
 import numpy as np
@@ -430,7 +430,7 @@ class PermutationRecursiveFeatureElimination:
         if set(active_cats) == set(original_cats):
             return estimator
         updated = deepcopy(estimator)
-        updated.set_params(cat_features=active_cats if active_cats else None)
+        updated.set_params(cat_features=active_cats or None)
         return updated
 
     def compute_removal_schedule(self, total_removable_features: int) -> list[int]:
@@ -643,14 +643,14 @@ class PermutationRecursiveFeatureElimination:
 if __name__ == "__main__":
     import numpy as np
     import pandas as pd
+    from catboost import CatBoostClassifier, CatBoostRegressor
     from feature_engine.encoding import MeanEncoder
     from feature_engine.imputation import MeanMedianImputer
     from lightgbm import LGBMClassifier, LGBMRegressor
-    from catboost import CatBoostClassifier, CatBoostRegressor
-    from xgboost import XGBClassifier, XGBRegressor
     from sklearn.datasets import make_classification, make_regression
     from sklearn.model_selection import KFold, StratifiedKFold
     from sklearn.pipeline import Pipeline
+    from xgboost import XGBClassifier, XGBRegressor
 
     from kvbiii_ml.data_processing.preprocessing.outlier_handling.winsorizer_trimmer import (
         WinsorizerWithOriginal,

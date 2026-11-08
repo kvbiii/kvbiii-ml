@@ -4,8 +4,8 @@ import pandas as pd
 from feature_engine.encoding import CountFrequencyEncoder
 
 from kvbiii_ml.data_processing.preprocessing.expansion_base import (
-    _WithOriginalBase,
     _cast_numeric_variables_to_object,
+    _WithOriginalBase,
 )
 
 

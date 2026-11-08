@@ -281,6 +281,7 @@ class BaseTrainer:
             X_valid (pd.DataFrame): Validation features to use as eval_set.
             y_valid (pd.Series): Validation target to use as eval_set.
             verbose (bool | int | None): Verbosity level for non-boosting estimators. Defaults to False.
+
         Returns:
             dict: Keyword arguments to pass to estimator.fit(), or empty dict for
                 estimators not in the three recognised boosting families.

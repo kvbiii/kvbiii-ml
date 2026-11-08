@@ -243,7 +243,7 @@ class KBinsDiscretiserWithOriginal(_WithOriginalSubsetBase):
         return [c for c in X.columns if pd.api.types.is_numeric_dtype(X[c])]
 
 
-__all__ = ["KBinsDiscretizer", "KBinsDiscretiserWithOriginal"]
+__all__ = ["KBinsDiscretiserWithOriginal", "KBinsDiscretizer"]
 
 
 if __name__ == "__main__":

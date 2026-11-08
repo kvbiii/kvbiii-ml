@@ -90,7 +90,7 @@ class DigitsEncodingFeatureGenerator(BaseEstimator, TransformerMixin):
             raise ValueError(
                 'min_digits and max_digits must either both be "auto" or both be explicit integers.'
             )
-        columns = self.features_names if self.features_names else list(df.columns)
+        columns = self.features_names or list(df.columns)
         columns = [c for c in columns if pd.api.types.is_numeric_dtype(df[c])]
         self.feature_names_in_ = np.asarray(df.columns, dtype=object)
         self.feature_configs_: dict[str, tuple[int, int]] = {

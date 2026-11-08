@@ -42,7 +42,7 @@ def test_settings() -> TestSettings:
     try:
         return TestSettings()
     except ValueError as e:
-        pytest.fail(f"Test configuration failed: {str(e)}")
+        pytest.fail(f"Test configuration failed: {e!s}")
 
 
 @pytest.fixture

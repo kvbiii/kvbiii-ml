@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -117,7 +116,7 @@ class PseudoLabelGenerator:
         X_train: pd.DataFrame,
         y_train: pd.Series,
         x_unlabeled: pd.DataFrame,
-    ) -> "PseudoLabelGenerator":
+    ) -> PseudoLabelGenerator:
         """Fit the model via CV, compute thresholds, and generate pseudo labels.
 
         Args:
@@ -157,7 +156,7 @@ class PseudoLabelGenerator:
         elif self.threshold_method == "top_k":
             self.thresholds_ = self._compute_thresholds_top_k(argmax_indices, max_confidences)
         else:
-            self.thresholds_ = {cls: self.fixed_threshold for cls in self.classes_}
+            self.thresholds_ = dict.fromkeys(self.classes_, self.fixed_threshold)
 
         selected_mask, pseudo_labels, confidences = self._select_pseudo_labels(
             argmax_indices, max_confidences
@@ -547,7 +546,7 @@ class PseudoLabelGenerator:
             mean_conf = confidences[sel_mask].mean() if n_sel > 0 else float("nan")
             thresh = self.thresholds_.get(cls, float("nan"))
             print(
-                f"  {str(cls):<12} {thresh:>10.4f} {n_cand:>12,} {n_sel:>10,} "
+                f"  {cls!s:<12} {thresh:>10.4f} {n_cand:>12,} {n_sel:>10,} "
                 f"{pct:>7.1f}% {mean_conf:>16.4f}"
             )
         print()

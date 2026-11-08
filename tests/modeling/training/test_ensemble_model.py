@@ -3,11 +3,11 @@
 import io
 from unittest.mock import Mock
 
+import joblib
+import lightgbm as lgb
 import numpy as np
 import pandas as pd
 import pytest
-import joblib
-import lightgbm as lgb
 from lightgbm import LGBMRegressor
 from sklearn.base import clone, is_classifier, is_regressor
 from sklearn.linear_model import LinearRegression, LogisticRegression

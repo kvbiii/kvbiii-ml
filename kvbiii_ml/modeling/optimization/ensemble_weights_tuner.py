@@ -749,6 +749,7 @@ if __name__ == "__main__":
     from sklearn.datasets import make_classification, make_regression
     from sklearn.model_selection import StratifiedKFold
     from sklearn.pipeline import Pipeline
+
     from kvbiii_ml.data_processing.preprocessing.outlier_handling.winsorizer_trimmer import (
         WinsorizerWithOriginal,
     )
