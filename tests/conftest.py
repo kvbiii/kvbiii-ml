@@ -31,13 +31,10 @@ class TestSettings(BaseSettings):
 
 @pytest.fixture(scope="session")
 def test_settings() -> TestSettings:
-    """Provides the test settings configuration.
+    """Provides the test settings configuration, failing the run if it is invalid or missing.
 
     Returns:
         TestSettings: Loaded configuration object
-
-    Raises:
-        pytest.Exception: On invalid/missing configuration
     """
     try:
         return TestSettings()
@@ -159,7 +156,7 @@ def mock_estimator() -> Mock:
         ["feature_0", "feature_1", "feature_2", "feature_3", "feature_4"]
     )
 
-    def mock_fit(X, y, **kwargs):
+    def mock_fit(*_args, **_kwargs):
         return estimator
 
     estimator.fit = Mock(side_effect=mock_fit)
@@ -215,11 +212,8 @@ def logistic_regression_estimator(test_settings: TestSettings) -> LogisticRegres
 
 
 @pytest.fixture
-def linear_regression_estimator(test_settings: TestSettings) -> LinearRegression:
+def linear_regression_estimator() -> LinearRegression:
     """Provides a configured LinearRegression estimator for testing.
-
-    Args:
-        test_settings (TestSettings): Test settings fixture.
 
     Returns:
         LinearRegression: Configured regression estimator.
