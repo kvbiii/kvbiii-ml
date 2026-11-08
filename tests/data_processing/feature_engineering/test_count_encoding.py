@@ -25,12 +25,8 @@ def categorical_data(test_settings):
     # Create data with categorical features of varying cardinality
     data = pd.DataFrame(
         {
-            "high_cardinality": np.random.choice(
-                [f"val_{i}" for i in range(50)], n_samples
-            ),
-            "medium_cardinality": np.random.choice(
-                [f"cat_{i}" for i in range(10)], n_samples
-            ),
+            "high_cardinality": np.random.choice([f"val_{i}" for i in range(50)], n_samples),
+            "medium_cardinality": np.random.choice([f"cat_{i}" for i in range(10)], n_samples),
             "low_cardinality": np.random.choice(["A", "B", "C"], n_samples),
             "binary": np.random.choice(["yes", "no"], n_samples),
             "numeric": np.random.randn(n_samples),

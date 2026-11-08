@@ -123,8 +123,4 @@ if __name__ == "__main__":
 
     pipe = Pipeline([("woe", WoEEncoderWithOriginal())])
     print("\n=== Inside sklearn Pipeline (auto-detect categoricals) ===")
-    print(
-        pipe.fit(df[["city", "tier", "revenue"]], y).transform(
-            df[["city", "tier", "revenue"]]
-        )
-    )
+    print(pipe.fit(df[["city", "tier", "revenue"]], y).transform(df[["city", "tier", "revenue"]]))

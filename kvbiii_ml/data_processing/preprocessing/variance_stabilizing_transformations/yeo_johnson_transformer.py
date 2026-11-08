@@ -48,9 +48,7 @@ class YeoJohnsonTransformerWithOriginal(_WithOriginalBase):
         """
         return inner.fit(X)
 
-    def _transform_inner(
-        self, inner: YeoJohnsonTransformer, X: pd.DataFrame
-    ) -> pd.DataFrame:
+    def _transform_inner(self, inner: YeoJohnsonTransformer, X: pd.DataFrame) -> pd.DataFrame:
         """Apply the Yeo-Johnson transformation to X.
 
         Args:

@@ -43,9 +43,7 @@ def test_reciprocaltransformerwithoriginal_transform_matches_reciprocal_formula(
     transformer.fit(nonzero_dataframe)
     result = transformer.transform(nonzero_dataframe)
     expected = 1.0 / nonzero_dataframe["response_time_ms"].to_numpy()
-    if not np.allclose(
-        result["response_time_ms_PREPROCESS_RECIPROCAL"].to_numpy(), expected
-    ):
+    if not np.allclose(result["response_time_ms_PREPROCESS_RECIPROCAL"].to_numpy(), expected):
         raise AssertionError("Derived response_time_ms values do not match 1/x.")
 
 
@@ -65,9 +63,7 @@ def test_reciprocaltransformerwithoriginal_transform_preserves_original_columns(
     )
     transformer.fit(nonzero_dataframe)
     result = transformer.transform(nonzero_dataframe)
-    pd.testing.assert_frame_equal(
-        result[nonzero_dataframe.columns.tolist()], nonzero_dataframe
-    )
+    pd.testing.assert_frame_equal(result[nonzero_dataframe.columns.tolist()], nonzero_dataframe)
 
 
 def test_reciprocaltransformerwithoriginal_transform_appends_derived_columns_named_correctly(

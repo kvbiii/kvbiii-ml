@@ -30,9 +30,7 @@ class MutualInformationFiltering:
             verbose (bool, optional): Whether to print selection details. Defaults to False.
         """
         if problem_type not in {"classification", "regression"}:
-            raise ValueError(
-                "problem_type must be either 'classification' or 'regression'."
-            )
+            raise ValueError("problem_type must be either 'classification' or 'regression'.")
         self.problem_type = problem_type
         self.mi_kwargs = {
             "n_neighbors": 3,
@@ -44,9 +42,7 @@ class MutualInformationFiltering:
         self.selected_features_ = []
         self.threshold_border_ = None
 
-    def fit(
-        self, X: pd.DataFrame, y: pd.Series | np.ndarray
-    ) -> MutualInformationFiltering:
+    def fit(self, X: pd.DataFrame, y: pd.Series | np.ndarray) -> MutualInformationFiltering:
         """Fit the filter by computing MI and selecting features.
 
         Args:
@@ -106,9 +102,7 @@ class MutualInformationFiltering:
         self.fit(X, y)
         return self.transform(X)
 
-    def _compute_mi_scores(
-        self, X: pd.DataFrame, y: pd.Series | np.ndarray
-    ) -> dict[str, float]:
+    def _compute_mi_scores(self, X: pd.DataFrame, y: pd.Series | np.ndarray) -> dict[str, float]:
         """Compute Mutual Information scores for the given features.
 
         Args:
@@ -142,8 +136,8 @@ class MutualInformationFiltering:
         if not isinstance(y, (pd.Series, np.ndarray)):
             raise ValueError("y must be a pandas Series or numpy array.")
 
-        x_prepared, discrete_features_mask = (
-            DataAnalyzer._prepare_features_for_mutual_information(X)
+        x_prepared, discrete_features_mask = DataAnalyzer._prepare_features_for_mutual_information(
+            X
         )
 
         if discrete_features_mask is None:
@@ -164,14 +158,10 @@ if __name__ == "__main__":
             {
                 "num1": rng.normal(size=100),
                 "num2": rng.normal(size=100),
-                "cat": pd.Series(
-                    rng.choice(["A", "B", "C"], size=100), dtype="category"
-                ),
+                "cat": pd.Series(rng.choice(["A", "B", "C"], size=100), dtype="category"),
             }
         )
-        y_demo = pd.Series(
-            (x_demo["num1"] + rng.normal(scale=0.1, size=100) > 0).astype(int)
-        )
+        y_demo = pd.Series((x_demo["num1"] + rng.normal(scale=0.1, size=100) > 0).astype(int))
 
         # Example 1: nominal threshold
         mif = MutualInformationFiltering(

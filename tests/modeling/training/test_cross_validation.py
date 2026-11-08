@@ -32,9 +32,7 @@ def test_crossvalidationtrainer_init_creates_instance_with_default_cv():
         - Default KFold shuffles with the fixed random_state=17.
         - Metric configuration is loaded from metric_name.
     """
-    trainer = CrossValidationTrainer(
-        problem_type="classification", metric_name="Accuracy"
-    )
+    trainer = CrossValidationTrainer(problem_type="classification", metric_name="Accuracy")
 
     if not isinstance(trainer.cv, KFold):
         raise AssertionError()
@@ -59,9 +57,7 @@ def test_crossvalidationtrainer_init_creates_instance_with_default_cv():
         ),
     ],
 )
-def test_crossvalidationtrainer_init_raises_valueerror_for_invalid_configuration(
-    kwargs, match
-):
+def test_crossvalidationtrainer_init_raises_valueerror_for_invalid_configuration(kwargs, match):
     """Tests CrossValidationTrainer initialization rejects invalid configurations.
 
     Args:
@@ -123,9 +119,7 @@ def test_crossvalidationtrainer_validate_pipeline_raises_for_invalid_state():
         - Calling validate_pipeline directly after mutating preprocessing_pipeline
           to a non-Pipeline value raises TypeError.
     """
-    trainer = CrossValidationTrainer(
-        problem_type="classification", metric_name="Accuracy"
-    )
+    trainer = CrossValidationTrainer(problem_type="classification", metric_name="Accuracy")
     trainer.preprocessing_pipeline = "not_a_pipeline"
 
     with pytest.raises(TypeError, match="must be an sklearn Pipeline or None"):
@@ -147,9 +141,7 @@ def test_crossvalidationtrainer_init_accepts_custom_metric():
         "metric_type": "preds",
         "direction": "minimize",
     }
-    trainer = CrossValidationTrainer(
-        problem_type="regression", custom_metric=custom_metric
-    )
+    trainer = CrossValidationTrainer(problem_type="regression", custom_metric=custom_metric)
 
     if trainer.metric_name != "custom_mae":
         raise AssertionError()
@@ -183,9 +175,7 @@ def test_crossvalidationtrainer_fit_returns_scores_matching_cv_splits(
         verbose=False,
     )
 
-    train_scores, valid_scores, avg_test_pred = trainer.fit(
-        logistic_regression_estimator, X, y
-    )
+    train_scores, valid_scores, avg_test_pred = trainer.fit(logistic_regression_estimator, X, y)
 
     if len(train_scores) != kfold_cv.n_splits:
         raise AssertionError()
@@ -267,9 +257,7 @@ def test_crossvalidationtrainer_fit_with_preprocessing_pipeline_round_trips(
         raise AssertionError()
 
 
-@pytest.mark.parametrize(
-    "method_name", ["predict", "predict_proba", "predict_with_confidence"]
-)
+@pytest.mark.parametrize("method_name", ["predict", "predict_proba", "predict_with_confidence"])
 def test_crossvalidationtrainer_prediction_methods_raise_before_fit(method_name):
     """Tests predict, predict_proba, and predict_with_confidence raise before fit().
 
@@ -279,9 +267,7 @@ def test_crossvalidationtrainer_prediction_methods_raise_before_fit(method_name)
     Asserts:
         - RuntimeError is raised when the method is called before fit().
     """
-    trainer = CrossValidationTrainer(
-        problem_type="classification", metric_name="Accuracy"
-    )
+    trainer = CrossValidationTrainer(problem_type="classification", metric_name="Accuracy")
     X = pd.DataFrame({"feature": [1, 2, 3]})
 
     with pytest.raises(RuntimeError, match="must be fitted before calling"):
@@ -297,9 +283,7 @@ def test_crossvalidationtrainer_predict_proba_raises_valueerror_for_regression()
     trainer = CrossValidationTrainer(problem_type="regression", metric_name="MAE")
     X = pd.DataFrame({"feature": [1, 2, 3]})
 
-    with pytest.raises(
-        ValueError, match="predict_proba is only available for classification"
-    ):
+    with pytest.raises(ValueError, match="predict_proba is only available for classification"):
         trainer.predict_proba(X)
 
 
@@ -402,9 +386,7 @@ def test_crossvalidationtrainer_order_x_for_estimator_reorders_exact_names(
     mock_estimator = Mock(spec=["feature_names_in_"])
     mock_estimator.feature_names_in_ = ["categorical_1", "numeric_1", "integer_1"]
 
-    reordered_x = CrossValidationTrainer._order_x_for_estimator(
-        sample_dataframe, mock_estimator
-    )
+    reordered_x = CrossValidationTrainer._order_x_for_estimator(sample_dataframe, mock_estimator)
     if list(reordered_x.columns) != ["categorical_1", "numeric_1", "integer_1"]:
         raise AssertionError()
 
@@ -514,12 +496,8 @@ def test_crossvalidationtrainer_init_rejects_non_positive_n_jobs():
         - The default n_jobs is 1.
     """
     with pytest.raises(ValueError, match="n_jobs"):
-        CrossValidationTrainer(
-            problem_type="classification", metric_name="Accuracy", n_jobs=0
-        )
-    trainer = CrossValidationTrainer(
-        problem_type="classification", metric_name="Accuracy"
-    )
+        CrossValidationTrainer(problem_type="classification", metric_name="Accuracy", n_jobs=0)
+    trainer = CrossValidationTrainer(problem_type="classification", metric_name="Accuracy")
     if trainer.n_jobs != 1:
         raise AssertionError()
 
@@ -642,10 +620,7 @@ def test_crossvalidationtrainer_binary_preds_metric_averages_test_probabilities(
 
     assert_valid_binary_proba_matrix(test_pred, 20)
     fold_label_fractions = {0.0, 1 / 3, 2 / 3, 1.0}
-    if all(
-        round(v, 6) in {round(f, 6) for f in fold_label_fractions}
-        for v in test_pred[:, 1]
-    ):
+    if all(round(v, 6) in {round(f, 6) for f in fold_label_fractions} for v in test_pred[:, 1]):
         raise AssertionError("test_pred looks like averaged labels")
 
 
@@ -663,9 +638,7 @@ def test_crossvalidationtrainer_custom_metric_receives_y_true_with_original_inde
     weights = pd.Series(np.arange(len(y), dtype=float), index=y.index)
     seen: list[pd.Index] = []
 
-    def weighted_error(
-        y_true: pd.Series, y_pred: np.ndarray, sample_weights: pd.Series
-    ) -> float:
+    def weighted_error(y_true: pd.Series, y_pred: np.ndarray, sample_weights: pd.Series) -> float:
         """Weighted share of wrong labels, aligning weights by y_true's index."""
         seen.append(y_true.index)
         w = sample_weights.loc[y_true.index].to_numpy()
@@ -749,12 +722,8 @@ def test_cross_validation_import_does_not_modify_sys_path():
 @pytest.mark.parametrize(
     "estimator",
     [
-        LGBMRegressor(
-            objective="poisson", n_estimators=40, early_stopping_round=5, verbose=-1
-        ),
-        XGBRegressor(
-            objective="count:poisson", n_estimators=40, early_stopping_rounds=5
-        ),
+        LGBMRegressor(objective="poisson", n_estimators=40, early_stopping_round=5, verbose=-1),
+        XGBRegressor(objective="count:poisson", n_estimators=40, early_stopping_rounds=5),
         CatBoostRegressor(
             loss_function="Poisson",
             iterations=40,

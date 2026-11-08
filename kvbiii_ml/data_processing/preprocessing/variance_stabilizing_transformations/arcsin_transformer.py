@@ -33,9 +33,7 @@ class ArcsinTransformerWithOriginal(_WithOriginalBase):
         """
         return ArcsinTransformer(variables=self.variables)
 
-    def _fit_inner(
-        self, inner: ArcsinTransformer, X: pd.DataFrame, y: Any
-    ) -> ArcsinTransformer:
+    def _fit_inner(self, inner: ArcsinTransformer, X: pd.DataFrame, y: Any) -> ArcsinTransformer:
         """Fit the transformer on X.
 
         Args:
@@ -48,9 +46,7 @@ class ArcsinTransformerWithOriginal(_WithOriginalBase):
         """
         return inner.fit(X)
 
-    def _transform_inner(
-        self, inner: ArcsinTransformer, X: pd.DataFrame
-    ) -> pd.DataFrame:
+    def _transform_inner(self, inner: ArcsinTransformer, X: pd.DataFrame) -> pd.DataFrame:
         """Apply arcsin(sqrt(x)) transformation to X.
 
         Args:

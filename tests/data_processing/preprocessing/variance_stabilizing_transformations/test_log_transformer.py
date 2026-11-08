@@ -62,9 +62,7 @@ def test_logtransformerwithoriginal_transform_preserves_original_columns(
     transformer = LogTransformerWithOriginal(variables=["income", "tenure_days"])
     transformer.fit(positive_dataframe)
     result = transformer.transform(positive_dataframe)
-    pd.testing.assert_frame_equal(
-        result[positive_dataframe.columns.tolist()], positive_dataframe
-    )
+    pd.testing.assert_frame_equal(result[positive_dataframe.columns.tolist()], positive_dataframe)
 
 
 def test_logtransformerwithoriginal_transform_appends_derived_columns_named_correctly(
@@ -84,9 +82,7 @@ def test_logtransformerwithoriginal_transform_appends_derived_columns_named_corr
     if "income_PREPROCESS_LOG" not in result.columns:
         raise AssertionError("Expected derived column income_PREPROCESS_LOG missing.")
     if "tenure_days_PREPROCESS_LOG" not in result.columns:
-        raise AssertionError(
-            "Expected derived column tenure_days_PREPROCESS_LOG missing."
-        )
+        raise AssertionError("Expected derived column tenure_days_PREPROCESS_LOG missing.")
 
 
 @pytest.mark.parametrize("bad_value", [0, -1])

@@ -49,20 +49,12 @@ class CategoricalCleaner(BaseEstimator, TransformerMixin):
             for feature in features:
                 if feature in df.columns:
                     df[feature] = df[feature].astype("object")
-                    df[feature] = df[feature].apply(
-                        lambda x: str(x) if pd.notna(x) else x
-                    )
-                    df[feature] = (
-                        df[feature]
-                        .replace(fill_value, np.nan)
-                        .infer_objects(copy=False)
-                    )
+                    df[feature] = df[feature].apply(lambda x: str(x) if pd.notna(x) else x)
+                    df[feature] = df[feature].replace(fill_value, np.nan).infer_objects(copy=False)
                     df[feature] = df[feature].astype("category")
         return df
 
-    def get_feature_names_out(
-        self, _input_features: list[str] | None = None
-    ) -> pd.Index:
+    def get_feature_names_out(self, _input_features: list[str] | None = None) -> pd.Index:
         """Return feature names seen during fit.
 
         Args:

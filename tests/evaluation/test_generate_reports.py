@@ -32,21 +32,13 @@ def test_regression_results_computes_metrics_matching_sklearn_equivalents():
     styler = regression_results(y_train_true, y_train_pred, y_test_true, y_test_pred)
     df = styler.data
 
-    if df.loc["Train", "MAE"] != pytest.approx(
-        mean_absolute_error(y_train_true, y_train_pred)
-    ):
+    if df.loc["Train", "MAE"] != pytest.approx(mean_absolute_error(y_train_true, y_train_pred)):
         raise AssertionError()
-    if df.loc["Test", "MAE"] != pytest.approx(
-        mean_absolute_error(y_test_true, y_test_pred)
-    ):
+    if df.loc["Test", "MAE"] != pytest.approx(mean_absolute_error(y_test_true, y_test_pred)):
         raise AssertionError()
-    if df.loc["Train", "MSE"] != pytest.approx(
-        mean_squared_error(y_train_true, y_train_pred)
-    ):
+    if df.loc["Train", "MSE"] != pytest.approx(mean_squared_error(y_train_true, y_train_pred)):
         raise AssertionError()
-    if df.loc["Test", "RMSE"] != pytest.approx(
-        root_mean_squared_error(y_test_true, y_test_pred)
-    ):
+    if df.loc["Test", "RMSE"] != pytest.approx(root_mean_squared_error(y_test_true, y_test_pred)):
         raise AssertionError()
     if df.loc["Train", "R²"] != pytest.approx(r2_score(y_train_true, y_train_pred)):
         raise AssertionError()

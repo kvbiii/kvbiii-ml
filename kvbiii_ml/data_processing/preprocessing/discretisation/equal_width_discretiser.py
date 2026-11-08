@@ -81,9 +81,7 @@ class EqualWidthDiscretiserWithOriginal(_WithOriginalBase):
         """
         return inner.fit(X)
 
-    def _transform_inner(
-        self, inner: EqualWidthDiscretiser, X: pd.DataFrame
-    ) -> pd.DataFrame:
+    def _transform_inner(self, inner: EqualWidthDiscretiser, X: pd.DataFrame) -> pd.DataFrame:
         """Apply the fitted discretiser to X.
 
         Args:

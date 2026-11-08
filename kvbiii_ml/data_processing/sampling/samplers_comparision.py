@@ -40,9 +40,7 @@ class FoldwiseSampler:
         else:
             raise ValueError(f"Unknown sampling strategy: {self.strategy}")
 
-    def fit_resample(
-        self, X: pd.DataFrame, y: pd.Series
-    ) -> tuple[pd.DataFrame, pd.Series]:
+    def fit_resample(self, X: pd.DataFrame, y: pd.Series) -> tuple[pd.DataFrame, pd.Series]:
         """
         Apply the sampling strategy to the data.
 
@@ -60,9 +58,7 @@ class FoldwiseSampler:
         y_resampled = pd.Series(y_resampled, name=y.name)
         return x_resampled, y_resampled
 
-    def fit_transform(
-        self, X: pd.DataFrame, y: pd.Series
-    ) -> tuple[pd.DataFrame, pd.Series]:
+    def fit_transform(self, X: pd.DataFrame, y: pd.Series) -> tuple[pd.DataFrame, pd.Series]:
         """
         Fit and apply the sampling strategy to the data.
 

@@ -28,9 +28,7 @@ def shap_rfe_data() -> tuple[pd.DataFrame, pd.Series]:
     """
     rng = np.random.default_rng(123)
     X = pd.DataFrame(rng.normal(size=(50, 5)), columns=[f"s{i}" for i in range(5)])
-    y = pd.Series(
-        ((X["s0"] - 0.7 * X["s1"] + rng.normal(scale=0.5, size=50)) > 0).astype(int)
-    )
+    y = pd.Series(((X["s0"] - 0.7 * X["s1"] + rng.normal(scale=0.5, size=50)) > 0).astype(int))
     return X, y
 
 

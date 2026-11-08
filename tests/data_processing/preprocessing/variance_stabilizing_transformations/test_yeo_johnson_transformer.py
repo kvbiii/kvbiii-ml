@@ -90,13 +90,9 @@ def test_yeojohnsontransformerwithoriginal_transform_appends_derived_columns_nam
     transformer.fit(zero_and_negative_dataframe)
     result = transformer.transform(zero_and_negative_dataframe)
     if "score_PREPROCESS_YEO_JOHNSON" not in result.columns:
-        raise AssertionError(
-            "Expected derived column score_PREPROCESS_YEO_JOHNSON missing."
-        )
+        raise AssertionError("Expected derived column score_PREPROCESS_YEO_JOHNSON missing.")
     if "balance_PREPROCESS_YEO_JOHNSON" not in result.columns:
-        raise AssertionError(
-            "Expected derived column balance_PREPROCESS_YEO_JOHNSON missing."
-        )
+        raise AssertionError("Expected derived column balance_PREPROCESS_YEO_JOHNSON missing.")
 
 
 if __name__ == "__main__":

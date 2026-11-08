@@ -40,9 +40,7 @@ class PowerTransformerWithOriginal(_WithOriginalBase):
         """
         return PowerTransformer(variables=self.variables, exp=self.exp)
 
-    def _fit_inner(
-        self, inner: PowerTransformer, X: pd.DataFrame, y: Any
-    ) -> PowerTransformer:
+    def _fit_inner(self, inner: PowerTransformer, X: pd.DataFrame, y: Any) -> PowerTransformer:
         """Fit the transformer on X.
 
         Args:
@@ -55,9 +53,7 @@ class PowerTransformerWithOriginal(_WithOriginalBase):
         """
         return inner.fit(X)
 
-    def _transform_inner(
-        self, inner: PowerTransformer, X: pd.DataFrame
-    ) -> pd.DataFrame:
+    def _transform_inner(self, inner: PowerTransformer, X: pd.DataFrame) -> pd.DataFrame:
         """Apply x^exp transformation to X.
 
         Args:

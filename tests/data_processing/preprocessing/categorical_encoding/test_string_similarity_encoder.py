@@ -69,12 +69,8 @@ def test_stringsimilarityencoderwithoriginal_transform_expands_one_column_per_tr
             f"Expected {unique_training_strings} new columns, got {len(new_columns)}."
         )
     if len(new_columns) <= 1:
-        raise AssertionError(
-            "Expected a 1-to-many expansion with more than one new column."
-        )
-    pd.testing.assert_frame_equal(
-        result[["product"]], string_similarity_data[["product"]]
-    )
+        raise AssertionError("Expected a 1-to-many expansion with more than one new column.")
+    pd.testing.assert_frame_equal(result[["product"]], string_similarity_data[["product"]])
 
 
 def test_stringsimilarityencoderwithoriginal_transform_before_fit_raises_attributeerror(
@@ -138,9 +134,7 @@ def test_stringsimilarityencoderwithoriginal_declares_dependencies_per_variable(
     encoder = StringSimilarityEncoderWithOriginal(variables=["product"])
     encoder.fit(string_similarity_data)
     transformed = encoder.transform(string_similarity_data)
-    real_new_columns = {
-        c for c in transformed.columns if c not in string_similarity_data.columns
-    }
+    real_new_columns = {c for c in transformed.columns if c not in string_similarity_data.columns}
     declared = encoder.get_derived_column_dependencies()
     if set(declared.keys()) != real_new_columns:
         raise AssertionError(

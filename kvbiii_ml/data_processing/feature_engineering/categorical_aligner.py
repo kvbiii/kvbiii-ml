@@ -89,9 +89,7 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
             if feature in df.columns
         }
 
-    def fit(
-        self, df: pd.DataFrame, _y: pd.Series | None = None
-    ) -> "CategoricalAligner":
+    def fit(self, df: pd.DataFrame, _y: pd.Series | None = None) -> "CategoricalAligner":
         """
         Fit the transformer by learning categories and modes from training data.
 
@@ -110,8 +108,7 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
         """
         if self.fill_strategy not in FILL_STRATEGIES:
             raise ValueError(
-                f"fill_strategy must be one of {FILL_STRATEGIES}, got "
-                f"'{self.fill_strategy}'."
+                f"fill_strategy must be one of {FILL_STRATEGIES}, got '{self.fill_strategy}'."
             )
         df = df.copy()
         features = self.variables
@@ -124,9 +121,7 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
             )
             features = self.categorical_features
         if features is None:
-            features = df.select_dtypes(
-                include=["object", "string", "category"]
-            ).columns.tolist()
+            features = df.select_dtypes(include=["object", "string", "category"]).columns.tolist()
         self.categorical_features_ = list(features)
         self.categories_: dict[str, list[str]] = {}
         self.modes_: dict[str, str] = {}
@@ -138,9 +133,7 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
                 str(mode_series[0]) if not mode_series.empty else self.default_value
             )
             fill_value = self._get_fill_value(feature)
-            df[feature] = self._fillna_as_str(df[feature], fill_value).astype(
-                "category"
-            )
+            df[feature] = self._fillna_as_str(df[feature], fill_value).astype("category")
             cats = df[feature].cat.categories.tolist()
             if fill_value not in cats:
                 cats = sorted(cats + [fill_value])

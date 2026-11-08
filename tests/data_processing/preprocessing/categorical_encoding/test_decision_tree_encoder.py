@@ -30,9 +30,7 @@ def decision_tree_encoder_data() -> tuple[pd.DataFrame, pd.Series, pd.Series]:
             "tier": ["A", "B", "A", "C", "B", "A", "C", "B"],
         }
     )
-    y_regression = pd.Series(
-        [100.0, 200.0, 150.0, 80.0, 220.0, 130.0, 90.0, 210.0], name="target"
-    )
+    y_regression = pd.Series([100.0, 200.0, 150.0, 80.0, 220.0, 130.0, 90.0, 210.0], name="target")
     y_classification = pd.Series([1, 0, 1, 0, 1, 0, 0, 1], name="target")
     return X, y_regression, y_classification
 

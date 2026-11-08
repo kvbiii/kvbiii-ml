@@ -107,14 +107,9 @@ def test_case_normalizer_normalizes_and_merges_categorical_categories() -> None:
     )
     out = CaseNormalizer(normalization="upper").fit(df).transform(df)
 
-    if (
-        out["plain"].tolist() != ["AB", "CD", "AB", "CD"]
-        or out["plain"].dtype.name != "category"
-    ):
+    if out["plain"].tolist() != ["AB", "CD", "AB", "CD"] or out["plain"].dtype.name != "category":
         raise AssertionError(out["plain"].tolist())
     if list(out["dupes"].cat.categories) != ["AB", "CD"]:
         raise AssertionError(list(out["dupes"].cat.categories))
-    if out["dupes"].tolist()[:3] != ["AB", "AB", "CD"] or not pd.isna(
-        out["dupes"].iloc[3]
-    ):
+    if out["dupes"].tolist()[:3] != ["AB", "AB", "CD"] or not pd.isna(out["dupes"].iloc[3]):
         raise AssertionError(out["dupes"].tolist())

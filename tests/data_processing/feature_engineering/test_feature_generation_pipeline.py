@@ -58,9 +58,7 @@ def test_pipeline_transform_reuses_fitted_steps():
     """Tests that transform reuses steps already fitted during fit."""
     df = pd.DataFrame({"A": ["a", "b"], "B": ["x", "y"]})
     steps = [CrossFeatureGenerator(features_names=[], degree=2)]
-    pipe = FeatureGenerationPipeline(
-        features_names=["A", "B"], preprocessing_steps=steps
-    )
+    pipe = FeatureGenerationPipeline(features_names=["A", "B"], preprocessing_steps=steps)
     pipe.fit(df, y=pd.Series([0, 1]))
     out = pipe.transform(df)
     if not set(out.columns) >= set(df.columns):
@@ -78,9 +76,7 @@ def test_pipeline_error_on_missing_fit_method():
             return X
 
     df = pd.DataFrame({"A": [1, 2], "B": [3, 4]})
-    pipe = FeatureGenerationPipeline(
-        features_names=["A", "B"], preprocessing_steps=[NoFit()]
-    )
+    pipe = FeatureGenerationPipeline(features_names=["A", "B"], preprocessing_steps=[NoFit()])
     with pytest.raises(ValueError, match="must implement a fit"):
         pipe.fit(df, y=pd.Series([0, 1]))
 

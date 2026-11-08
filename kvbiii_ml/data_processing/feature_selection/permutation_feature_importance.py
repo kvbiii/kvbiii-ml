@@ -124,9 +124,7 @@ class PermutationRecursiveFeatureElimination:
             "importance_score": float,
         }
 
-    def run(
-        self, X: pd.DataFrame, y: pd.Series | np.ndarray
-    ) -> dict[str, list | pd.DataFrame]:
+    def run(self, X: pd.DataFrame, y: pd.Series | np.ndarray) -> dict[str, list | pd.DataFrame]:
         """Run permutation RFE and return the selection summary.
 
         Algorithm:
@@ -159,24 +157,18 @@ class PermutationRecursiveFeatureElimination:
         summary_df: dict[str, list | pd.DataFrame] = {
             "selected_features": [],
             "selected_features_names": [],
-            "history": pd.DataFrame(columns=self.history_schema.keys()).astype(
-                self.history_schema
-            ),
+            "history": pd.DataFrame(columns=self.history_schema.keys()).astype(self.history_schema),
         }
 
         pipeline = self.cross_validator.preprocessing_pipeline
-        dependency_graph = PipelineDependencyGraph.build(
-            pipeline, X[all_raw_features], y
-        )
+        dependency_graph = PipelineDependencyGraph.build(pipeline, X[all_raw_features], y)
 
         baseline_estimator = self._restrict_catboost_cat_features(
             self.estimator,
             set(dependency_graph.processed_columns),
             dependency_graph.processed_dtypes,
         )
-        _, valid_scores, _ = self.cross_validator.fit(
-            baseline_estimator, X[all_raw_features], y
-        )
+        _, valid_scores, _ = self.cross_validator.fit(baseline_estimator, X[all_raw_features], y)
         baseline_metric = float(np.mean(valid_scores))
 
         fold_splits = list(self.cross_validator.cv.split(X[all_raw_features], y))
@@ -195,9 +187,7 @@ class PermutationRecursiveFeatureElimination:
             )
         ]
 
-        self.all_processed_features: list[str] = list(
-            dependency_graph.processed_columns
-        )
+        self.all_processed_features: list[str] = list(dependency_graph.processed_columns)
         all_processed_set = set(self.all_processed_features)
 
         missing_protected = set(self.protected_features) - all_processed_set
@@ -289,9 +279,7 @@ class PermutationRecursiveFeatureElimination:
             )
 
             current_processed_features = [
-                f
-                for f in current_processed_features
-                if f not in set(features_to_remove)
+                f for f in current_processed_features if f not in set(features_to_remove)
             ]
             current_raw_features, restricted_pipeline = dependency_graph.restrict(
                 current_processed_features
@@ -312,9 +300,7 @@ class PermutationRecursiveFeatureElimination:
         protected_set = set(self.protected_features)
         logged_set = set(summary_df["history"]["removed_feature_name"].dropna())
         never_removed = [
-            f
-            for f in self.all_processed_features
-            if f not in protected_set and f not in logged_set
+            f for f in self.all_processed_features if f not in protected_set and f not in logged_set
         ]
         if never_removed:
             last_step = int(summary_df["history"]["step"].max())
@@ -339,8 +325,8 @@ class PermutationRecursiveFeatureElimination:
                 [summary_df["history"], pd.DataFrame(rows)], ignore_index=True
             )
 
-        summary_df["selected_features"], metric_selected = (
-            self.select_features_weighted_score(summary_df["history"], self.alpha)
+        summary_df["selected_features"], metric_selected = self.select_features_weighted_score(
+            summary_df["history"], self.alpha
         )
         summary_df["selected_features_names"] = summary_df["selected_features"]
 
@@ -396,9 +382,7 @@ class PermutationRecursiveFeatureElimination:
                     n_jobs=self.n_jobs,
                     random_state=self.random_state + fold_idx,
                 )
-            fold_importances.append(
-                pd.Series(result.importances_mean, index=x_val.columns)
-            )
+            fold_importances.append(pd.Series(result.importances_mean, index=x_val.columns))
 
         return pd.DataFrame(fold_importances).mean().to_dict()
 
@@ -508,9 +492,7 @@ class PermutationRecursiveFeatureElimination:
                 "metric_change": 0.0,
                 "importance_score": importance_scores.get(feat, 0.0),
             }
-            for i, feat in enumerate(
-                f for f in features_to_remove if f not in protected_set
-            )
+            for i, feat in enumerate(f for f in features_to_remove if f not in protected_set)
         ]
         if rows:
             summary_df["history"] = pd.concat(
@@ -563,9 +545,7 @@ class PermutationRecursiveFeatureElimination:
         feat_max = step_agg["n_features_remaining"].max()
         feat_min = step_agg["n_features_remaining"].min()
         denom_feat = feat_max - feat_min if feat_max != feat_min else 1.0
-        step_agg["features_norm"] = (
-            1 - (step_agg["n_features_remaining"] - feat_min) / denom_feat
-        )
+        step_agg["features_norm"] = 1 - (step_agg["n_features_remaining"] - feat_min) / denom_feat
         step_agg["score"] = (
             alpha * step_agg["metric_norm"] + (1 - alpha) * step_agg["features_norm"]
         )
@@ -657,13 +637,10 @@ class PermutationRecursiveFeatureElimination:
         else:
             print(f"📈 Final metric: {metric_selected}")
 
-        print(
-            f"🗑️ Features removed: {n_removed} of {total_processed} ({pct_removed:.2f}%)"
-        )
+        print(f"🗑️ Features removed: {n_removed} of {total_processed} ({pct_removed:.2f}%)")
 
 
 if __name__ == "__main__":
-
     import numpy as np
     import pandas as pd
     from feature_engine.encoding import MeanEncoder
@@ -803,18 +780,14 @@ if __name__ == "__main__":
         x_reg, y_reg = _make_reg_data()
 
         x_bin_cat = x_bin.assign(**{c: x_bin[c].astype(str) for c in CAT_FEATURES})
-        x_multi_cat = x_multi.assign(
-            **{c: x_multi[c].astype(str) for c in CAT_FEATURES}
-        )
+        x_multi_cat = x_multi.assign(**{c: x_multi[c].astype(str) for c in CAT_FEATURES})
         x_reg_cat = x_reg.assign(**{c: x_reg[c].astype(str) for c in CAT_FEATURES})
 
         clf_pipeline = _build_pipeline(CAT_FEATURES, NUM_FEATURES)
         reg_pipeline = _build_pipeline(CAT_FEATURES, NUM_FEATURES)
 
         print("=" * 75)
-        print(
-            "PermutationRecursiveFeatureElimination - full test matrix (3 folds, 5 steps)"
-        )
+        print("PermutationRecursiveFeatureElimination - full test matrix (3 folds, 5 steps)")
         print("=" * 75)
 
         _run_rfe(

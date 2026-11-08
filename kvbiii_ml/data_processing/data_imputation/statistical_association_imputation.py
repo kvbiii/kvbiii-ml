@@ -87,12 +87,8 @@ class StatisticalAssociationImputer:
             list[str]: Names of columns treated as categorical.
         """
         categorical_columns = df.select_dtypes(include=["object", "category"]).columns
-        categorical_columns = [
-            col for col in categorical_columns if df[col].nunique() < 100
-        ]
-        categorical_columns = list(
-            set(categorical_columns) | set(df.columns[df.nunique() == 2])
-        )
+        categorical_columns = [col for col in categorical_columns if df[col].nunique() < 100]
+        categorical_columns = list(set(categorical_columns) | set(df.columns[df.nunique() == 2]))
         return categorical_columns
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -122,17 +118,13 @@ class StatisticalAssociationImputer:
         for feature in columns_with_missing:
             if feature not in self.impute_stats:
                 if self.verbose:
-                    print(
-                        f"Warning: No imputation info for feature '{feature}', skipping."
-                    )
+                    print(f"Warning: No imputation info for feature '{feature}', skipping.")
                 continue
 
             feature_info = self.impute_stats[feature]
             selected_cols = feature_info["selected_cols"]
 
-            df = self.impute_with_stats(
-                df, feature, feature_info["stats"], selected_cols
-            )
+            df = self.impute_with_stats(df, feature, feature_info["stats"], selected_cols)
 
             if self.verbose:
                 self.ks_test(df, feature)
@@ -176,9 +168,7 @@ class StatisticalAssociationImputer:
         if "cramers_v" in self.metrics:
             for col in df_bin.columns:
                 if col != feature_name and df_bin[col].nunique() > 1:
-                    rankings["cramers_v"][col] = self.cramers_v(
-                        df_bin[col], df_bin[feature_name]
-                    )
+                    rankings["cramers_v"][col] = self.cramers_v(df_bin[col], df_bin[feature_name])
 
         if "mutual_info" in self.metrics:
             # Use the same row subset for all columns (as in original behavior), but
@@ -196,16 +186,14 @@ class StatisticalAssociationImputer:
         if "theils_u" in self.metrics:
             for col in df_bin.columns:
                 if col != feature_name and df_bin[col].nunique() > 1:
-                    rankings["theils_u"][col] = self.theils_u(
-                        df_bin[col], df_bin[feature_name]
-                    )
+                    rankings["theils_u"][col] = self.theils_u(df_bin[col], df_bin[feature_name])
 
         df_ranks = pd.DataFrame(rankings)
         for metric in df_ranks.columns:
             df_ranks[f"{metric}_rank"] = df_ranks[metric].rank(ascending=False)
-        df_ranks["total_rank"] = df_ranks[
-            [c for c in df_ranks.columns if c.endswith("_rank")]
-        ].sum(axis=1)
+        df_ranks["total_rank"] = df_ranks[[c for c in df_ranks.columns if c.endswith("_rank")]].sum(
+            axis=1
+        )
         df_ranks = df_ranks.sort_values("total_rank")
         if self.verbose:
             display(df_ranks)
@@ -229,17 +217,13 @@ class StatisticalAssociationImputer:
             pd.DataFrame: Dataframe with binned numeric features.
         """
         df_bin = df.copy()
-        numerical_columns = list(
-            set(df.columns) - set(self.categorical_columns) - {feature_name}
-        )
+        numerical_columns = list(set(df.columns) - set(self.categorical_columns) - {feature_name})
         for col in numerical_columns:
             try:
                 non_na_data = df[col].dropna()
                 if len(non_na_data) > 1:
                     if fit_bins and col not in self.bin_edges:
-                        _, bin_edges = pd.qcut(
-                            non_na_data, q=10, duplicates="drop", retbins=True
-                        )
+                        _, bin_edges = pd.qcut(non_na_data, q=10, duplicates="drop", retbins=True)
                         self.bin_edges[col] = bin_edges
                     if col in self.bin_edges:
                         df_bin[col] = pd.cut(
@@ -314,9 +298,7 @@ class StatisticalAssociationImputer:
             if total == 0:
                 return 0.0
 
-            h_y = -sum(
-                (val / total) * log(val / total + 1e-10) for val in s_y if val > 0
-            )
+            h_y = -sum((val / total) * log(val / total + 1e-10) for val in s_y if val > 0)
             if h_y == 0:
                 return 0.0
             h_y_given_x = 0.0
@@ -325,9 +307,7 @@ class StatisticalAssociationImputer:
                 if row_total == 0:
                     continue
                 h_row = -sum(
-                    (val / row_total) * log(val / row_total + 1e-10)
-                    for val in row
-                    if val > 0
+                    (val / row_total) * log(val / row_total + 1e-10) for val in row if val > 0
                 )
                 h_y_given_x += row_total / total * h_row
             return (h_y - h_y_given_x) / h_y
@@ -377,22 +357,18 @@ class StatisticalAssociationImputer:
 
         df_for_stats = df_binned.copy()
         df_for_stats[feature_name] = df[feature_name]
-        grouping_cols_binned = [
-            col for col in selected_cols if col in df_binned.columns
-        ]
+        grouping_cols_binned = [col for col in selected_cols if col in df_binned.columns]
 
-        grouped = df_for_stats.groupby(
-            grouping_cols_binned, observed=True, dropna=False
-        )[feature_name]
+        grouped = df_for_stats.groupby(grouping_cols_binned, observed=True, dropna=False)[
+            feature_name
+        ]
 
         if is_categorical:
             group_stats = grouped.agg(
                 lambda x: x.mode().iloc[0] if not x.mode().empty else np.nan
             ).dropna()
             overall_stat = (
-                df[feature_name].mode().iloc[0]
-                if not df[feature_name].mode().empty
-                else np.nan
+                df[feature_name].mode().iloc[0] if not df[feature_name].mode().empty else np.nan
             )
         else:
             group_stats = grouped.mean().dropna()
@@ -415,9 +391,7 @@ class StatisticalAssociationImputer:
         """Prints grouped and overall statistics for verbose diagnostics."""
         print("Stats by group (using binned grouping):")
         for group, stat in group_stats.items():
-            group_str = ", ".join(
-                f"{col}: {val}" for col, val in zip(selected_cols, group)
-            )
+            group_str = ", ".join(f"{col}: {val}" for col, val in zip(selected_cols, group))
             print(f"{group_str} -> {stat}")
         print("Overall stat:", overall_stat)
 

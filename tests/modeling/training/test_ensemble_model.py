@@ -96,9 +96,7 @@ def test_ensemblemodel_init_validates_weights(ensemble_estimators):
         - Error is raised when invalid weights are provided
     """
     # Test with no weights (should use equal weights)
-    ensemble = EnsembleModel(
-        estimators=ensemble_estimators, problem_type="classification"
-    )
+    ensemble = EnsembleModel(estimators=ensemble_estimators, problem_type="classification")
 
     if len(ensemble.weights) != len(ensemble_estimators):
         raise AssertionError()
@@ -121,14 +119,10 @@ def test_ensemblemodel_init_validates_weights(ensemble_estimators):
 
     # Test with invalid weights
     # Negative weights: behavior not enforced; just instantiate normalization
-    EnsembleModel(
-        estimators=ensemble_estimators, weights=[-1, 2], problem_type="classification"
-    )
+    EnsembleModel(estimators=ensemble_estimators, weights=[-1, 2], problem_type="classification")
 
 
-def test_ensemblemodel_fit_trains_all_estimators(
-    binary_classification_data, ensemble_estimators
-):
+def test_ensemblemodel_fit_trains_all_estimators(binary_classification_data, ensemble_estimators):
     """Tests fit method trains all estimators correctly.
 
     Args:
@@ -228,9 +222,7 @@ def test_ensemblemodel_predict_proba_computes_weighted_probabilities(mock_estima
 
     # Manually calculate expected probabilities for first sample
     expected_proba_0 = (
-        0.2 * np.array([0.7, 0.3])
-        + 0.5 * np.array([0.3, 0.7])
-        + 0.3 * np.array([0.6, 0.4])
+        0.2 * np.array([0.7, 0.3]) + 0.5 * np.array([0.3, 0.7]) + 0.3 * np.array([0.6, 0.4])
     )
     if not np.allclose(probabilities[0], expected_proba_0):
         raise AssertionError()
@@ -289,17 +281,13 @@ def test_ensemblemodel_get_params_returns_estimator_params():
     estimator2 = Mock()
     estimator2.get_params.return_value = {"alpha": 0.1, "beta": 0.2}
 
-    ensemble = EnsembleModel(
-        estimators=[estimator1, estimator2], problem_type="classification"
-    )
+    ensemble = EnsembleModel(estimators=[estimator1, estimator2], problem_type="classification")
 
     params = ensemble.get_params(deep=True)
 
     # Should include parameters for each estimator
     # Implementation only returns top-level params
-    if not (
-        "estimators" in params and "problem_type" in params and "weights" in params
-    ):
+    if not ("estimators" in params and "problem_type" in params and "weights" in params):
         raise AssertionError()
 
 
@@ -319,9 +307,7 @@ def test_ensemblemodel_set_params_updates_parameters():
     estimator2.get_params.return_value = {"alpha": 0.1, "beta": 0.2}
     estimator2.set_params.return_value = estimator2
 
-    ensemble = EnsembleModel(
-        estimators=[estimator1, estimator2], problem_type="classification"
-    )
+    ensemble = EnsembleModel(estimators=[estimator1, estimator2], problem_type="classification")
 
     # Update parameters
     result = ensemble.set_params(weights=[0.3, 0.7])
@@ -354,9 +340,7 @@ def test_ensemblemodel_fit_in_parallel_matches_sequential_fit(
         - n_jobs survives get_params, so clones keep the concurrency.
     """
     X, y = binary_classification_data
-    sequential = EnsembleModel(
-        estimators=ensemble_estimators, problem_type="classification"
-    )
+    sequential = EnsembleModel(estimators=ensemble_estimators, problem_type="classification")
     parallel = EnsembleModel(
         estimators=ensemble_estimators, problem_type="classification", n_jobs=2
     )
@@ -382,9 +366,7 @@ def test_ensemblemodel_init_rejects_non_positive_n_jobs(ensemble_estimators):
         - n_jobs=0 raises ValueError naming n_jobs.
     """
     with pytest.raises(ValueError, match="n_jobs"):
-        EnsembleModel(
-            estimators=ensemble_estimators, problem_type="classification", n_jobs=0
-        )
+        EnsembleModel(estimators=ensemble_estimators, problem_type="classification", n_jobs=0)
 
 
 @pytest.mark.parametrize("problem_type", ["classification", "regression"])
@@ -404,9 +386,7 @@ def test_ensemblemodel_fitted_instance_survives_pickle_round_trip(
         - clone keeps the parameters and score() works.
     """
     X, y = binary_classification_data
-    base = (
-        LogisticRegression() if problem_type == "classification" else LinearRegression()
-    )
+    base = LogisticRegression() if problem_type == "classification" else LinearRegression()
     ensemble = EnsembleModel(estimators=[base], problem_type=problem_type).fit(X, y)
 
     buffer = io.BytesIO()
@@ -416,9 +396,7 @@ def test_ensemblemodel_fitted_instance_survives_pickle_round_trip(
 
     if not np.array_equal(ensemble.predict(X), restored.predict(X)):
         raise AssertionError()
-    if not isinstance(ensemble, EnsembleModel) or not isinstance(
-        restored, EnsembleModel
-    ):
+    if not isinstance(ensemble, EnsembleModel) or not isinstance(restored, EnsembleModel):
         raise AssertionError()
     if clone(ensemble).get_params()["problem_type"] != problem_type:
         raise AssertionError()
@@ -516,9 +494,7 @@ def test_ensemblemodel_stacking_meta_learner_trusts_memorising_model_less_out_of
 def _exposure_frame(n_samples: int = 600) -> tuple[pd.DataFrame, pd.Series]:
     """Poisson counts whose mean is exposure * exp(0.6 * x0)."""
     rng = np.random.default_rng(5)
-    X = pd.DataFrame(
-        {"x0": rng.normal(size=n_samples), "x1": rng.normal(size=n_samples)}
-    )
+    X = pd.DataFrame({"x0": rng.normal(size=n_samples), "x1": rng.normal(size=n_samples)})
     X["log_exposure"] = np.log(rng.uniform(0.2, 3.0, size=n_samples))
     y = pd.Series(rng.poisson(np.exp(0.6 * X["x0"] + X["log_exposure"])))
     return X, y

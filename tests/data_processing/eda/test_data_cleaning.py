@@ -176,9 +176,7 @@ def test_datacleaner_fit_transform_combines_all_cleaning_steps(dirty_data):
     try:
         # Add some duplicate columns and single-value columns for testing
         test_data = dirty_data.copy()
-        test_data["duplicate_col"] = test_data.iloc[
-            :, 0
-        ].copy()  # Duplicate first column
+        test_data["duplicate_col"] = test_data.iloc[:, 0].copy()  # Duplicate first column
         test_data["single_val_col"] = "constant"  # Single value
         test_data["all_na_col"] = pd.NA  # All missing
 
@@ -311,9 +309,7 @@ def test_datacleaner_get_categorical_features_method(test_settings):
             "low_card_cat": np.random.choice(
                 ["A", "B", "C"], test_settings.N_SAMPLES
             ),  # Low cardinality
-            "binary_numeric": np.random.choice(
-                [0, 1], test_settings.N_SAMPLES
-            ),  # Binary
+            "binary_numeric": np.random.choice([0, 1], test_settings.N_SAMPLES),  # Binary
             "continuous": np.random.randn(test_settings.N_SAMPLES),  # Continuous
             "object_cat": pd.Series(
                 np.random.choice(["cat", "dog", "bird"], test_settings.N_SAMPLES),
@@ -368,9 +364,7 @@ def test_datacleaner_initial_features_removal_method(test_settings):
             "duplicate_original": np.random.randn(test_settings.N_SAMPLES),
         }
     )
-    base_data["duplicate_copy"] = base_data[
-        "duplicate_original"
-    ].copy()  # Exact duplicate
+    base_data["duplicate_copy"] = base_data["duplicate_original"].copy()  # Exact duplicate
 
     original_shape = base_data.shape
     cleaned_data = DataCleaner.initial_features_removal(base_data)
@@ -386,9 +380,7 @@ def test_datacleaner_initial_features_removal_method(test_settings):
         raise AssertionError()
 
     # One of the duplicates should remain, one should be removed
-    duplicate_features_remaining = [
-        col for col in cleaned_data.columns if "duplicate" in col
-    ]
+    duplicate_features_remaining = [col for col in cleaned_data.columns if "duplicate" in col]
     if len(duplicate_features_remaining) != 1:
         raise AssertionError()
 
@@ -421,9 +413,7 @@ def test_datacleaner_categorize_categorical_features_by_missing_method(test_sett
     )
 
     cat_features = ["no_missing", "few_missing", "many_missing"]
-    categories = DataCleaner.categorize_categorical_features_by_missing(
-        test_data, cat_features
-    )
+    categories = DataCleaner.categorize_categorical_features_by_missing(test_data, cat_features)
 
     # Check all expected keys are present
     expected_keys = [

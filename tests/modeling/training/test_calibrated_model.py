@@ -18,9 +18,7 @@ def test_calibratedmodel_init_raises_error_for_invalid_problem_type(
         - ValueError is raised when problem_type is not "classification".
     """
     with pytest.raises(ValueError, match="classification"):
-        CalibratedModel(
-            estimator=logistic_regression_estimator, problem_type="regression"
-        )
+        CalibratedModel(estimator=logistic_regression_estimator, problem_type="regression")
 
 
 def test_calibratedmodel_init_raises_error_for_invalid_calibration_method(
@@ -35,9 +33,7 @@ def test_calibratedmodel_init_raises_error_for_invalid_calibration_method(
         - ValueError is raised when calibration_method is not "isotonic"/"sigmoid".
     """
     with pytest.raises(ValueError, match="isotonic"):
-        CalibratedModel(
-            estimator=logistic_regression_estimator, calibration_method="platt"
-        )
+        CalibratedModel(estimator=logistic_regression_estimator, calibration_method="platt")
 
 
 @pytest.mark.parametrize("calibration_size", [0.0, 1.0, -0.1, 1.5])
@@ -54,9 +50,7 @@ def test_calibratedmodel_init_raises_error_for_invalid_calibration_size(
         - ValueError is raised for calibration_size at or beyond the (0, 1) bounds.
     """
     with pytest.raises(ValueError, match="calibration_size"):
-        CalibratedModel(
-            estimator=logistic_regression_estimator, calibration_size=calibration_size
-        )
+        CalibratedModel(estimator=logistic_regression_estimator, calibration_size=calibration_size)
 
 
 def test_calibratedmodel_init_accepts_valid_calibration_size(
@@ -70,9 +64,7 @@ def test_calibratedmodel_init_accepts_valid_calibration_size(
     Asserts:
         - Construction succeeds and calibration_size is stored unchanged.
     """
-    model = CalibratedModel(
-        estimator=logistic_regression_estimator, calibration_size=0.5
-    )
+    model = CalibratedModel(estimator=logistic_regression_estimator, calibration_size=0.5)
     if model.calibration_size != 0.5:
         raise AssertionError("calibration_size was not stored correctly.")
 
@@ -167,9 +159,7 @@ def test_calibratedmodel_fit_and_predict_returns_known_class_labels(
         (np.array([0.2, 0.8, 0.5]), 2),
     ],
 )
-def test_calibratedmodel_ensure_proba_matrix_coerces_1d_to_2d(
-    probas_1d, expected_columns
-):
+def test_calibratedmodel_ensure_proba_matrix_coerces_1d_to_2d(probas_1d, expected_columns):
     """Tests that _ensure_proba_matrix coerces a 1-D positive-class array to 2-D.
 
     Args:
@@ -184,9 +174,7 @@ def test_calibratedmodel_ensure_proba_matrix_coerces_1d_to_2d(
     if coerced.ndim != 2 or coerced.shape[1] != expected_columns:
         raise AssertionError(f"Unexpected coerced shape: {coerced.shape}")
     if not np.allclose(coerced[:, 0], 1.0 - probas_1d):
-        raise AssertionError(
-            "Negative-class column is not the complement of the input."
-        )
+        raise AssertionError("Negative-class column is not the complement of the input.")
 
 
 def test_calibratedmodel_ensure_proba_matrix_passthrough_for_2d():

@@ -40,9 +40,7 @@ class LogTransformerWithOriginal(_WithOriginalBase):
         """
         return LogTransformer(variables=self.variables, base=self.base)
 
-    def _fit_inner(
-        self, inner: LogTransformer, X: pd.DataFrame, y: Any
-    ) -> LogTransformer:
+    def _fit_inner(self, inner: LogTransformer, X: pd.DataFrame, y: Any) -> LogTransformer:
         """Fit the transformer on X.
 
         Args:

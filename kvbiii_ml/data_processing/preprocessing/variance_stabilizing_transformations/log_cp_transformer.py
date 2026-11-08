@@ -45,9 +45,7 @@ class LogCpTransformerWithOriginal(_WithOriginalBase):
         """
         return LogCpTransformer(variables=self.variables, base=self.base, C=self.C)
 
-    def _fit_inner(
-        self, inner: LogCpTransformer, X: pd.DataFrame, y: Any
-    ) -> LogCpTransformer:
+    def _fit_inner(self, inner: LogCpTransformer, X: pd.DataFrame, y: Any) -> LogCpTransformer:
         """Fit the transformer on X (learns C per variable if C='auto').
 
         Args:
@@ -60,9 +58,7 @@ class LogCpTransformerWithOriginal(_WithOriginalBase):
         """
         return inner.fit(X)
 
-    def _transform_inner(
-        self, inner: LogCpTransformer, X: pd.DataFrame
-    ) -> pd.DataFrame:
+    def _transform_inner(self, inner: LogCpTransformer, X: pd.DataFrame) -> pd.DataFrame:
         """Apply log(x+C) transformation to X.
 
         Args:

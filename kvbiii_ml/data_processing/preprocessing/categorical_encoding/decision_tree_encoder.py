@@ -106,9 +106,7 @@ class DecisionTreeEncoderWithOriginal(_WithOriginalBase):
         """
         return inner.fit(X, y)
 
-    def _transform_inner(
-        self, inner: DecisionTreeEncoder, X: pd.DataFrame
-    ) -> pd.DataFrame:
+    def _transform_inner(self, inner: DecisionTreeEncoder, X: pd.DataFrame) -> pd.DataFrame:
         """Apply the fitted encoder to X.
 
         Args:
@@ -146,9 +144,7 @@ if __name__ == "__main__":
     )
     y = pd.Series([1, 0, 1, 0, 1, 0, 0, 1], name="target")
 
-    enc = DecisionTreeEncoder(
-        variables=["city", "tier"], regression=False, cv=2, random_state=42
-    )
+    enc = DecisionTreeEncoder(variables=["city", "tier"], regression=False, cv=2, random_state=42)
     print("=== DecisionTreeEncoder (replace) ===")
     print(enc.fit_transform(df[["city", "tier", "revenue"]], y))
 
@@ -162,15 +158,9 @@ if __name__ == "__main__":
         [
             (
                 "dt_enc",
-                DecisionTreeEncoderWithOriginal(
-                    regression=False, cv=2, random_state=42
-                ),
+                DecisionTreeEncoderWithOriginal(regression=False, cv=2, random_state=42),
             )
         ]
     )
     print("\n=== Inside sklearn Pipeline ===")
-    print(
-        pipe.fit(df[["city", "tier", "revenue"]], y).transform(
-            df[["city", "tier", "revenue"]]
-        )
-    )
+    print(pipe.fit(df[["city", "tier", "revenue"]], y).transform(df[["city", "tier", "revenue"]]))

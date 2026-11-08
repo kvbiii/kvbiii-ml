@@ -104,19 +104,15 @@ class CutoffTunerCV:
                 n_trials=self.n_trials,
                 callbacks=[self._log_trial] if self.verbose else None,
             )
-            self.best_cutoffs, self.best_score_, self.selection_source_ = (
-                self._select_best(
-                    study, y_true, y_proba, fold_boundaries, default_cutoffs
-                )
+            self.best_cutoffs, self.best_score_, self.selection_source_ = self._select_best(
+                study, y_true, y_proba, fold_boundaries, default_cutoffs
             )
             self._log_finish()
         finally:
             optuna.logging.set_verbosity(previous_verbosity)
         return study
 
-    def predict(
-        self, X: pd.DataFrame, estimator: BaseEstimator | None = None
-    ) -> np.ndarray:
+    def predict(self, X: pd.DataFrame, estimator: BaseEstimator | None = None) -> np.ndarray:
         """Apply tuned cutoffs to produce class predictions.
 
         When no estimator is provided, uses the first fold's fitted estimator with
@@ -146,9 +142,7 @@ class CutoffTunerCV:
         return self._apply_cutoffs(y_proba, self.best_cutoffs, self._is_binary)
 
     @staticmethod
-    def _apply_cutoffs(
-        y_proba: np.ndarray, cutoffs: np.ndarray, is_binary: bool
-    ) -> np.ndarray:
+    def _apply_cutoffs(y_proba: np.ndarray, cutoffs: np.ndarray, is_binary: bool) -> np.ndarray:
         """Convert probabilities and cutoffs into class predictions.
 
         Args:
@@ -201,9 +195,7 @@ class CutoffTunerCV:
         Returns:
             optuna.study.Study: Configured study.
         """
-        sampler = optuna.samplers.TPESampler(
-            seed=self.seed, n_startup_trials=25, multivariate=True
-        )
+        sampler = optuna.samplers.TPESampler(seed=self.seed, n_startup_trials=25, multivariate=True)
         return optuna.create_study(
             direction=self.metric_direction,
             sampler=sampler,
@@ -287,14 +279,9 @@ class CutoffTunerCV:
                 four decimals.
         """
         labels = (
-            self.fitted_estimators_[0].classes_
-            if self.fitted_estimators_
-            else range(len(cutoffs))
+            self.fitted_estimators_[0].classes_ if self.fitted_estimators_ else range(len(cutoffs))
         )
-        return {
-            str(label): round(float(cutoff), 4)
-            for label, cutoff in zip(labels, cutoffs)
-        }
+        return {str(label): round(float(cutoff), 4) for label, cutoff in zip(labels, cutoffs)}
 
     def _log_finish(self) -> None:
         """Prints the final cutoff-selection summary when verbose mode is enabled."""
@@ -305,9 +292,7 @@ class CutoffTunerCV:
             f"(selected: '{self.selection_source_}')"
         )
         if self.selection_source_ == "optimized":
-            print(
-                f"✨ Search beat the default cutoff (scored {self.baseline_score_:.5f})."
-            )
+            print(f"✨ Search beat the default cutoff (scored {self.baseline_score_:.5f}).")
         else:
             print(f"🛑 {self._explain_baseline_fallback()}")
         print(f"🏆 Best cutoffs: {self._format_cutoffs(self.best_cutoffs)}")
@@ -323,9 +308,7 @@ class CutoffTunerCV:
             f"🎯 Tuning decision cutoffs for {type(self.estimator).__name__}."
         )
 
-    def _log_trial(
-        self, study: optuna.study.Study, trial: optuna.trial.FrozenTrial
-    ) -> None:
+    def _log_trial(self, study: optuna.study.Study, trial: optuna.trial.FrozenTrial) -> None:
         """Prints a one-line summary for a finished trial.
 
         Registered as an Optuna study callback, so it fires once per trial in
@@ -386,10 +369,7 @@ class CutoffTunerCV:
             low, high = self.MULTICLASS_CUTOFF_BOUNDS
             n_classes = y_proba.shape[1]
             cutoffs = np.array(
-                [
-                    trial.suggest_float(f"cutoff_{i}", low, high)
-                    for i in range(n_classes)
-                ]
+                [trial.suggest_float(f"cutoff_{i}", low, high) for i in range(n_classes)]
             )
         score = self._score_cutoffs(cutoffs, y_true, y_proba, fold_boundaries)
         if score is None:
@@ -398,9 +378,7 @@ class CutoffTunerCV:
             )
         return score
 
-    def _params_to_cutoffs(
-        self, params: dict[str, float], n_classes: int
-    ) -> np.ndarray:
+    def _params_to_cutoffs(self, params: dict[str, float], n_classes: int) -> np.ndarray:
         """Converts Optuna's suggest-parameter naming scheme back into a cutoff vector.
 
         Args:
@@ -497,9 +475,7 @@ class CutoffTunerCV:
         fold_scores: list[float] = []
         for start, end in zip(fold_boundaries[:-1], fold_boundaries[1:]):
             try:
-                fold_scores.append(
-                    float(self.metric_fn(y_true[start:end], y_pred[start:end]))
-                )
+                fold_scores.append(float(self.metric_fn(y_true[start:end], y_pred[start:end])))
             except ValueError:
                 continue
 
@@ -509,11 +485,7 @@ class CutoffTunerCV:
         scores = np.array(fold_scores)
         penalty = self.fold_std_penalty * float(scores.std())
         mean_score = float(scores.mean())
-        return (
-            mean_score - penalty
-            if self.metric_direction == "maximize"
-            else mean_score + penalty
-        )
+        return mean_score - penalty if self.metric_direction == "maximize" else mean_score + penalty
 
     def _select_best(
         self,
@@ -552,9 +524,7 @@ class CutoffTunerCV:
             Also records ``baseline_score_`` and ``optimized_score_`` on ``self`` so
             ``_log_finish`` can explain the outcome.
         """
-        baseline_score = self._score_cutoffs(
-            default_cutoffs, y_true, y_proba, fold_boundaries
-        )
+        baseline_score = self._score_cutoffs(default_cutoffs, y_true, y_proba, fold_boundaries)
         if baseline_score is None:
             raise RuntimeError(
                 "Could not score the default cutoff; every cross-validation fold "
@@ -563,9 +533,7 @@ class CutoffTunerCV:
         self.baseline_score_ = baseline_score
         self.optimized_score_ = None
 
-        completed_trials = [
-            t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE
-        ]
+        completed_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
         if not completed_trials:
             warnings.warn(
                 "All Optuna trials were pruned; falling back to the default cutoff.",
@@ -575,9 +543,7 @@ class CutoffTunerCV:
 
         n_classes = 1 if self._is_binary else y_proba.shape[1]
         optimized_cutoffs = self._params_to_cutoffs(study.best_params, n_classes)
-        optimized_score = self._score_cutoffs(
-            optimized_cutoffs, y_true, y_proba, fold_boundaries
-        )
+        optimized_score = self._score_cutoffs(optimized_cutoffs, y_true, y_proba, fold_boundaries)
         if optimized_score is None:
             return self._expand_cutoffs(default_cutoffs), baseline_score, "default"
         self.optimized_score_ = optimized_score
@@ -613,9 +579,7 @@ class CutoffTunerCV:
         fold_scores = []
         for start, end in zip(fold_boundaries[:-1], fold_boundaries[1:]):
             try:
-                fold_scores.append(
-                    float(self.metric_fn(y_true[start:end], y_pred[start:end]))
-                )
+                fold_scores.append(float(self.metric_fn(y_true[start:end], y_pred[start:end])))
             except ValueError:
                 continue
         if not fold_scores:
@@ -676,9 +640,7 @@ if __name__ == "__main__":
             verbose=False,
         )
         tuner_bin = CutoffTunerCV(
-            estimator=LGBMClassifier(
-                n_estimators=100, verbose=-1, random_state=RANDOM_STATE
-            ),
+            estimator=LGBMClassifier(n_estimators=100, verbose=-1, random_state=RANDOM_STATE),
             cross_validator=cv_bin,
             n_trials=30,
             seed=RANDOM_STATE,
@@ -709,9 +671,7 @@ if __name__ == "__main__":
             verbose=False,
         )
         tuner_mc = CutoffTunerCV(
-            estimator=LGBMClassifier(
-                n_estimators=100, verbose=-1, random_state=RANDOM_STATE
-            ),
+            estimator=LGBMClassifier(n_estimators=100, verbose=-1, random_state=RANDOM_STATE),
             cross_validator=cv_mc,
             n_trials=30,
             seed=RANDOM_STATE,

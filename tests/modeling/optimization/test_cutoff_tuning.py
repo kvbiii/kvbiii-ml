@@ -63,9 +63,7 @@ def multiclass_logistic_regression_estimator(test_settings) -> LogisticRegressio
     Returns:
         LogisticRegression: Configured multiclass-capable estimator.
     """
-    return LogisticRegression(
-        max_iter=200, random_state=test_settings.SEED, solver="lbfgs"
-    )
+    return LogisticRegression(max_iter=200, random_state=test_settings.SEED, solver="lbfgs")
 
 
 @pytest.fixture

@@ -53,9 +53,7 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
         self.float_precision = float_precision
         self.columns = columns
 
-    def fit(
-        self, df: pd.DataFrame, _y: pd.Series | None = None
-    ) -> "NumericalDowncaster":
+    def fit(self, df: pd.DataFrame, _y: pd.Series | None = None) -> "NumericalDowncaster":
         """
         Fit method that determines optimal dtypes for numerical columns.
 
@@ -202,11 +200,7 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
         values = series.to_numpy(dtype=np.float64, na_value=np.nan)
         with np.errstate(over="ignore"):
             as_float32 = values.astype(np.float32)
-        return bool(
-            np.allclose(
-                values, as_float32, rtol=LOSSLESS_RTOL, atol=0.0, equal_nan=True
-            )
-        )
+        return bool(np.allclose(values, as_float32, rtol=LOSSLESS_RTOL, atol=0.0, equal_nan=True))
 
     @staticmethod
     def _nan_integer_dtype(series: pd.Series) -> Any:
@@ -242,17 +236,15 @@ if __name__ == "__main__":
     print(df_train.dtypes)
     print(f"\nOriginal memory: {df_train.memory_usage(deep=True).sum() / 1024:.2f} KB")
 
-    downcaster = NumericalDowncaster(
-        variables=["price", "mileage", "rating", "efficiency"]
-    ).fit(df_train)
+    downcaster = NumericalDowncaster(variables=["price", "mileage", "rating", "efficiency"]).fit(
+        df_train
+    )
     transformed_train = downcaster.transform(df_train)
     transformed_test = downcaster.transform(df_test)
 
     print("\nDowncasted dtypes:")
     print(transformed_train.dtypes)
-    print(
-        f"\nDowncasted memory: {transformed_train.memory_usage(deep=True).sum() / 1024:.2f} KB"
-    )
+    print(f"\nDowncasted memory: {transformed_train.memory_usage(deep=True).sum() / 1024:.2f} KB")
 
     print("\nTransformed train data:")
     print(transformed_train)

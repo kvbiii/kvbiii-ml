@@ -122,16 +122,12 @@ class EnsembleWeightTunerCV:
             study = self._create_study()
             self._enqueue_baselines(study, candidates)
             study.optimize(
-                lambda trial: self._objective(
-                    trial, y_true, preds_list, fold_boundaries
-                ),
+                lambda trial: self._objective(trial, y_true, preds_list, fold_boundaries),
                 n_trials=self.n_trials,
                 callbacks=[self._log_trial] if self.verbose else None,
             )
-            self.best_weights, self.best_score_, self.selection_source_ = (
-                self._select_best(
-                    study, y_true, preds_list, fold_boundaries, candidates
-                )
+            self.best_weights, self.best_score_, self.selection_source_ = self._select_best(
+                study, y_true, preds_list, fold_boundaries, candidates
             )
             self._log_finish()
         finally:
@@ -209,9 +205,7 @@ class EnsembleWeightTunerCV:
 
         if neg_clf and not is_df:
             eps = 1e-9
-            logits = np.log(
-                np.clip(stacked, eps, 1 - eps) / np.clip(1 - stacked, eps, 1 - eps)
-            )
+            logits = np.log(np.clip(stacked, eps, 1 - eps) / np.clip(1 - stacked, eps, 1 - eps))
             blended = 1.0 / (1.0 + np.exp(-np.einsum("e,es->s", weights, logits)))
         elif neg_clf:
             eps = 1e-12
@@ -224,9 +218,7 @@ class EnsembleWeightTunerCV:
             blended = np.einsum("e,e...->...", weights, stacked)
             if is_df:
                 row_sums = blended.sum(axis=1, keepdims=True)
-                blended = np.clip(
-                    blended / np.where(row_sums == 0.0, 1.0, row_sums), 0.0, 1.0
-                )
+                blended = np.clip(blended / np.where(row_sums == 0.0, 1.0, row_sums), 0.0, 1.0)
                 blended /= np.clip(blended.sum(axis=1, keepdims=True), 1e-12, None)
 
         if is_df:
@@ -299,9 +291,7 @@ class EnsembleWeightTunerCV:
         Returns:
             optuna.study.Study: Configured study.
         """
-        sampler = optuna.samplers.TPESampler(
-            seed=self.seed, n_startup_trials=25, multivariate=True
-        )
+        sampler = optuna.samplers.TPESampler(seed=self.seed, n_startup_trials=25, multivariate=True)
         return optuna.create_study(
             direction=self.metric_direction,
             sampler=sampler,
@@ -310,9 +300,7 @@ class EnsembleWeightTunerCV:
         )
 
     @staticmethod
-    def _enqueue_baselines(
-        study: optuna.study.Study, candidates: dict[str, np.ndarray]
-    ) -> None:
+    def _enqueue_baselines(study: optuna.study.Study, candidates: dict[str, np.ndarray]) -> None:
         """Seeds the study with baseline weight vectors as guaranteed first trials.
 
         Args:
@@ -396,9 +384,7 @@ class EnsembleWeightTunerCV:
             f"🎛️  Blending {len(self.estimators)} estimators: {names}"
         )
 
-    def _log_trial(
-        self, study: optuna.study.Study, trial: optuna.trial.FrozenTrial
-    ) -> None:
+    def _log_trial(self, study: optuna.study.Study, trial: optuna.trial.FrozenTrial) -> None:
         """Prints a one-line summary for a finished trial.
 
         Registered as an Optuna study callback, so it fires once per trial in
@@ -480,9 +466,7 @@ class EnsembleWeightTunerCV:
         )
         weights = self._normalize_weights(raw_weights)
         if weights is None:
-            raise optuna.TrialPruned(
-                "Degenerate weight vector: weights summed too close to zero."
-            )
+            raise optuna.TrialPruned("Degenerate weight vector: weights summed too close to zero.")
         score = self._score_weights(weights, y_true, preds_list, fold_boundaries)
         if score is None:
             raise optuna.TrialPruned(
@@ -527,9 +511,7 @@ class EnsembleWeightTunerCV:
             pooled_preds = self._collect_fold_predictions(X, splits, cross_validator)
             preds_per_estimator.append(pooled_preds)
             if self.verbose:
-                self._summarize_oof(
-                    estimator, y_valid_true, pooled_preds, fold_boundaries
-                )
+                self._summarize_oof(estimator, y_valid_true, pooled_preds, fold_boundaries)
 
         return y_valid_true, preds_per_estimator, fold_boundaries
 
@@ -582,9 +564,7 @@ class EnsembleWeightTunerCV:
             fold_y_true = y_true.iloc[start:end]
             fold_pred = blended.iloc[start:end]
             try:
-                fold_scores.append(
-                    float(self.metric_fn(fold_y_true, fold_pred.to_numpy()))
-                )
+                fold_scores.append(float(self.metric_fn(fold_y_true, fold_pred.to_numpy())))
             except ValueError:
                 continue
 
@@ -595,9 +575,7 @@ class EnsembleWeightTunerCV:
         penalty = self.fold_std_penalty * float(scores.std())
         mean_score = float(scores.mean())
         aggregate_score = (
-            mean_score - penalty
-            if self.metric_direction == "maximize"
-            else mean_score + penalty
+            mean_score - penalty if self.metric_direction == "maximize" else mean_score + penalty
         )
         return (aggregate_score, fold_scores) if return_fold_scores else aggregate_score
 
@@ -662,9 +640,7 @@ class EnsembleWeightTunerCV:
         self.baseline_score_ = baseline_score
         self.n_baselines_ = len(results)
 
-        completed_trials = [
-            t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE
-        ]
+        completed_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
         if not completed_trials:
             warnings.warn(
                 "All Optuna trials were pruned; falling back to baseline weight vectors.",
@@ -672,9 +648,7 @@ class EnsembleWeightTunerCV:
             )
             return baseline_weights, baseline_score, baseline_name
 
-        optimized_raw = np.array(
-            [study.best_params[f"w{i}"] for i in range(n)], dtype=float
-        )
+        optimized_raw = np.array([study.best_params[f"w{i}"] for i in range(n)], dtype=float)
         optimized_weights = self._normalize_weights(optimized_raw)
         if optimized_weights is None:
             return baseline_weights, baseline_score, baseline_name
@@ -724,9 +698,7 @@ class EnsembleWeightTunerCV:
             try:
                 fold_scores.append(
                     float(
-                        self.metric_fn(
-                            y_true.iloc[start:end], fold_pred.iloc[start:end].to_numpy()
-                        )
+                        self.metric_fn(y_true.iloc[start:end], fold_pred.iloc[start:end].to_numpy())
                     )
                 )
             except ValueError:
@@ -813,15 +785,9 @@ if __name__ == "__main__":
         y_ser = pd.Series(y_arr)
 
         clf_estimators = [
-            LGBMClassifier(
-                n_estimators=100, num_leaves=15, verbose=-1, random_state=RANDOM_STATE
-            ),
-            LGBMClassifier(
-                n_estimators=100, num_leaves=31, verbose=-1, random_state=RANDOM_STATE
-            ),
-            LGBMClassifier(
-                n_estimators=100, num_leaves=63, verbose=-1, random_state=RANDOM_STATE
-            ),
+            LGBMClassifier(n_estimators=100, num_leaves=15, verbose=-1, random_state=RANDOM_STATE),
+            LGBMClassifier(n_estimators=100, num_leaves=31, verbose=-1, random_state=RANDOM_STATE),
+            LGBMClassifier(n_estimators=100, num_leaves=63, verbose=-1, random_state=RANDOM_STATE),
         ]
         cv_clf = CrossValidationTrainer(
             metric_name="Roc AUC",
@@ -854,15 +820,9 @@ if __name__ == "__main__":
         y_reg_ser = pd.Series(y_reg)
 
         reg_estimators = [
-            LGBMRegressor(
-                n_estimators=100, num_leaves=15, verbose=-1, random_state=RANDOM_STATE
-            ),
-            LGBMRegressor(
-                n_estimators=100, num_leaves=31, verbose=-1, random_state=RANDOM_STATE
-            ),
-            LGBMRegressor(
-                n_estimators=100, num_leaves=63, verbose=-1, random_state=RANDOM_STATE
-            ),
+            LGBMRegressor(n_estimators=100, num_leaves=15, verbose=-1, random_state=RANDOM_STATE),
+            LGBMRegressor(n_estimators=100, num_leaves=31, verbose=-1, random_state=RANDOM_STATE),
+            LGBMRegressor(n_estimators=100, num_leaves=63, verbose=-1, random_state=RANDOM_STATE),
         ]
         cv_reg = CrossValidationTrainer(
             metric_name="RMSE",

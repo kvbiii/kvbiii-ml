@@ -26,9 +26,7 @@ def mi_rfe_data() -> tuple[pd.DataFrame, pd.Series]:
     """
     rng = np.random.default_rng(5)
     X = pd.DataFrame(rng.normal(size=(80, 6)), columns=[f"f{i}" for i in range(6)])
-    y = pd.Series(
-        ((X["f0"] * 0.8 + X["f1"] * -0.5 + rng.normal(size=80)) > 0).astype(int)
-    )
+    y = pd.Series(((X["f0"] * 0.8 + X["f1"] * -0.5 + rng.normal(size=80)) > 0).astype(int))
     return X, y
 
 
@@ -342,9 +340,7 @@ def test_run_respects_protected_features(mi_rfe_data: tuple[pd.DataFrame, pd.Ser
     result = selector.run(X, y)
     if not set(protected).issubset(set(result["selected_features"])):
         raise AssertionError()
-    if any(
-        feat in protected for feat in result["history"]["removed_feature_name"].tolist()
-    ):
+    if any(feat in protected for feat in result["history"]["removed_feature_name"].tolist()):
         raise AssertionError()
 
 

@@ -64,9 +64,7 @@ def _build_cv(pipeline: Pipeline | None = None):
         ),
     ],
 )
-def test_modelimportancefiltering_init_raises_valueerror_for_invalid_params(
-    kwargs, match
-):
+def test_modelimportancefiltering_init_raises_valueerror_for_invalid_params(kwargs, match):
     """Tests init validation rejects invalid parameter types and values.
 
     Args:
@@ -180,9 +178,7 @@ def test_modelimportancefiltering_history_schema_matches_documented_columns(
 
     result = selector.run(X, y)
 
-    if set(result["history"].columns) != set(
-        ModelImportanceFiltering.history_schema.keys()
-    ):
+    if set(result["history"].columns) != set(ModelImportanceFiltering.history_schema.keys()):
         raise AssertionError()
 
 
@@ -289,9 +285,7 @@ def test_modelimportancefiltering_run_with_pipeline_expansion_discovers_derived_
 
     if not any("_PREPROCESS_EQ_WIDTH" in f for f in selector.all_processed_features):
         raise AssertionError()
-    if not set(result["selected_features"]).issubset(
-        set(selector.all_processed_features)
-    ):
+    if not set(result["selected_features"]).issubset(set(selector.all_processed_features)):
         raise AssertionError()
 
 
@@ -312,14 +306,10 @@ def test_modelimportancefiltering_run_with_string_similarity_encoder_survives_ra
     """
     products = ["apple", "orange", "grape", "melon"] * 10
     rng = np.random.default_rng(17)
-    X = pd.DataFrame(
-        {"product": pd.Categorical(products), "num": rng.normal(size=len(products))}
-    )
+    X = pd.DataFrame({"product": pd.Categorical(products), "num": rng.normal(size=len(products))})
     y = pd.Series((X["num"] > 0).astype(int), name="target")
 
-    pipeline = Pipeline(
-        [("sse", StringSimilarityEncoderWithOriginal(variables=["product"]))]
-    )
+    pipeline = Pipeline([("sse", StringSimilarityEncoderWithOriginal(variables=["product"]))])
     estimator = LGBMClassifier(n_estimators=5, max_depth=2, verbose=-1, random_state=17)
     selector = ModelImportanceFiltering(
         estimator=estimator,

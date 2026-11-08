@@ -262,9 +262,7 @@ def test_permutationrfe_select_features_weighted_score_aggregates_per_step_not_p
         estimator=_build_estimator(), cross_validator=_build_cv(), steps=2, alpha=1.0
     )
 
-    perm_selected, perm_metric = perm_selector.select_features_weighted_score(
-        history, alpha=1.0
-    )
+    perm_selected, perm_metric = perm_selector.select_features_weighted_score(history, alpha=1.0)
     row_selected, _ = row_selector.select_features_weighted_score(history, alpha=1.0)
 
     if perm_selected != ["f0", "f1", "f2", "f3"]:
@@ -360,9 +358,7 @@ def test_permutationrfe_run_with_pipeline_expansion_discovers_derived_columns(
 
     if not any("_PREPROCESS_EQ_WIDTH" in f for f in selector.all_processed_features):
         raise AssertionError()
-    if not set(result["selected_features"]).issubset(
-        set(selector.all_processed_features)
-    ):
+    if not set(result["selected_features"]).issubset(set(selector.all_processed_features)):
         raise AssertionError()
 
 
@@ -382,14 +378,10 @@ def test_permutationrfe_run_with_string_similarity_encoder_survives_raw_column_r
     """
     products = ["apple", "orange", "grape", "melon"] * 10
     rng = np.random.default_rng(17)
-    X = pd.DataFrame(
-        {"product": pd.Categorical(products), "num": rng.normal(size=len(products))}
-    )
+    X = pd.DataFrame({"product": pd.Categorical(products), "num": rng.normal(size=len(products))})
     y = pd.Series((X["num"] > 0).astype(int), name="target")
 
-    pipeline = Pipeline(
-        [("sse", StringSimilarityEncoderWithOriginal(variables=["product"]))]
-    )
+    pipeline = Pipeline([("sse", StringSimilarityEncoderWithOriginal(variables=["product"]))])
     estimator = LGBMClassifier(n_estimators=5, max_depth=2, verbose=-1, random_state=17)
 
     def _fake_permutation_importance(_estimator, x_val, _y, **_kwargs):

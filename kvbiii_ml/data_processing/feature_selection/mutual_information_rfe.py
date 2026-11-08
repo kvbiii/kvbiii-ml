@@ -61,9 +61,7 @@ class MutualInformationRecursiveFeatureElimination:
             "mi_score": float,
         }
 
-    def run(
-        self, X: pd.DataFrame, y: pd.Series | np.ndarray
-    ) -> dict[str, list | pd.DataFrame]:
+    def run(self, X: pd.DataFrame, y: pd.Series | np.ndarray) -> dict[str, list | pd.DataFrame]:
         """Run MI-based selection and return the selection summary.
 
         Args:
@@ -81,9 +79,7 @@ class MutualInformationRecursiveFeatureElimination:
         self._validate_protected_features(current_features)
 
         history_records = []
-        removable_features = [
-            f for f in current_features if f not in self.protected_features
-        ]
+        removable_features = [f for f in current_features if f not in self.protected_features]
         removal_schedule = self.compute_removal_schedule(len(removable_features))
 
         mi_scores = self._compute_mi_scores(X[current_features], y)
@@ -91,18 +87,14 @@ class MutualInformationRecursiveFeatureElimination:
 
         prev_metric = None
         for step_idx, n_remove in enumerate(removal_schedule, start=1):
-            step_metric, step_metric_std = self._cross_val_base_metric(
-                X, y, current_features
-            )
+            step_metric, step_metric_std = self._cross_val_base_metric(X, y, current_features)
 
             if self.verbose:
                 print(
                     f"\n🔁 Step {step_idx} | Number of features remaining: {len(current_features)} | {self.cross_validator.metric_name}: {step_metric:.6f} ± {step_metric_std:.6f}\n{sorted(current_features)}"
                 )
 
-            removable_feats = [
-                f for f in current_features if f not in self.protected_features
-            ]
+            removable_feats = [f for f in current_features if f not in self.protected_features]
             to_remove = sorted(removable_feats, key=lambda f: mi_scores.get(f, 0.0))[
                 : min(n_remove, len(removable_feats))
             ]
@@ -111,10 +103,7 @@ class MutualInformationRecursiveFeatureElimination:
                 history_records.append(
                     {
                         "step": step_idx,
-                        "n_features_removed": len(X.columns)
-                        - len(current_features)
-                        + idx
-                        + 1,
+                        "n_features_removed": len(X.columns) - len(current_features) + idx + 1,
                         "n_features_remaining": len(current_features) - idx - 1,
                         "removed_feature_name": feat,
                         "metric_value": step_metric,
@@ -168,9 +157,7 @@ class MutualInformationRecursiveFeatureElimination:
         print(f"📅 Remove per step: {removal_schedule}")
         print(f"🛡️  Protected features: {self.protected_features}")
         print("Top MI features:")
-        for feat, score in sorted(
-            mi_scores.items(), key=lambda kv: kv[1], reverse=True
-        )[:5]:
+        for feat, score in sorted(mi_scores.items(), key=lambda kv: kv[1], reverse=True)[:5]:
             print(f"  • {feat}: {score:.4f}")
 
     def _print_summary(
@@ -205,14 +192,10 @@ class MutualInformationRecursiveFeatureElimination:
         """
         x_converted = X.copy()
         for col in x_converted.select_dtypes(include=["category"]).columns:
-            x_converted[col] = (
-                x_converted[col].cat.codes.astype("object").astype("category")
-            )
+            x_converted[col] = x_converted[col].cat.codes.astype("object").astype("category")
         return x_converted
 
-    def _compute_mi_scores(
-        self, X: pd.DataFrame, y: pd.Series | np.ndarray
-    ) -> dict[str, float]:
+    def _compute_mi_scores(self, X: pd.DataFrame, y: pd.Series | np.ndarray) -> dict[str, float]:
         """Compute mutual information scores for current features."""
         return DataAnalyzer.mutual_information_scores(
             X=X,
@@ -240,8 +223,8 @@ class MutualInformationRecursiveFeatureElimination:
         if not isinstance(y, (pd.Series, np.ndarray)):
             raise ValueError("y must be a pandas Series or numpy array.")
 
-        x_prepared, discrete_features_mask = (
-            DataAnalyzer._prepare_features_for_mutual_information(X)
+        x_prepared, discrete_features_mask = DataAnalyzer._prepare_features_for_mutual_information(
+            X
         )
 
         if discrete_features_mask is None:
@@ -255,9 +238,7 @@ class MutualInformationRecursiveFeatureElimination:
         self, X: pd.DataFrame, y: pd.Series, current_features: list[str]
     ) -> tuple[float, float]:
         """Compute the base metric across validation folds."""
-        _, valid_scores, _ = self.cross_validator.fit(
-            self.estimator, X[current_features], y
-        )
+        _, valid_scores, _ = self.cross_validator.fit(self.estimator, X[current_features], y)
         gc.collect()
         return float(np.mean(valid_scores)), float(np.std(valid_scores))
 
@@ -305,9 +286,7 @@ class MutualInformationRecursiveFeatureElimination:
         df["features_norm"] = 1 - (df["n_features_remaining"] - feat_min) / denom_feat
         df["score"] = alpha * df["metric_norm"] + (1 - alpha) * df["features_norm"]
         best_row = df.loc[df["score"].idxmax()]
-        selected = set(
-            history[history["step"] >= best_row["step"]]["removed_feature_name"]
-        )
+        selected = set(history[history["step"] >= best_row["step"]]["removed_feature_name"])
         selected.update(self.protected_features)
         gc.collect()
         return list(sorted(selected)), best_row["metric_value"]

@@ -407,9 +407,7 @@ class TestEnsembleWeightTunerCV:
             tuner._objective(mock_trial, y_true, preds_list, fold_boundaries)
         except optuna.TrialPruned:
             return
-        raise AssertionError(
-            "Expected optuna.TrialPruned for a cancelling weight vector."
-        )
+        raise AssertionError("Expected optuna.TrialPruned for a cancelling weight vector.")
 
     def test_ensembleweighttuner_tune_integration(
         self,
@@ -731,9 +729,7 @@ def test_tuner_reorders_columns_per_estimator_like_the_trainer():
         problem_type="regression",
         metric_name="RMSE",
         cv=KFold(n_splits=3, shuffle=True, random_state=0),
-        preprocessing_pipeline=Pipeline(
-            [("reverse", _ReverseColumnsAfterSecondTransform())]
-        ),
+        preprocessing_pipeline=Pipeline([("reverse", _ReverseColumnsAfterSecondTransform())]),
         verbose=False,
     )
     tuner = EnsembleWeightTunerCV(
@@ -769,10 +765,7 @@ def test_tuner_leaves_the_trainer_it_receives_untouched():
         verbose=False,
     ).tune(X, y)
 
-    if (
-        trainer.fitted_estimators_ != estimators_before
-        or trainer.valid_scores_ != scores_before
-    ):
+    if trainer.fitted_estimators_ != estimators_before or trainer.valid_scores_ != scores_before:
         raise AssertionError("tuner overwrote the trainer's fitted state")
     if trainer.verbose != 1:
         raise AssertionError()

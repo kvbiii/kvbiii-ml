@@ -73,9 +73,7 @@ class GeometricWidthDiscretiserWithOriginal(_WithOriginalBase):
         """
         return inner.fit(X)
 
-    def _transform_inner(
-        self, inner: GeometricWidthDiscretiser, X: pd.DataFrame
-    ) -> pd.DataFrame:
+    def _transform_inner(self, inner: GeometricWidthDiscretiser, X: pd.DataFrame) -> pd.DataFrame:
         """Apply the fitted discretiser to X.
 
         Args:
@@ -107,8 +105,6 @@ if __name__ == "__main__":
     print("=== GeometricWidthDiscretiser (replace) ===")
     print(enc.fit_transform(df).head())
 
-    enc_exp = GeometricWidthDiscretiserWithOriginal(
-        variables=["income", "tenure_days"], bins=5
-    )
+    enc_exp = GeometricWidthDiscretiserWithOriginal(variables=["income", "tenure_days"], bins=5)
     print("\n=== GeometricWidthDiscretiserWithOriginal (append) ===")
     print(enc_exp.fit_transform(df).head())

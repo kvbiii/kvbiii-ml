@@ -152,14 +152,10 @@ class PseudoLabelGenerator:
         max_confidences = self._unlabeled_probas.max(axis=1)
 
         if self.threshold_method == "auto":
-            y_oof, oof_probas = _collect_oof_probas(
-                self.cross_validator, X_train, y_train
-            )
+            y_oof, oof_probas = _collect_oof_probas(self.cross_validator, X_train, y_train)
             self.thresholds_ = self._compute_thresholds_auto(oof_probas, y_oof)
         elif self.threshold_method == "top_k":
-            self.thresholds_ = self._compute_thresholds_top_k(
-                argmax_indices, max_confidences
-            )
+            self.thresholds_ = self._compute_thresholds_top_k(argmax_indices, max_confidences)
         else:
             self.thresholds_ = {cls: self.fixed_threshold for cls in self.classes_}
 
@@ -168,17 +164,13 @@ class PseudoLabelGenerator:
         )
 
         self.pseudo_labels_df_ = x_unlabeled.copy()
-        self.pseudo_labels_df_["_pseudo_label"] = np.where(
-            selected_mask, pseudo_labels, np.nan
-        )
-        self.pseudo_labels_df_["_confidence"] = np.where(
-            selected_mask, confidences, np.nan
-        )
+        self.pseudo_labels_df_["_pseudo_label"] = np.where(selected_mask, pseudo_labels, np.nan)
+        self.pseudo_labels_df_["_confidence"] = np.where(selected_mask, confidences, np.nan)
         self.pseudo_labels_df_["_selected"] = selected_mask
         self.pseudo_labels_df_ = self.pseudo_labels_df_[selected_mask].copy()
-        self.pseudo_labels_df_["_pseudo_label"] = self.pseudo_labels_df_[
-            "_pseudo_label"
-        ].astype(y_train.dtype)
+        self.pseudo_labels_df_["_pseudo_label"] = self.pseudo_labels_df_["_pseudo_label"].astype(
+            y_train.dtype
+        )
 
         self._print_summary(selected_mask, pseudo_labels, confidences)
         return self
@@ -199,19 +191,13 @@ class PseudoLabelGenerator:
         if self._x_train is None:
             raise RuntimeError("Call fit() before get_augmented_dataset().")
 
-        feature_cols = [
-            c for c in self.pseudo_labels_df_.columns if not c.startswith("_")
-        ]
+        feature_cols = [c for c in self.pseudo_labels_df_.columns if not c.startswith("_")]
         x_pseudo = self.pseudo_labels_df_[feature_cols].reset_index(drop=True)
         y_pseudo = self.pseudo_labels_df_["_pseudo_label"].reset_index(drop=True)
         w_pseudo = self.pseudo_labels_df_["_confidence"].reset_index(drop=True)
 
-        x_combined = pd.concat(
-            [self._x_train.reset_index(drop=True), x_pseudo], ignore_index=True
-        )
-        y_combined = pd.concat(
-            [self._y_train.reset_index(drop=True), y_pseudo], ignore_index=True
-        )
+        x_combined = pd.concat([self._x_train.reset_index(drop=True), x_pseudo], ignore_index=True)
+        y_combined = pd.concat([self._y_train.reset_index(drop=True), y_pseudo], ignore_index=True)
         w_combined = pd.concat(
             [
                 pd.Series(np.ones(len(self._x_train)), name="_weight", dtype=float),
@@ -284,9 +270,7 @@ class PseudoLabelGenerator:
                 oof_class_probs = oof_probas[tp_mask, i]
             else:
                 pred_mask = argmax_oof == i
-                oof_class_probs = (
-                    oof_probas[pred_mask, i] if pred_mask.any() else np.array([0.5])
-                )
+                oof_class_probs = oof_probas[pred_mask, i] if pred_mask.any() else np.array([0.5])
 
             t_oof = min(
                 float(np.percentile(oof_class_probs, self.threshold_percentile)),
@@ -373,9 +357,7 @@ class PseudoLabelGenerator:
             np.ndarray: Density values aligned with ``grid``.
         """
         if len(values) < _MIN_KDE_SAMPLES or np.isclose(np.std(values), 0.0):
-            counts, edges = np.histogram(
-                values, bins=20, range=(grid[0], grid[-1]), density=True
-            )
+            counts, edges = np.histogram(values, bins=20, range=(grid[0], grid[-1]), density=True)
             bin_centers = (edges[:-1] + edges[1:]) / 2
             return np.interp(grid, bin_centers, counts, left=0.0, right=0.0)
         return gaussian_kde(values)(grid)
@@ -392,9 +374,7 @@ class PseudoLabelGenerator:
         argmax_labels = self.classes_[np.argmax(self._unlabeled_probas, axis=1)]
         max_confidences = self._unlabeled_probas.max(axis=1)
 
-        fig, axes = plt.subplots(
-            1, n_classes, figsize=(5.5 * n_classes, 4.8), squeeze=False
-        )
+        fig, axes = plt.subplots(1, n_classes, figsize=(5.5 * n_classes, 4.8), squeeze=False)
         for col, cls in enumerate(self.classes_):
             ax = axes[0, col]
             cls_mask = argmax_labels == cls
@@ -516,9 +496,7 @@ class PseudoLabelGenerator:
         ax.set_xticklabels([str(c) for c in self.classes_], fontsize=_TICK_FONTSIZE)
         ax.tick_params(axis="y", labelsize=_TICK_FONTSIZE)
         ax.set_ylabel("Proportion of samples", fontsize=_LABEL_FONTSIZE)
-        ax.set_title(
-            "Original labels vs newly generated pseudo labels", fontsize=_TITLE_FONTSIZE
-        )
+        ax.set_title("Original labels vs newly generated pseudo labels", fontsize=_TITLE_FONTSIZE)
         ax.spines[["top", "right"]].set_visible(False)
         ax.grid(axis="y", alpha=0.25)
         ax.legend(fontsize=_LEGEND_FONTSIZE, loc="lower right")
@@ -549,9 +527,7 @@ class PseudoLabelGenerator:
         n_selected = selected_mask.sum()
         print(f"\nPseudo-labeling summary  [method={self.threshold_method}]")
         print(f"  Unlabeled samples : {n_total:,}")
-        print(
-            f"  Selected          : {n_selected:,}  ({100 * n_selected / max(n_total, 1):.1f}%)"
-        )
+        print(f"  Selected          : {n_selected:,}  ({100 * n_selected / max(n_total, 1):.1f}%)")
         print(f"  Rejected          : {n_total - n_selected:,}")
         print()
 
@@ -609,9 +585,7 @@ if __name__ == "__main__":
             flip_y=0.05,
             random_state=seed,
         )
-        return pd.DataFrame(x_arr, columns=FEATURE_NAMES), pd.Series(
-            y_arr, name="target"
-        )
+        return pd.DataFrame(x_arr, columns=FEATURE_NAMES), pd.Series(y_arr, name="target")
 
     def _build_pipeline() -> Pipeline:
         """Build a standard preprocessing pipeline."""
@@ -626,16 +600,12 @@ if __name__ == "__main__":
             ]
         )
 
-    def _build_cv(
-        metric: str, pipeline: Pipeline | None = None
-    ) -> CrossValidationTrainer:
+    def _build_cv(metric: str, pipeline: Pipeline | None = None) -> CrossValidationTrainer:
         """Build a cross-validator for the given metric."""
         return CrossValidationTrainer(
             metric_name=metric,
             problem_type="classification",
-            cv=StratifiedKFold(
-                n_splits=N_FOLDS, shuffle=True, random_state=RANDOM_STATE
-            ),
+            cv=StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=RANDOM_STATE),
             preprocessing_pipeline=pipeline,
             verbose=False,
         )
@@ -657,9 +627,7 @@ if __name__ == "__main__":
         print("=" * 75)
 
         cv = _build_cv(metric, pipeline)
-        gen = PseudoLabelGenerator(
-            cross_validator=cv, threshold_method=threshold_method, **kwargs
-        )
+        gen = PseudoLabelGenerator(cross_validator=cv, threshold_method=threshold_method, **kwargs)
         gen.fit(estimator, X_train, y_train, x_unlabeled)
         x_aug, y_aug, _w_aug = gen.get_augmented_dataset()
 
@@ -679,9 +647,7 @@ if __name__ == "__main__":
         print(
             f"  Baseline CV valid   : {np.mean(cv.valid_scores_):.4f} ± {np.std(cv.valid_scores_):.4f}"
         )
-        print(
-            f"  Augmented CV valid  : {np.mean(valid_aug):.4f} ± {np.std(valid_aug):.4f}"
-        )
+        print(f"  Augmented CV valid  : {np.mean(valid_aug):.4f} ± {np.std(valid_aug):.4f}")
         print()
         gen.plot_pseudo_label_stats()
 

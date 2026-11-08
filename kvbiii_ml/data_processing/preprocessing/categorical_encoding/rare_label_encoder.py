@@ -71,9 +71,7 @@ class RareLabelEncoderWithOriginal(_WithOriginalBase):
             ignore_format=self.ignore_format,
         )
 
-    def _fit_inner(
-        self, inner: RareLabelEncoder, X: pd.DataFrame, y: Any
-    ) -> RareLabelEncoder:
+    def _fit_inner(self, inner: RareLabelEncoder, X: pd.DataFrame, y: Any) -> RareLabelEncoder:
         """Fit the encoder on X.
 
         Args:
@@ -86,9 +84,7 @@ class RareLabelEncoderWithOriginal(_WithOriginalBase):
         """
         return inner.fit(X)
 
-    def _transform_inner(
-        self, inner: RareLabelEncoder, X: pd.DataFrame
-    ) -> pd.DataFrame:
+    def _transform_inner(self, inner: RareLabelEncoder, X: pd.DataFrame) -> pd.DataFrame:
         """Apply the fitted encoder to X.
 
         Args:
@@ -132,9 +128,7 @@ if __name__ == "__main__":
     print(enc.fit_transform(df[["city", "tier", "revenue"]]))
     print("Encoder mapping:", enc.encoder_dict_)
 
-    enc_exp = RareLabelEncoderWithOriginal(
-        tol=0.15, n_categories=3, variables=["city", "tier"]
-    )
+    enc_exp = RareLabelEncoderWithOriginal(tol=0.15, n_categories=3, variables=["city", "tier"])
     print("\n=== RareLabelEncoderWithOriginal (append) ===")
     print(enc_exp.fit_transform(df[["city", "tier", "revenue"]]))
 

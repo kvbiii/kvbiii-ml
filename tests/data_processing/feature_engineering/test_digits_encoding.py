@@ -12,9 +12,7 @@ from kvbiii_ml.data_processing.feature_engineering.digits_encoding import (
 
 def _digit_columns(frame: pd.DataFrame) -> list[str]:
     """Return generated digit columns for the numeric feature used in tests."""
-    return [
-        column for column in frame.columns if column.startswith("num_PREPROCESS_DIGIT")
-    ]
+    return [column for column in frame.columns if column.startswith("num_PREPROCESS_DIGIT")]
 
 
 def test_transform_handles_nan_rows_with_fill_value() -> None:
@@ -68,9 +66,7 @@ def test_column_names_use_preprocess_digit_suffix_without_hyphen() -> None:
     """Generated column names should follow the PREPROCESS_DIGIT_{n}/N{n} convention."""
     frame = pd.DataFrame({"num": [123.45, 67.89, 10.01]})
 
-    generator = DigitsEncodingFeatureGenerator(
-        features_names=["num"], min_digits=3, max_digits=5
-    )
+    generator = DigitsEncodingFeatureGenerator(features_names=["num"], min_digits=3, max_digits=5)
     transformed = generator.fit_transform(frame)
 
     digit_columns = _digit_columns(transformed)
@@ -119,9 +115,7 @@ def test_auto_mode_derives_range_from_data_and_caps_decimals() -> None:
     if not expected_decimal_columns.issubset(digit_columns):
         raise AssertionError()
     if f"num_PREPROCESS_DIGIT_N{MAX_AUTO_DECIMAL_DIGITS + 1}" in digit_columns:
-        raise AssertionError(
-            "auto mode should not exceed MAX_AUTO_DECIMAL_DIGITS places"
-        )
+        raise AssertionError("auto mode should not exceed MAX_AUTO_DECIMAL_DIGITS places")
 
 
 def test_auto_mode_does_not_pad_integer_only_feature() -> None:
@@ -133,9 +127,7 @@ def test_auto_mode_does_not_pad_integer_only_feature() -> None:
 
     digit_columns = _digit_columns(transformed)
     if any(column.startswith("num_PREPROCESS_DIGIT_N") for column in digit_columns):
-        raise AssertionError(
-            "integer-only feature should not generate decimal digit columns"
-        )
+        raise AssertionError("integer-only feature should not generate decimal digit columns")
 
 
 def test_mismatched_auto_and_explicit_digits_raises() -> None:

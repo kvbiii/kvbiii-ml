@@ -83,14 +83,10 @@ class EnsembleModel(BaseEstimator):
             raise ValueError("n_jobs must be a positive integer.")
 
         if problem_type not in {"classification", "regression"}:
-            raise ValueError(
-                "problem_type must be either 'classification' or 'regression'."
-            )
+            raise ValueError("problem_type must be either 'classification' or 'regression'.")
 
         if on_estimator_error not in ESTIMATOR_ERROR_POLICIES:
-            raise ValueError(
-                f"on_estimator_error must be one of {ESTIMATOR_ERROR_POLICIES}."
-            )
+            raise ValueError(f"on_estimator_error must be one of {ESTIMATOR_ERROR_POLICIES}.")
 
         self.estimators = estimators
         self.problem_type = problem_type
@@ -171,14 +167,10 @@ class EnsembleModel(BaseEstimator):
                 non-finite values, or sums to zero.
         """
         if weights is None:
-            return np.ones(len(self._estimators_list), dtype=float) / len(
-                self._estimators_list
-            )
+            return np.ones(len(self._estimators_list), dtype=float) / len(self._estimators_list)
         w = np.asarray(weights, dtype=float)
         if w.shape[0] != len(self._estimators_list):
-            raise ValueError(
-                "The number of estimators must match the number of weights."
-            )
+            raise ValueError("The number of estimators must match the number of weights.")
         if np.any(~np.isfinite(w)):
             raise ValueError("weights must be finite numbers.")
         s = w.sum()
@@ -227,9 +219,7 @@ class EnsembleModel(BaseEstimator):
                 X_train, y_train, X_valid, y_valid, sample_weight, verbose
             )
             self.fitted_meta_learner_ = self._safe_clone_estimator(self.meta_learner)
-            self.fitted_meta_learner_.fit(
-                meta_features, y_train, sample_weight=sample_weight
-            )
+            self.fitted_meta_learner_.fit(meta_features, y_train, sample_weight=sample_weight)
         return self
 
     def _fit_base_estimators(  # pylint: disable=too-many-arguments,too-many-positional-arguments
@@ -247,9 +237,7 @@ class EnsembleModel(BaseEstimator):
             """Clone, configure and fit one base estimator."""
             x_fit, offset_fit = split_offset(X_train, self.offset_column)
             x_eval, offset_eval = (
-                split_offset(X_valid, self.offset_column)
-                if X_valid is not None
-                else (None, None)
+                split_offset(X_valid, self.offset_column) if X_valid is not None else (None, None)
             )
             estimator = self._set_categorical_params_for_estimator(
                 self._safe_clone_estimator(base_estimator), x_fit
@@ -308,9 +296,7 @@ class EnsembleModel(BaseEstimator):
                 None if weights is None else weights[train_idx],
                 verbose,
             )
-            fold_features = self._meta_features(
-                fold_estimators, X_train.iloc[valid_idx]
-            )
+            fold_features = self._meta_features(fold_estimators, X_train.iloc[valid_idx])
             if meta_features is None:
                 meta_features = np.zeros((len(X_train), fold_features.shape[1]))
             if fold_features.shape[1] != meta_features.shape[1]:
@@ -326,9 +312,7 @@ class EnsembleModel(BaseEstimator):
         """Generate meta-features from the fitted base estimators' predictions."""
         return self._meta_features(self.fitted_estimators_, X)
 
-    def _meta_features(
-        self, estimators: list[BaseEstimator], X: pd.DataFrame
-    ) -> np.ndarray:
+    def _meta_features(self, estimators: list[BaseEstimator], X: pd.DataFrame) -> np.ndarray:
         """Stack class probabilities (classification) or predictions (regression) of estimators."""
         meta_features = []
         for estimator in estimators:
@@ -368,13 +352,10 @@ class EnsembleModel(BaseEstimator):
                 active_cats = [
                     c
                     for c in existing_cats
-                    if c in X_train.columns
-                    and not pd.api.types.is_numeric_dtype(X_train[c])
+                    if c in X_train.columns and not pd.api.types.is_numeric_dtype(X_train[c])
                 ]
                 if set(active_cats) != set(existing_cats):
-                    estimator.set_params(
-                        cat_features=active_cats if active_cats else None
-                    )
+                    estimator.set_params(cat_features=active_cats if active_cats else None)
             else:
                 auto_cats = X_train.select_dtypes(include="category").columns.tolist()
                 if auto_cats:
@@ -430,9 +411,7 @@ class EnsembleModel(BaseEstimator):
             RuntimeError: If called before fitting, or if every estimator was skipped.
         """
         if self.problem_type == "regression":
-            raise AttributeError(
-                "predict_proba is not available for regression problems"
-            )
+            raise AttributeError("predict_proba is not available for regression problems")
 
         if not getattr(self, "fitted_estimators_", None):
             raise RuntimeError("EnsembleModel must be fitted before calling predict().")
@@ -445,13 +424,9 @@ class EnsembleModel(BaseEstimator):
 
         predictions, weights = self._collect_predictions(
             X,
-            lambda est, x: self._prepare_probabilities(
-                self._estimator_output(est, x, proba=True)
-            ),
+            lambda est, x: self._prepare_probabilities(self._estimator_output(est, x, proba=True)),
         )
-        return self._prepare_probabilities(
-            np.average(predictions, axis=0, weights=weights)
-        )
+        return self._prepare_probabilities(np.average(predictions, axis=0, weights=weights))
 
     def _collect_predictions(
         self,
@@ -547,9 +522,7 @@ class EnsembleModel(BaseEstimator):
             predictions.append(estimator_predictions)
         predictions = np.array(predictions)
         if self.problem_type == "regression":
-            mean_pred = np.average(
-                predictions, axis=0, weights=self._weights_normalized
-            )
+            mean_pred = np.average(predictions, axis=0, weights=self._weights_normalized)
             std_pred = np.sqrt(
                 np.average(
                     (predictions - mean_pred) ** 2,
@@ -568,14 +541,10 @@ class EnsembleModel(BaseEstimator):
             }
 
         else:
-            mean_proba = np.average(
-                predictions, axis=0, weights=self._weights_normalized
-            )
+            mean_proba = np.average(predictions, axis=0, weights=self._weights_normalized)
             pred_class = np.argmax(mean_proba, axis=1)
             pred_confidence = mean_proba[np.arange(len(pred_class)), pred_class]
-            disagreement = predictions[:, np.arange(len(pred_class)), pred_class].std(
-                axis=0
-            )
+            disagreement = predictions[:, np.arange(len(pred_class)), pred_class].std(axis=0)
 
             return {
                 "prediction": pred_class,
@@ -584,9 +553,7 @@ class EnsembleModel(BaseEstimator):
                 "proba": mean_proba,
             }
 
-    def score(
-        self, X: pd.DataFrame, y: pd.Series, sample_weight: pd.Series | None = None
-    ) -> float:
+    def score(self, X: pd.DataFrame, y: pd.Series, sample_weight: pd.Series | None = None) -> float:
         """Return accuracy for classification or R^2 for regression.
 
         Args:
@@ -608,15 +575,9 @@ class EnsembleModel(BaseEstimator):
         x_ordered = self._order_x_for_estimator(X, estimator)
         if offset is not None:
             return predict_with_offset(estimator, x_ordered, offset, proba=proba)
-        return (
-            estimator.predict_proba(x_ordered)
-            if proba
-            else estimator.predict(x_ordered)
-        )
+        return estimator.predict_proba(x_ordered) if proba else estimator.predict(x_ordered)
 
-    def _order_x_for_estimator(
-        self, X: pd.DataFrame, estimator: BaseEstimator
-    ) -> pd.DataFrame:
+    def _order_x_for_estimator(self, X: pd.DataFrame, estimator: BaseEstimator) -> pd.DataFrame:
         """Reorder columns to the estimator's feature order, raising if any is missing.
 
         Args:
@@ -654,9 +615,7 @@ class EnsembleModel(BaseEstimator):
 
         for idx, estimator in enumerate(self.fitted_estimators_):
             if hasattr(estimator, "feature_importances_"):
-                feature_importance = np.asarray(
-                    estimator.feature_importances_, dtype=float
-                )
+                feature_importance = np.asarray(estimator.feature_importances_, dtype=float)
                 min_importance = feature_importance.min()
                 max_importance = feature_importance.max()
                 if max_importance > min_importance:
@@ -714,9 +673,7 @@ if __name__ == "__main__":
     )
     ensemble_blend.fit(X, y)
     predictions_blend = ensemble_blend.predict(X)
-    print(
-        f"Blending predictions value counts:\n{pd.Series(predictions_blend).value_counts()}"
-    )
+    print(f"Blending predictions value counts:\n{pd.Series(predictions_blend).value_counts()}")
 
     print("\n=== Blending with XGBClassifier (verbose must be suppressed) ===")
     ensemble_xgb = EnsembleModel(
@@ -728,9 +685,7 @@ if __name__ == "__main__":
     )
     ensemble_xgb.fit(X, y, eval_set=[(X, y)])
     predictions_xgb = ensemble_xgb.predict(X)
-    print(
-        f"XGB blending predictions value counts:\n{pd.Series(predictions_xgb).value_counts()}"
-    )
+    print(f"XGB blending predictions value counts:\n{pd.Series(predictions_xgb).value_counts()}")
 
     print("\n=== Stacking with LogisticRegression meta-learner ===")
     ensemble_stack = EnsembleModel(
@@ -743,6 +698,4 @@ if __name__ == "__main__":
     )
     ensemble_stack.fit(X, y)
     predictions_stack = ensemble_stack.predict(X)
-    print(
-        f"Stacking predictions value counts:\n{pd.Series(predictions_stack).value_counts()}"
-    )
+    print(f"Stacking predictions value counts:\n{pd.Series(predictions_stack).value_counts()}")

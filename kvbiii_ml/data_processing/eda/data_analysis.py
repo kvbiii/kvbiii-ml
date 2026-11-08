@@ -98,9 +98,7 @@ class DataAnalyzer:
         categorical_cols = df.select_dtypes(include=["object", "category"]).columns
         nunique = df.nunique()
 
-        categorical_features = [
-            col for col in categorical_cols if nunique[col] < unique_threshold
-        ]
+        categorical_features = [col for col in categorical_cols if nunique[col] < unique_threshold]
         binary_features = [col for col in df.columns if nunique[col] == 2]
         return list(set(categorical_features) | set(binary_features))
 
@@ -321,17 +319,13 @@ class DataAnalyzer:
             counts = data_copy[feature].dt.day.value_counts().sort_index()
             label, caption = "Day", "📅 {} Daily Distribution"
         elif agg_freq == "W":
-            counts = (
-                data_copy[feature].dt.isocalendar().week.value_counts().sort_index()
-            )
+            counts = data_copy[feature].dt.isocalendar().week.value_counts().sort_index()
             label, caption = "Week", "📅 {} Weekly Distribution"
         elif agg_freq == "H":
             counts = data_copy[feature].dt.hour.value_counts().sort_index()
             label, caption = "Hour", "🕒 {} Hourly Distribution"
         else:
-            raise ValueError(
-                "Invalid aggregation frequency. Use 'ME', 'YE', 'D', 'W', or 'H'."
-            )
+            raise ValueError("Invalid aggregation frequency. Use 'ME', 'YE', 'D', 'W', or 'H'.")
 
         df = pd.DataFrame({label: counts.index.astype(int), "Count": counts.values})
         if missing_count > 0:
@@ -535,9 +529,7 @@ class DataAnalyzer:
                     "color": "#2c3e50",
                 }
             )
-            .set_properties(
-                subset=["Feature"], **{"text-align": "left", "font-weight": "bold"}
-            )
+            .set_properties(subset=["Feature"], **{"text-align": "left", "font-weight": "bold"})
             .set_properties(
                 subset=["Flags"],
                 **{
@@ -611,12 +603,8 @@ class DataAnalyzer:
         for bin_idx in range(n_quantiles):
             bin_mask = data_copy["__bin_idx__"] == bin_idx
             vals = data_copy.loc[bin_mask, target]
-            quantile_labels.append(
-                f"Q{bin_idx + 1} [{vals.min():.3f}, {vals.max():.3f}]"
-            )
-        data_copy["__target_bin__"] = data_copy["__bin_idx__"].map(
-            dict(enumerate(quantile_labels))
-        )
+            quantile_labels.append(f"Q{bin_idx + 1} [{vals.min():.3f}, {vals.max():.3f}]")
+        data_copy["__target_bin__"] = data_copy["__bin_idx__"].map(dict(enumerate(quantile_labels)))
         return data_copy.drop(columns=["__bin_idx__"]), quantile_labels
 
     @staticmethod
@@ -657,9 +645,7 @@ class DataAnalyzer:
                 ``"regression"``.
         """
         if problem_type not in {"classification", "regression"}:
-            raise ValueError(
-                "problem_type must be either 'classification' or 'regression'."
-            )
+            raise ValueError("problem_type must be either 'classification' or 'regression'.")
 
         rows: list[dict] = []
 
@@ -865,20 +851,14 @@ class DataAnalyzer:
             ValueError: If ``problem_type`` is invalid or ``target`` is absent.
         """
         if problem_type not in {"classification", "regression"}:
-            raise ValueError(
-                "problem_type must be either 'classification' or 'regression'."
-            )
+            raise ValueError("problem_type must be either 'classification' or 'regression'.")
         if target not in data.columns:
             raise ValueError(f"Target column '{target}' not found in DataFrame.")
 
         if problem_type == "regression":
-            data_work, classes = DataAnalyzer._bin_regression_target(
-                data, target, n_quantiles
-            )
+            data_work, classes = DataAnalyzer._bin_regression_target(data, target, n_quantiles)
             group_col = "__target_bin__"
-            caption = (
-                f"🔗 Numerical Features — Association with {target} (Quantile Bins)"
-            )
+            caption = f"🔗 Numerical Features — Association with {target} (Quantile Bins)"
         else:
             data_work = data
             classes = sorted(data[target].dropna().unique())
@@ -894,15 +874,11 @@ class DataAnalyzer:
             for cls, grp in zip(classes, groups):
                 row[f"{cls} Median"] = float(np.median(grp)) if len(grp) else np.nan
                 row[f"{cls} IQR"] = (
-                    float(np.percentile(grp, 75) - np.percentile(grp, 25))
-                    if len(grp)
-                    else np.nan
+                    float(np.percentile(grp, 75) - np.percentile(grp, 25)) if len(grp) else np.nan
                 )
 
             grand_mean = float(clean[col].mean())
-            ss_between = sum(
-                len(grp) * (float(np.mean(grp)) - grand_mean) ** 2 for grp in groups
-            )
+            ss_between = sum(len(grp) * (float(np.mean(grp)) - grand_mean) ** 2 for grp in groups)
             ss_total = float(((clean[col] - grand_mean) ** 2).sum())
             eta_sq = ss_between / ss_total if ss_total > 0 else 0.0
 
@@ -913,9 +889,7 @@ class DataAnalyzer:
                 h_stat, p_val = np.nan, np.nan
             n_total = len(clean)
             k = len(valid_groups)
-            epsilon_sq = (
-                max((h_stat - k + 1) / (n_total - k), 0.0) if n_total > k else 0.0
-            )
+            epsilon_sq = max((h_stat - k + 1) / (n_total - k), 0.0) if n_total > k else 0.0
 
             cls_medians = [row[f"{cls} Median"] for cls in classes]
             cls_iqrs = [row[f"{cls} IQR"] for cls in classes]
@@ -938,9 +912,7 @@ class DataAnalyzer:
             )
             rows.append(row)
 
-        df = (
-            pd.DataFrame(rows).sort_values("η²", ascending=False).reset_index(drop=True)
-        )
+        df = pd.DataFrame(rows).sort_values("η²", ascending=False).reset_index(drop=True)
 
         format_dict: dict[str, str] = {
             "η²": "{:.5f}",
@@ -1019,9 +991,7 @@ class DataAnalyzer:
                     "color": "#2c3e50",
                 }
             )
-            .set_properties(
-                subset=["Feature"], **{"text-align": "left", "font-weight": "bold"}
-            )
+            .set_properties(subset=["Feature"], **{"text-align": "left", "font-weight": "bold"})
         )
         return styled
 
@@ -1064,11 +1034,7 @@ class DataAnalyzer:
             return 0.0
         target_marginal = contingency.sum(axis=0) / n
         h_target = -float(
-            np.sum(
-                np.where(
-                    target_marginal > 0, target_marginal * np.log(target_marginal), 0.0
-                )
-            )
+            np.sum(np.where(target_marginal > 0, target_marginal * np.log(target_marginal), 0.0))
         )
         if h_target == 0.0:
             return 0.0
@@ -1278,14 +1244,10 @@ class DataAnalyzer:
             ValueError: If ``problem_type`` is invalid.
         """
         if problem_type not in {"classification", "regression"}:
-            raise ValueError(
-                "problem_type must be either 'classification' or 'regression'."
-            )
+            raise ValueError("problem_type must be either 'classification' or 'regression'.")
 
         if problem_type == "regression":
-            data_work, classes = DataAnalyzer._bin_regression_target(
-                data, target, n_quantiles
-            )
+            data_work, classes = DataAnalyzer._bin_regression_target(data, target, n_quantiles)
             group_col = "__target_bin__"
             caption = f"🔀 {feature} × {target} — Quantile Cross-Distribution"
         else:
@@ -1318,20 +1280,12 @@ class DataAnalyzer:
             row["Count"] = total_count
             row["Count %"] = total_count / n_total * 100
             for cls in classes:
-                cls_count = (
-                    int(contingency.at[cat, cls]) if cls in contingency.columns else 0
-                )
+                cls_count = int(contingency.at[cat, cls]) if cls in contingency.columns else 0
                 row[f"{cls} Count"] = cls_count
-                row[f"{cls} Row %"] = (
-                    cls_count / total_count * 100 if total_count > 0 else 0.0
-                )
+                row[f"{cls} Row %"] = cls_count / total_count * 100 if total_count > 0 else 0.0
             rows.append(row)
 
-        df = (
-            pd.DataFrame(rows)
-            .sort_values("Count", ascending=False)
-            .reset_index(drop=True)
-        )
+        df = pd.DataFrame(rows).sort_values("Count", ascending=False).reset_index(drop=True)
 
         total_row: dict = {"Category": "Total", "Count": n_total, "Count %": 100.0}
         for cls in classes:
@@ -1408,9 +1362,7 @@ class DataAnalyzer:
         styled = (
             df.style.set_caption(caption)
             .format(format_dict)
-            .background_gradient(
-                subset=row_pct_cols, cmap="Blues", axis=0, vmin=0, vmax=100
-            )
+            .background_gradient(subset=row_pct_cols, cmap="Blues", axis=0, vmin=0, vmax=100)
             .apply(_highlight_total, axis=1)
             .set_table_styles(table_styles)
             .set_properties(
@@ -1424,9 +1376,7 @@ class DataAnalyzer:
                     "color": "#2c3e50",
                 }
             )
-            .set_properties(
-                subset=["Category"], **{"text-align": "left", "font-weight": "bold"}
-            )
+            .set_properties(subset=["Category"], **{"text-align": "left", "font-weight": "bold"})
         )
         return styled
 
@@ -1473,20 +1423,14 @@ class DataAnalyzer:
             ValueError: If ``problem_type`` is invalid or ``target`` is absent.
         """
         if problem_type not in {"classification", "regression"}:
-            raise ValueError(
-                "problem_type must be either 'classification' or 'regression'."
-            )
+            raise ValueError("problem_type must be either 'classification' or 'regression'.")
         if target not in data.columns:
             raise ValueError(f"Target column '{target}' not found in DataFrame.")
 
         if problem_type == "regression":
-            data_work, _ = DataAnalyzer._bin_regression_target(
-                data, target, n_quantiles
-            )
+            data_work, _ = DataAnalyzer._bin_regression_target(data, target, n_quantiles)
             group_col = "__target_bin__"
-            caption = (
-                f"🔗 Categorical Features — Association with {target} (Quantile Bins)"
-            )
+            caption = f"🔗 Categorical Features — Association with {target} (Quantile Bins)"
         else:
             data_work = data
             group_col = target
@@ -1497,9 +1441,7 @@ class DataAnalyzer:
             clean = data_work[[col, group_col]].dropna()
             if len(clean) == 0 or clean[col].nunique() < 2:
                 continue
-            v, chi2, p_val = DataAnalyzer._compute_cramers_v_chi2(
-                clean[col], clean[group_col]
-            )
+            v, chi2, p_val = DataAnalyzer._compute_cramers_v_chi2(clean[col], clean[group_col])
             u = DataAnalyzer._compute_theil_u(clean[col], clean[group_col])
             rows.append(
                 {
@@ -1512,11 +1454,7 @@ class DataAnalyzer:
                 }
             )
 
-        df = (
-            pd.DataFrame(rows)
-            .sort_values("Cramér's V", ascending=False)
-            .reset_index(drop=True)
-        )
+        df = pd.DataFrame(rows).sort_values("Cramér's V", ascending=False).reset_index(drop=True)
 
         table_styles = [
             {
@@ -1579,9 +1517,7 @@ class DataAnalyzer:
                     "p-value": "{:.3e}",
                 }
             )
-            .map(
-                DataAnalyzer._association_cell_color, subset=["Cramér's V", "Theil's U"]
-            )
+            .map(DataAnalyzer._association_cell_color, subset=["Cramér's V", "Theil's U"])
             .map(DataAnalyzer._pvalue_cell_color, subset=["p-value"])
             .set_table_styles(table_styles)
             .set_properties(
@@ -1595,9 +1531,7 @@ class DataAnalyzer:
                     "color": "#2c3e50",
                 }
             )
-            .set_properties(
-                subset=["Feature"], **{"text-align": "left", "font-weight": "bold"}
-            )
+            .set_properties(subset=["Feature"], **{"text-align": "left", "font-weight": "bold"})
         )
         return styled
 
@@ -1642,20 +1576,14 @@ class DataAnalyzer:
         return f"background-color: rgb({r},{g},{b}); color: white; font-weight: bold; text-align: center"
 
     @staticmethod
-    def _compute_numerical_psi(
-        train: np.ndarray, test: np.ndarray, n_bins: int = 10
-    ) -> float:
+    def _compute_numerical_psi(train: np.ndarray, test: np.ndarray, n_bins: int = 10) -> float:
         """PSI for a numerical feature using equal-frequency bins derived from train."""
         breakpoints = np.unique(np.percentile(train, np.linspace(0, 100, n_bins + 1)))
         if len(breakpoints) < 3:
             return np.nan
         bins = np.concatenate([[-np.inf], breakpoints[1:-1], [np.inf]])
-        train_pcts = np.maximum(
-            np.histogram(train, bins=bins)[0].astype(float) / len(train), 1e-6
-        )
-        test_pcts = np.maximum(
-            np.histogram(test, bins=bins)[0].astype(float) / len(test), 1e-6
-        )
+        train_pcts = np.maximum(np.histogram(train, bins=bins)[0].astype(float) / len(train), 1e-6)
+        test_pcts = np.maximum(np.histogram(test, bins=bins)[0].astype(float) / len(test), 1e-6)
         return float(np.sum((test_pcts - train_pcts) * np.log(test_pcts / train_pcts)))
 
     @staticmethod
@@ -1756,9 +1684,7 @@ class DataAnalyzer:
             tr_std, te_std = float(tr.std()), float(te.std())
             pooled_std = float(np.sqrt((tr_std**2 + te_std**2) / 2))
             smd = (te_mean - tr_mean) / pooled_std if pooled_std > 0 else 0.0
-            mean_delta_pct = (
-                (te_mean - tr_mean) / abs(tr_mean) * 100 if tr_mean != 0 else np.nan
-            )
+            mean_delta_pct = (te_mean - tr_mean) / abs(tr_mean) * 100 if tr_mean != 0 else np.nan
             std_ratio = te_std / tr_std if tr_std > 0 else np.nan
             psi = DataAnalyzer._compute_numerical_psi(tr, te, n_bins)
 
@@ -1776,11 +1702,7 @@ class DataAnalyzer:
                 }
             )
 
-        df = (
-            pd.DataFrame(rows)
-            .sort_values("KS Stat", ascending=False)
-            .reset_index(drop=True)
-        )
+        df = pd.DataFrame(rows).sort_values("KS Stat", ascending=False).reset_index(drop=True)
 
         table_styles = [
             {
@@ -1861,9 +1783,7 @@ class DataAnalyzer:
                     "color": "#2c3e50",
                 }
             )
-            .set_properties(
-                subset=["Feature"], **{"text-align": "left", "font-weight": "bold"}
-            )
+            .set_properties(subset=["Feature"], **{"text-align": "left", "font-weight": "bold"})
             .set_properties(
                 subset=["Flag"],
                 **{"text-align": "left", "white-space": "nowrap"},
@@ -1967,11 +1887,7 @@ class DataAnalyzer:
                 }
             )
 
-        df = (
-            pd.DataFrame(rows)
-            .sort_values("JS Distance", ascending=False)
-            .reset_index(drop=True)
-        )
+        df = pd.DataFrame(rows).sort_values("JS Distance", ascending=False).reset_index(drop=True)
 
         table_styles = [
             {
@@ -2050,9 +1966,7 @@ class DataAnalyzer:
                     "color": "#2c3e50",
                 }
             )
-            .set_properties(
-                subset=["Feature"], **{"text-align": "left", "font-weight": "bold"}
-            )
+            .set_properties(subset=["Feature"], **{"text-align": "left", "font-weight": "bold"})
             .set_properties(
                 subset=["Flag"],
                 **{"text-align": "left", "white-space": "nowrap"},
@@ -2068,9 +1982,7 @@ class DataAnalyzer:
         if not isinstance(X, pd.DataFrame):
             raise ValueError("X must be a pandas DataFrame.")
 
-        discrete_columns = X.select_dtypes(
-            include=["category", "object", "bool"]
-        ).columns
+        discrete_columns = X.select_dtypes(include=["category", "object", "bool"]).columns
         if len(discrete_columns) == 0:
             return X, None
 
@@ -2115,12 +2027,10 @@ class DataAnalyzer:
         if not isinstance(y, (pd.Series, np.ndarray)):
             raise ValueError("y must be a pandas Series or numpy array.")
         if problem_type not in {"classification", "regression"}:
-            raise ValueError(
-                "problem_type must be either 'classification' or 'regression'."
-            )
+            raise ValueError("problem_type must be either 'classification' or 'regression'.")
 
-        x_prepared, discrete_features_mask = (
-            DataAnalyzer._prepare_features_for_mutual_information(X)
+        x_prepared, discrete_features_mask = DataAnalyzer._prepare_features_for_mutual_information(
+            X
         )
 
         mi_kwargs: dict[str, int | np.ndarray] = {"n_neighbors": n_neighbors}
@@ -2137,10 +2047,7 @@ class DataAnalyzer:
         mi_scores = np.nan_to_num(mi_scores, nan=0.0, posinf=0.0, neginf=0.0)
         sorted_indices = np.argsort(mi_scores)[::-1]
 
-        return {
-            str(x_prepared.columns[idx]): float(mi_scores[idx])
-            for idx in sorted_indices
-        }
+        return {str(x_prepared.columns[idx]): float(mi_scores[idx]) for idx in sorted_indices}
 
 
 if __name__ == "__main__":

@@ -62,18 +62,14 @@ def test_equalfrequencydiscretiserwithoriginal_transform_produces_roughly_equal_
     result = discretiser.transform(equal_frequency_data)
     bin_counts = result[f"age_PREPROCESS_EQ_FREQ_{CUSTOM_Q}"].value_counts()
     if len(bin_counts) != CUSTOM_Q:
-        raise AssertionError(
-            f"Expected {CUSTOM_Q} distinct bins, got {len(bin_counts)}."
-        )
+        raise AssertionError(f"Expected {CUSTOM_Q} distinct bins, got {len(bin_counts)}.")
     expected_count_per_bin = N_ROWS // CUSTOM_Q
     if not (bin_counts == expected_count_per_bin).all():
         raise AssertionError(f"Bin counts not equal: {bin_counts.to_dict()}")
 
 
 @pytest.mark.parametrize("q", [3, 4, 10])
-def test_equalfrequencydiscretiserwithoriginal_suffix_encodes_q(
-    equal_frequency_data, q
-):
+def test_equalfrequencydiscretiserwithoriginal_suffix_encodes_q(equal_frequency_data, q):
     """Tests that the derived column suffix is keyed on q, not a fixed string.
 
     Args:

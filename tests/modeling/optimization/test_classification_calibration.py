@@ -73,9 +73,7 @@ def multiclass_logistic_regression_estimator(test_settings) -> LogisticRegressio
     Returns:
         LogisticRegression: Configured multiclass-capable estimator.
     """
-    return LogisticRegression(
-        max_iter=200, random_state=test_settings.SEED, solver="lbfgs"
-    )
+    return LogisticRegression(max_iter=200, random_state=test_settings.SEED, solver="lbfgs")
 
 
 @pytest.fixture
@@ -265,9 +263,7 @@ def test_classificationcalibrator_plot_calibration_curves_raises_runtimeerror_be
         estimator=logistic_regression_estimator, cross_validator=calibration_cv_trainer
     )
 
-    with pytest.raises(
-        RuntimeError, match=r"Call fit\(\) before plot_calibration_curves\(\)\."
-    ):
+    with pytest.raises(RuntimeError, match=r"Call fit\(\) before plot_calibration_curves\(\)\."):
         calibrator.plot_calibration_curves()
 
 
@@ -387,12 +383,8 @@ def test_show_figure_uses_plain_show_outside_notebook():
             "kvbiii_ml.modeling.optimization.classification_calibration.get_ipython",
             return_value=None,
         ),
-        patch(
-            "kvbiii_ml.modeling.optimization.classification_calibration.plt.show"
-        ) as mock_show,
-        patch(
-            "kvbiii_ml.modeling.optimization.classification_calibration.display"
-        ) as mock_display,
+        patch("kvbiii_ml.modeling.optimization.classification_calibration.plt.show") as mock_show,
+        patch("kvbiii_ml.modeling.optimization.classification_calibration.display") as mock_display,
     ):
         _show_figure(fig)
 
@@ -416,15 +408,9 @@ def test_show_figure_displays_inline_image_inside_notebook():
             "kvbiii_ml.modeling.optimization.classification_calibration.get_ipython",
             return_value=Mock(),
         ),
-        patch(
-            "kvbiii_ml.modeling.optimization.classification_calibration.plt.show"
-        ) as mock_show,
-        patch(
-            "kvbiii_ml.modeling.optimization.classification_calibration.plt.close"
-        ) as mock_close,
-        patch(
-            "kvbiii_ml.modeling.optimization.classification_calibration.display"
-        ) as mock_display,
+        patch("kvbiii_ml.modeling.optimization.classification_calibration.plt.show") as mock_show,
+        patch("kvbiii_ml.modeling.optimization.classification_calibration.plt.close") as mock_close,
+        patch("kvbiii_ml.modeling.optimization.classification_calibration.display") as mock_display,
     ):
         _show_figure(fig)
 
@@ -480,9 +466,7 @@ def test_classificationcalibrator_style_scores_returns_styler_with_best_row_high
         raise AssertionError()
     html = styled.to_html()
     if "font-weight: 800" not in html:
-        raise AssertionError(
-            "Expected the best method's row to be bolded in the rendered table."
-        )
+        raise AssertionError("Expected the best method's row to be bolded in the rendered table.")
 
 
 if __name__ == "__main__":

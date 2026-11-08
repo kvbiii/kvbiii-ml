@@ -37,9 +37,7 @@ def test_numericaldowncaster_fit_downcasts_nan_containing_integer_column_to_floa
         ([-2147483649, 0, 2147483647], np.int64),
     ],
 )
-def test_numericaldowncaster_fit_selects_correct_integer_boundary_dtype(
-    values, expected_dtype
-):
+def test_numericaldowncaster_fit_selects_correct_integer_boundary_dtype(values, expected_dtype):
     """Tests fit selects the smallest signed-integer dtype whose range covers the data.
 
     Args:
@@ -164,9 +162,7 @@ def test_numericaldowncaster_keeps_large_integers_with_nan_exact():
     big = [2**24 + 1, 2**31 + 7, None]
     df = pd.DataFrame({"id": pd.array(big, dtype="Int64")})
     out = NumericalDowncaster().fit_transform(df)
-    if out["id"].iloc[:2].astype("int64").tolist() != big[:2] or not pd.isna(
-        out["id"].iloc[2]
-    ):
+    if out["id"].iloc[:2].astype("int64").tolist() != big[:2] or not pd.isna(out["id"].iloc[2]):
         raise AssertionError(out["id"].tolist())
 
     downcaster = NumericalDowncaster().fit(pd.DataFrame({"ts": [2**24 + 1, 2**30 + 3]}))

@@ -137,14 +137,11 @@ class CrossValidationTrainer(BaseTrainer):
             raise ValueError("n_jobs must be a positive integer.")
 
         if early_stopping_holdout is not None and not 0 < early_stopping_holdout < 1:
-            raise ValueError(
-                "early_stopping_holdout must be None or a float in (0, 1)."
-            )
+            raise ValueError("early_stopping_holdout must be None or a float in (0, 1).")
 
         if sample_weight_fn is not None and not callable(sample_weight_fn):
             raise TypeError(
-                f"sample_weight_fn must be callable or None, "
-                f"got {type(sample_weight_fn).__name__}."
+                f"sample_weight_fn must be callable or None, got {type(sample_weight_fn).__name__}."
             )
 
         if metric_name is not None:
@@ -272,9 +269,7 @@ class CrossValidationTrainer(BaseTrainer):
         return x_train_out, x_valid_out, x_test_out, fitted
 
     @staticmethod
-    def _transform_with_pipeline(
-        pipeline: Pipeline | None, X: pd.DataFrame
-    ) -> pd.DataFrame:
+    def _transform_with_pipeline(pipeline: Pipeline | None, X: pd.DataFrame) -> pd.DataFrame:
         """Apply a fitted pipeline to X using transform only.
 
         Args:
@@ -339,29 +334,21 @@ class CrossValidationTrainer(BaseTrainer):
         splits = list(self.cv.split(X, y))
         show_progress_bar = self.verbose and not bool(self.fit_verbose)
         progress_bar = (
-            tqdm(total=len(splits), desc="Cross-validation")
-            if show_progress_bar
-            else None
+            tqdm(total=len(splits), desc="Cross-validation") if show_progress_bar else None
         )
 
         def run_split(train_idx: np.ndarray, valid_idx: np.ndarray) -> _FoldResult:
             """Train one fold and advance the progress bar."""
-            result = self._run_fold(
-                active_pipeline, estimator, X, y, X_test, train_idx, valid_idx
-            )
+            result = self._run_fold(active_pipeline, estimator, X, y, X_test, train_idx, valid_idx)
             if progress_bar is not None:
                 progress_bar.update(1)
             return result
 
         try:
             if self.n_jobs == 1 or len(splits) <= 1:
-                fold_results = [
-                    run_split(train_idx, valid_idx) for train_idx, valid_idx in splits
-                ]
+                fold_results = [run_split(train_idx, valid_idx) for train_idx, valid_idx in splits]
             else:
-                with ThreadPoolExecutor(
-                    max_workers=min(self.n_jobs, len(splits))
-                ) as executor:
+                with ThreadPoolExecutor(max_workers=min(self.n_jobs, len(splits))) as executor:
                     futures = {
                         executor.submit(run_split, train_idx, valid_idx): position
                         for position, (train_idx, valid_idx) in enumerate(splits)
@@ -390,8 +377,7 @@ class CrossValidationTrainer(BaseTrainer):
 
             if self.verbose:
                 tqdm.write(
-                    f"Fold {fold}: train={result.train_score:.5f} | "
-                    f"valid={result.valid_score:.5f}"
+                    f"Fold {fold}: train={result.train_score:.5f} | valid={result.valid_score:.5f}"
                 )
 
         avg_test_pred = (
@@ -445,9 +431,7 @@ class CrossValidationTrainer(BaseTrainer):
         x_fit, y_fit, w_fit, o_fit = x_train_proc, y_train, fold_weights, off_train
         x_es, y_es, o_es = x_valid_proc, y_valid, off_valid
         if self.early_stopping_holdout is not None:
-            n_holdout = max(
-                1, int(round(len(x_train_proc) * self.early_stopping_holdout))
-            )
+            n_holdout = max(1, int(round(len(x_train_proc) * self.early_stopping_holdout)))
             x_fit, x_es = x_train_proc.iloc[:-n_holdout], x_train_proc.iloc[-n_holdout:]
             y_fit, y_es = y_train.iloc[:-n_holdout], y_train.iloc[-n_holdout:]
             w_fit = None if fold_weights is None else fold_weights[:-n_holdout]
@@ -495,9 +479,7 @@ class CrossValidationTrainer(BaseTrainer):
             return to_metric_proba(self._estimator_output(estimator, X, offset, True))
         if self.metric_type == "preds":
             return self._estimator_output(estimator, X, offset, False)
-        raise ValueError(
-            f"Unknown metric type '{self.metric_type}'. Must be 'preds' or 'probs'."
-        )
+        raise ValueError(f"Unknown metric type '{self.metric_type}'. Must be 'preds' or 'probs'.")
 
     @staticmethod
     def _estimator_output(
@@ -511,9 +493,7 @@ class CrossValidationTrainer(BaseTrainer):
             return predict_with_offset(estimator, X, offset, proba=proba)
         return estimator.predict_proba(X) if proba else estimator.predict(X)
 
-    def _compute_fold_weights(
-        self, X_train: pd.DataFrame, y_train: pd.Series
-    ) -> np.ndarray | None:
+    def _compute_fold_weights(self, X_train: pd.DataFrame, y_train: pd.Series) -> np.ndarray | None:
         """Compute one fold's training weights with ``sample_weight_fn``.
 
         Args:
@@ -554,23 +534,17 @@ class CrossValidationTrainer(BaseTrainer):
             RuntimeError: If called before fitting.
         """
         if not self.fitted_estimators_:
-            raise RuntimeError(
-                "CrossValidationTrainer must be fitted before calling predict()."
-            )
+            raise RuntimeError("CrossValidationTrainer must be fitted before calling predict().")
 
         X, offset = split_offset(X, self.offset_column)
         preds = []
-        for fitted_estimator, fold_pipeline in zip(
-            self.fitted_estimators_, self.fitted_pipelines_
-        ):
+        for fitted_estimator, fold_pipeline in zip(self.fitted_estimators_, self.fitted_pipelines_):
             x_proc = self._transform_with_pipeline(fold_pipeline, X)
             x_ordered = self._order_x_for_estimator(x_proc, fitted_estimator)
             proba = self.problem_type == "classification" and hasattr(
                 fitted_estimator, "predict_proba"
             )
-            preds.append(
-                self._estimator_output(fitted_estimator, x_ordered, offset, proba)
-            )
+            preds.append(self._estimator_output(fitted_estimator, x_ordered, offset, proba))
 
         preds_arr = np.asarray(preds, dtype=float)
         avg = preds_arr.mean(axis=0)
@@ -595,9 +569,7 @@ class CrossValidationTrainer(BaseTrainer):
             ValueError: If called for a regression problem.
         """
         if self.problem_type != "classification":
-            raise ValueError(
-                "predict_proba is only available for classification problems."
-            )
+            raise ValueError("predict_proba is only available for classification problems.")
         if not self.fitted_estimators_:
             raise RuntimeError(
                 "CrossValidationTrainer must be fitted before calling predict_proba()."
@@ -605,14 +577,10 @@ class CrossValidationTrainer(BaseTrainer):
 
         X, offset = split_offset(X, self.offset_column)
         probs = []
-        for fitted_estimator, fold_pipeline in zip(
-            self.fitted_estimators_, self.fitted_pipelines_
-        ):
+        for fitted_estimator, fold_pipeline in zip(self.fitted_estimators_, self.fitted_pipelines_):
             x_proc = self._transform_with_pipeline(fold_pipeline, X)
             x_ordered = self._order_x_for_estimator(x_proc, fitted_estimator)
-            probs.append(
-                self._estimator_output(fitted_estimator, x_ordered, offset, True)
-            )
+            probs.append(self._estimator_output(fitted_estimator, x_ordered, offset, True))
 
         return np.asarray(probs, dtype=float).mean(axis=0)
 
@@ -642,9 +610,7 @@ class CrossValidationTrainer(BaseTrainer):
         X, offset = split_offset(X, self.offset_column)
         if self.problem_type == "regression":
             fold_preds = []
-            for est, fold_pipeline in zip(
-                self.fitted_estimators_, self.fitted_pipelines_
-            ):
+            for est, fold_pipeline in zip(self.fitted_estimators_, self.fitted_pipelines_):
                 x_proc = self._transform_with_pipeline(fold_pipeline, X)
                 x_ordered = self._order_x_for_estimator(x_proc, est)
                 fold_preds.append(
@@ -671,9 +637,7 @@ class CrossValidationTrainer(BaseTrainer):
                 raise ValueError(
                     "All fold estimators must implement predict_proba for classification confidence."
                 )
-            p = np.asarray(
-                self._estimator_output(est, x_ordered, offset, True), dtype=float
-            )
+            p = np.asarray(self._estimator_output(est, x_ordered, offset, True), dtype=float)
             if p.ndim == 1:
                 p = np.column_stack([1 - p, p])
             probs.append(p)
@@ -691,9 +655,7 @@ class CrossValidationTrainer(BaseTrainer):
         }
 
     @staticmethod
-    def _order_x_for_estimator(
-        X: pd.DataFrame, estimator: BaseEstimator
-    ) -> pd.DataFrame:
+    def _order_x_for_estimator(X: pd.DataFrame, estimator: BaseEstimator) -> pd.DataFrame:
         """Reorder columns to match an estimator's feature order (see `order_x_for_estimator`)."""
         return order_x_for_estimator(X, estimator)
 
@@ -794,9 +756,7 @@ if __name__ == "__main__":
         x_reg, y_reg = _make_reg_data()
 
         x_bin_cat = x_bin.assign(**{c: x_bin[c].astype(str) for c in CAT_FEATURES})
-        x_multi_cat = x_multi.assign(
-            **{c: x_multi[c].astype(str) for c in CAT_FEATURES}
-        )
+        x_multi_cat = x_multi.assign(**{c: x_multi[c].astype(str) for c in CAT_FEATURES})
         x_reg_cat = x_reg.assign(**{c: x_reg[c].astype(str) for c in CAT_FEATURES})
 
         es = EARLY_STOPPING_ROUNDS
