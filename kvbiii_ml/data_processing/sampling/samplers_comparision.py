@@ -4,18 +4,15 @@ from imblearn.under_sampling import RandomUnderSampler
 
 
 class FoldwiseSampler:
-    """
-    A wrapper class for applying various sampling strategies consistently across CV folds.
-    """
+    """Apply a sampling strategy consistently across CV folds."""
 
     def __init__(self, strategy="none", sampler_params=None) -> None:
         """
         Initialize the FoldwiseSampler with a specified strategy and parameters.
 
         Args:
-            strategy (str): Sampling strategy to use. Options are "none", "smote",
-                "random_over", "random_under". Default is "none".
-            sampler_params (dict, optional): Additional parameters for the sampler.
+            strategy (str): "none", "smote", "random_over" or "random_under". Defaults to "none".
+            sampler_params (dict | None): Keyword arguments for the sampler. Defaults to None.
         """
         self.strategy = strategy
         self.sampler_params = sampler_params or {}
@@ -28,6 +25,9 @@ class FoldwiseSampler:
         Args:
             X (pd.DataFrame): Feature matrix.
             y (pd.Series): Target vector.
+
+        Raises:
+            ValueError: If the strategy is unknown.
         """
         if self.strategy == "none":
             self.sampler = None
