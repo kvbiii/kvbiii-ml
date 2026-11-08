@@ -154,7 +154,7 @@ class CalibratedModel:
         if self.fitted_estimator_ is None:
             raise RuntimeError("CalibratedModel must be fitted before calling predict_proba().")
 
-        x_ord = CrossValidationTrainer._order_x_for_estimator(X, self.fitted_estimator_)
+        x_ord = CrossValidationTrainer._order_x_for_estimator(X, self.fitted_estimator_)  # noqa: SLF001
         raw = self._ensure_proba_matrix(self.fitted_estimator_.predict_proba(x_ord))
         return _apply_calibrator(self.calibrator_, raw, self.classes_, self.calibration_method)
 
@@ -185,7 +185,7 @@ class CalibratedModel:
             holdout_estimator (BaseEstimator): Estimator fitted on the hold-out split.
             eval_set (list[tuple] | None): Validation data for early stopping, or None.
         """
-        X_valid, y_valid = OOFModel._parse_eval_set(eval_set)
+        X_valid, y_valid = OOFModel._parse_eval_set(eval_set)  # noqa: SLF001
         n_iter = _get_n_iterations(holdout_estimator)
         final_est = deepcopy(self.estimator)
         if n_iter is not None:

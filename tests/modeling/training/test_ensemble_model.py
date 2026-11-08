@@ -455,7 +455,7 @@ def test_ensemblemodel_predict_raises_when_a_base_model_cannot_score_x(regressio
     ensemble.fitted_estimators_ = [good, foreign]
     ensemble._weights_normalized = np.array([0.5, 0.5])
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="expects features missing from X"):
         ensemble.predict(X)
 
     ensemble.on_estimator_error = "skip"

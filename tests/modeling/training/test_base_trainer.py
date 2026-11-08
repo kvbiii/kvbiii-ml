@@ -245,7 +245,7 @@ def test_basetrainer_fit_and_predict_raises_error_for_invalid_metric_type(
     y_valid = sample_series.iloc[:20]
 
     with pytest.raises(
-        ValueError, match="Unknown metric type 'invalid'. Must be 'preds' or 'probs'"
+        ValueError, match=r"Unknown metric type 'invalid'. Must be 'preds' or 'probs'"
     ):
         BaseTrainer.fit_and_predict(
             mock_estimator,

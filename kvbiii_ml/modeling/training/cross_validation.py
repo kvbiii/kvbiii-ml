@@ -19,6 +19,8 @@ from kvbiii_ml.evaluation.metrics import (
     get_metric_type,
 )
 from kvbiii_ml.modeling.training.base_trainer import (
+    PROBA_MATRIX_NDIM,
+    PROBABILITY_THRESHOLD,
     BaseTrainer,
     order_x_for_estimator,
     predict_with_offset,
@@ -426,7 +428,7 @@ class CrossValidationTrainer(BaseTrainer):
         x_fit, y_fit, w_fit, o_fit = x_train_proc, y_train, fold_weights, off_train
         x_es, y_es, o_es = x_valid_proc, y_valid, off_valid
         if self.early_stopping_holdout is not None:
-            n_holdout = max(1, int(round(len(x_train_proc) * self.early_stopping_holdout)))
+            n_holdout = max(1, round(len(x_train_proc) * self.early_stopping_holdout))
             x_fit, x_es = x_train_proc.iloc[:-n_holdout], x_train_proc.iloc[-n_holdout:]
             y_fit, y_es = y_train.iloc[:-n_holdout], y_train.iloc[-n_holdout:]
             w_fit = None if fold_weights is None else fold_weights[:-n_holdout]
@@ -475,9 +477,9 @@ class CrossValidationTrainer(BaseTrainer):
             ValueError: If metric_type is not 'preds' or 'probs'.
         """
         if self.metric_type == "probs":
-            return to_metric_proba(self._estimator_output(estimator, X, offset, True))
+            return to_metric_proba(self._estimator_output(estimator, X, offset, proba=True))
         if self.metric_type == "preds":
-            return self._estimator_output(estimator, X, offset, False)
+            return self._estimator_output(estimator, X, offset, proba=False)
         raise ValueError(f"Unknown metric type '{self.metric_type}'. Must be 'preds' or 'probs'.")
 
     @staticmethod
@@ -536,7 +538,9 @@ class CrossValidationTrainer(BaseTrainer):
 
         X, offset = split_offset(X, self.offset_column)
         preds = []
-        for fitted_estimator, fold_pipeline in zip(self.fitted_estimators_, self.fitted_pipelines_):
+        for fitted_estimator, fold_pipeline in zip(
+            self.fitted_estimators_, self.fitted_pipelines_, strict=False
+        ):
             x_proc = self._transform_with_pipeline(fold_pipeline, X)
             x_ordered = self._order_x_for_estimator(x_proc, fitted_estimator)
             proba = self.problem_type == "classification" and hasattr(
@@ -547,7 +551,11 @@ class CrossValidationTrainer(BaseTrainer):
         preds_arr = np.asarray(preds, dtype=float)
         avg = preds_arr.mean(axis=0)
         if self.problem_type == "classification":
-            return np.argmax(avg, axis=1) if avg.ndim == 2 else (avg >= 0.5).astype(int)
+            return (
+                np.argmax(avg, axis=1)
+                if avg.ndim == PROBA_MATRIX_NDIM
+                else (avg >= PROBABILITY_THRESHOLD).astype(int)
+            )
         return avg
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
@@ -575,10 +583,12 @@ class CrossValidationTrainer(BaseTrainer):
 
         X, offset = split_offset(X, self.offset_column)
         probs = []
-        for fitted_estimator, fold_pipeline in zip(self.fitted_estimators_, self.fitted_pipelines_):
+        for fitted_estimator, fold_pipeline in zip(
+            self.fitted_estimators_, self.fitted_pipelines_, strict=False
+        ):
             x_proc = self._transform_with_pipeline(fold_pipeline, X)
             x_ordered = self._order_x_for_estimator(x_proc, fitted_estimator)
-            probs.append(self._estimator_output(fitted_estimator, x_ordered, offset, True))
+            probs.append(self._estimator_output(fitted_estimator, x_ordered, offset, proba=True))
 
         return np.asarray(probs, dtype=float).mean(axis=0)
 
@@ -608,12 +618,14 @@ class CrossValidationTrainer(BaseTrainer):
         X, offset = split_offset(X, self.offset_column)
         if self.problem_type == "regression":
             fold_preds = []
-            for est, fold_pipeline in zip(self.fitted_estimators_, self.fitted_pipelines_):
+            for est, fold_pipeline in zip(
+                self.fitted_estimators_, self.fitted_pipelines_, strict=False
+            ):
                 x_proc = self._transform_with_pipeline(fold_pipeline, X)
                 x_ordered = self._order_x_for_estimator(x_proc, est)
                 fold_preds.append(
                     np.asarray(
-                        self._estimator_output(est, x_ordered, offset, False),
+                        self._estimator_output(est, x_ordered, offset, proba=False),
                         dtype=float,
                     )
                 )
@@ -628,7 +640,9 @@ class CrossValidationTrainer(BaseTrainer):
             }
 
         probs = []
-        for est, fold_pipeline in zip(self.fitted_estimators_, self.fitted_pipelines_):
+        for est, fold_pipeline in zip(
+            self.fitted_estimators_, self.fitted_pipelines_, strict=False
+        ):
             x_proc = self._transform_with_pipeline(fold_pipeline, X)
             x_ordered = self._order_x_for_estimator(x_proc, est)
             if not hasattr(est, "predict_proba"):
@@ -636,7 +650,7 @@ class CrossValidationTrainer(BaseTrainer):
                     "All fold estimators must implement predict_proba "
                     "for classification confidence."
                 )
-            p = np.asarray(self._estimator_output(est, x_ordered, offset, True), dtype=float)
+            p = np.asarray(self._estimator_output(est, x_ordered, offset, proba=True), dtype=float)
             if p.ndim == 1:
                 p = np.column_stack([1 - p, p])
             probs.append(p)
@@ -714,7 +728,7 @@ if __name__ == "__main__":
 
     def _run_scenario(
         label: str,
-        estimator: Any,
+        estimator: Any,  # noqa: ANN401
         X: pd.DataFrame,
         y: pd.Series,
         metric_name: str,

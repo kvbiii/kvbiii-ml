@@ -25,6 +25,11 @@ EARLY_STOPPING_PARAMS: dict[str, tuple[str, ...]] = {
 }
 
 EXP_LINK_OBJECTIVES = ("poisson", "tweedie", "gamma")
+PROBABILITY_THRESHOLD = 0.5
+PROBA_MATRIX_NDIM = 2
+BINARY_N_CLASSES = 2
+TRAIN_VALID_PAIR = 2
+MAX_LISTED_MISSING = 10
 
 
 def split_offset(
@@ -100,7 +105,7 @@ def predict_with_offset(
         positive = 1.0 / (1.0 + np.exp(-raw))
         if proba:
             return np.column_stack([1.0 - positive, positive])
-        return np.asarray(estimator.classes_)[(positive >= 0.5).astype(int)]
+        return np.asarray(estimator.classes_)[(positive >= PROBABILITY_THRESHOLD).astype(int)]
     if any(token in _objective_name(estimator) for token in EXP_LINK_OBJECTIVES):
         return np.exp(raw)
     return raw
@@ -133,7 +138,7 @@ def to_metric_proba(proba: np.ndarray) -> np.ndarray:
             unchanged.
     """
     proba = np.asarray(proba)
-    if proba.ndim == 2 and proba.shape[1] == 2:
+    if proba.ndim == PROBA_MATRIX_NDIM and proba.shape[1] == BINARY_N_CLASSES:
         return proba[:, 1]
     return proba
 
@@ -186,7 +191,8 @@ def order_x_for_estimator(
             missing = [n for n in expected_names if n not in columns_set]
             raise ValueError(
                 f"{type(estimator).__name__} expects features missing from X: "
-                f"{missing[:10]}{'...' if len(missing) > 10 else ''}"
+                f"{missing[:MAX_LISTED_MISSING]}"
+                f"{'...' if len(missing) > MAX_LISTED_MISSING else ''}"
             )
     return X
 
@@ -343,7 +349,7 @@ class BaseTrainer:
                 cat_features = estimator.get_params().get("cat_features")
                 fit_params["eval_set"] = [
                     Pool(x, y, cat_features=cat_features, baseline=offset)
-                    for (x, y), offset in zip(eval_set, eval_offsets)
+                    for (x, y), offset in zip(eval_set, eval_offsets, strict=False)
                 ]
         else:
             raise TypeError(
@@ -499,9 +505,10 @@ class BaseTrainer:
                 fit_params["verbose"] = log_period
             elif "verbosity" in sig.parameters:
                 fit_params["verbosity"] = verbose
-            if "callbacks" in sig.parameters:
-                if estimator.__class__.__name__.startswith(LGBM_PREFIX):
-                    fit_params["callbacks"] = [log_evaluation(log_period)]
+            if "callbacks" in sig.parameters and estimator.__class__.__name__.startswith(
+                LGBM_PREFIX
+            ):
+                fit_params["callbacks"] = [log_evaluation(log_period)]
             if (
                 estimator.__class__.__name__.startswith(HISTGB_PREFIX)
                 and "verbose" in estimator.get_params()

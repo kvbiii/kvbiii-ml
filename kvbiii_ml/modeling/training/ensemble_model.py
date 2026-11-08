@@ -11,6 +11,7 @@ from sklearn.model_selection import BaseCrossValidator, KFold
 from sklearn.utils import ClassifierTags, RegressorTags, Tags
 
 from kvbiii_ml.modeling.training.base_trainer import (
+    TRAIN_VALID_PAIR,
     BaseTrainer,
     order_x_for_estimator,
     predict_with_offset,
@@ -206,7 +207,7 @@ class EnsembleModel(BaseEstimator):
         """
         X_valid, y_valid = None, None
         if isinstance(eval_set, list) and eval_set and isinstance(eval_set[0], tuple):
-            X_valid, y_valid = eval_set[1] if len(eval_set) == 2 else eval_set[0]
+            X_valid, y_valid = eval_set[1] if len(eval_set) == TRAIN_VALID_PAIR else eval_set[0]
 
         self.fitted_estimators_ = self._fit_base_estimators(
             X_train, y_train, X_valid, y_valid, sample_weight, verbose
@@ -392,9 +393,7 @@ class EnsembleModel(BaseEstimator):
             labels = np.argmax(proba, axis=1)
             return self.classes_[labels] if self.classes_ is not None else labels
 
-        predictions, weights = self._collect_predictions(
-            X, lambda est, x: self._estimator_output(est, x)
-        )
+        predictions, weights = self._collect_predictions(X, self._estimator_output)
         return np.average(predictions, axis=0, weights=weights)
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
