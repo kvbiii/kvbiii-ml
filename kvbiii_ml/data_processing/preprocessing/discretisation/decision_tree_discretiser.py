@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 from feature_engine.discretisation import DecisionTreeDiscretiser
@@ -56,7 +56,7 @@ class DecisionTreeDiscretiserWithOriginal(_WithOriginalBase):
             DecisionTreeDiscretiser: Unfitted instance.
         """
         return DecisionTreeDiscretiser(
-            variables=self.variables,
+            variables=cast("list[str | int] | None", self.variables),
             bin_output=self.bin_output,
             precision=self.precision,
             cv=self.cv,

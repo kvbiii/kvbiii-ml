@@ -1,3 +1,5 @@
+from typing import cast
+
 import pandas as pd
 from feature_engine.encoding import RareLabelEncoder
 
@@ -56,7 +58,7 @@ class RareLabelEncoderWithOriginal(_WithOriginalBase):
             n_categories=self.n_categories,
             max_n_categories=self.max_n_categories,
             replace_with=self.replace_with,
-            variables=self.variables,
+            variables=cast("list[str | int] | None", self.variables),
             missing_values=self.missing_values,
             ignore_format=self.ignore_format,
         )

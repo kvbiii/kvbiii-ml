@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 from feature_engine.encoding import CountFrequencyEncoder
@@ -59,7 +59,7 @@ class CountFrequencyEncoderWithOriginal(_WithOriginalBase):
         """
         return CountFrequencyEncoder(
             encoding_method=self.encoding_method,
-            variables=self.variables,
+            variables=cast("list[str | int] | None", self.variables),
             missing_values=self.missing_values,
             ignore_format=self.ignore_format,
             unseen=self.unseen,

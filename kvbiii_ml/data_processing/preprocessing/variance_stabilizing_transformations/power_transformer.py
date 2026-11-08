@@ -1,3 +1,5 @@
+from typing import cast
+
 import pandas as pd
 from feature_engine.transformation import PowerTransformer
 
@@ -34,7 +36,9 @@ class PowerTransformerWithOriginal(_WithOriginalBase):
         Returns:
             PowerTransformer: Unfitted instance.
         """
-        return PowerTransformer(variables=self.variables, exp=self.exp)
+        return PowerTransformer(
+            variables=cast("list[str | int] | None", self.variables), exp=self.exp
+        )
 
     def _fit_inner(self, inner: PowerTransformer, X: pd.DataFrame, y: object) -> PowerTransformer:
         """Fit the transformer on X.

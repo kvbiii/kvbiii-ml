@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 from feature_engine.encoding import WoEEncoder
@@ -48,7 +48,7 @@ class WoEEncoderWithOriginal(_WithOriginalBase):
             WoEEncoder: Unfitted encoder instance.
         """
         return WoEEncoder(
-            variables=self.variables,
+            variables=cast("list[str | int] | None", self.variables),
             ignore_format=self.ignore_format,
             unseen=self.unseen,
             fill_value=self.fill_value,

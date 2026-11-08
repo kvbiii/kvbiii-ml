@@ -1,3 +1,5 @@
+from typing import cast
+
 import pandas as pd
 from feature_engine.transformation import ReciprocalTransformer
 
@@ -28,7 +30,7 @@ class ReciprocalTransformerWithOriginal(_WithOriginalBase):
         Returns:
             ReciprocalTransformer: Unfitted instance.
         """
-        return ReciprocalTransformer(variables=self.variables)
+        return ReciprocalTransformer(variables=cast("list[str | int] | None", self.variables))
 
     def _fit_inner(
         self, inner: ReciprocalTransformer, X: pd.DataFrame, y: object

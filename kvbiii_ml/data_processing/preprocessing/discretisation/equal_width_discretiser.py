@@ -1,3 +1,5 @@
+from typing import cast
+
 import pandas as pd
 from feature_engine.discretisation import EqualWidthDiscretiser
 
@@ -53,7 +55,7 @@ class EqualWidthDiscretiserWithOriginal(_WithOriginalBase):
             EqualWidthDiscretiser: Unfitted instance.
         """
         return EqualWidthDiscretiser(
-            variables=self.variables,
+            variables=cast("list[str | int] | None", self.variables),
             bins=self.bins,
             return_object=self.return_object,
             return_boundaries=self.return_boundaries,

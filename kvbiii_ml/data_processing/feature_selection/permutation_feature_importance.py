@@ -2,6 +2,7 @@ import warnings
 from collections.abc import Generator
 from contextlib import contextmanager
 from copy import deepcopy
+from typing import cast
 
 import joblib.parallel
 import numpy as np
@@ -706,7 +707,10 @@ if __name__ == "__main__":
                 ),
                 (
                     "mean_encoder",
-                    MeanEncoder(variables=cat_features, missing_values="ignore"),
+                    MeanEncoder(
+                        variables=cast("list[str | int] | None", cat_features),
+                        missing_values="ignore",
+                    ),
                 ),
             ]
         )

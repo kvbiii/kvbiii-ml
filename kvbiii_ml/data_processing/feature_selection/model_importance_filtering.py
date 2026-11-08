@@ -1,6 +1,6 @@
 import gc
 from copy import deepcopy
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import numpy as np
 import pandas as pd
@@ -599,7 +599,9 @@ if __name__ == "__main__":
                 ),
                 (
                     "mean_encoder",
-                    MeanEncoder(variables=cat_cols, missing_values="ignore"),
+                    MeanEncoder(
+                        variables=cast("list[str | int] | None", cat_cols), missing_values="ignore"
+                    ),
                 ),
             ]
         )

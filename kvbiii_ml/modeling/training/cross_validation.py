@@ -2,7 +2,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -754,7 +754,9 @@ if __name__ == "__main__":
         _winsorizer = Winsorizer(
             capping_method="iqr", tail="both", fold=3.0, missing_values="ignore"
         )
-        _mean_encoder = MeanEncoder(variables=CAT_FEATURES, missing_values="ignore")
+        _mean_encoder = MeanEncoder(
+            variables=cast("list[str | int] | None", CAT_FEATURES), missing_values="ignore"
+        )
         _imputer = MeanMedianImputer(imputation_method="median")
         _categorial_aligner = CategoricalAligner(variables=CAT_FEATURES)
         _pipe_steps = [

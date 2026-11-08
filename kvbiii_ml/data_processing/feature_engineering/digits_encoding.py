@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, cast
 
 import numpy as np
 import pandas as pd
@@ -178,10 +178,10 @@ class DigitsEncodingFeatureGenerator(BaseEstimator, TransformerMixin):
         end = min(max_power, self.max_digits // 2)
 
         span = end - start
-        if span < self.min_digits:
+        if span < cast("int", self.min_digits):
             center = (start + end) // 2
-            start = center - self.min_digits // 2
-            end = start + self.min_digits
+            start = center - cast("int", self.min_digits) // 2
+            end = start + cast("int", self.min_digits)
         elif span > self.max_digits:
             end = start + self.max_digits
 

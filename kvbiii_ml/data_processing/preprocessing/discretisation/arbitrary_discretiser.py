@@ -1,3 +1,5 @@
+from typing import cast
+
 import pandas as pd
 from feature_engine.discretisation import ArbitraryDiscretiser
 
@@ -45,7 +47,7 @@ class ArbitraryDiscretiserWithOriginal(_WithOriginalBase):
             ArbitraryDiscretiser: Unfitted instance.
         """
         return ArbitraryDiscretiser(
-            binning_dict=self.binning_dict,
+            binning_dict=cast("dict[str | int, list[str | int]]", self.binning_dict),
             return_object=self.return_object,
             return_boundaries=self.return_boundaries,
             precision=self.precision,
@@ -97,7 +99,7 @@ if __name__ == "__main__":
 
     bins = {"age": [0, 25, 40, 60, np.inf], "income": [0, 40_000, 80_000, np.inf]}
 
-    enc = ArbitraryDiscretiser(binning_dict=bins)
+    enc = ArbitraryDiscretiser(binning_dict=cast("dict[str | int, list[str | int]]", bins))
     print("=== ArbitraryDiscretiser (replace) ===")
     print(enc.fit_transform(df).head())
 

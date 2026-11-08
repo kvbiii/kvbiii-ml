@@ -1,3 +1,5 @@
+from typing import cast
+
 import pandas as pd
 from feature_engine.outliers import Winsorizer
 
@@ -42,7 +44,7 @@ class WinsorizerWithOriginal(_WithOriginalBase):
             Winsorizer: Unfitted Winsorizer instance.
         """
         return Winsorizer(
-            variables=self.variables,
+            variables=cast("list[str | int] | None", self.variables),
             capping_method=self.capping_method,
             tail=self.tail,
             fold=self.fold,

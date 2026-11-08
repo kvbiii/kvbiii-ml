@@ -1,3 +1,5 @@
+from typing import cast
+
 import pandas as pd
 from feature_engine.transformation import BoxCoxTransformer
 
@@ -28,7 +30,7 @@ class BoxCoxTransformerWithOriginal(_WithOriginalBase):
         Returns:
             BoxCoxTransformer: Unfitted instance.
         """
-        return BoxCoxTransformer(variables=self.variables)
+        return BoxCoxTransformer(variables=cast("list[str | int] | None", self.variables))
 
     def _fit_inner(self, inner: BoxCoxTransformer, X: pd.DataFrame, y: object) -> BoxCoxTransformer:
         """Fit the transformer on X (estimates lambda per variable).

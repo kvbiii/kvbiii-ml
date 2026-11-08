@@ -1,3 +1,5 @@
+from typing import cast
+
 import pandas as pd
 from feature_engine.transformation import ArcsinTransformer
 
@@ -28,7 +30,7 @@ class ArcsinTransformerWithOriginal(_WithOriginalBase):
         Returns:
             ArcsinTransformer: Unfitted instance.
         """
-        return ArcsinTransformer(variables=self.variables)
+        return ArcsinTransformer(variables=cast("list[str | int] | None", self.variables))
 
     def _fit_inner(self, inner: ArcsinTransformer, X: pd.DataFrame, y: object) -> ArcsinTransformer:
         """Fit the transformer on X.
