@@ -1,6 +1,7 @@
 import abc
 import contextlib
 import warnings
+from collections.abc import Generator
 from typing import Any
 
 import numpy as np
@@ -64,7 +65,7 @@ class _WithOriginalBase(BaseEstimator, TransformerMixin, abc.ABC):
     _suppress_warnings: bool = False
 
     @abc.abstractmethod
-    def _build_inner(self) -> Any:
+    def _build_inner(self) -> Any:  # noqa: ANN401
         """Return a fresh, unfitted inner transformer.
 
         Returns:
@@ -72,20 +73,20 @@ class _WithOriginalBase(BaseEstimator, TransformerMixin, abc.ABC):
         """
 
     @abc.abstractmethod
-    def _fit_inner(self, inner: Any, X: pd.DataFrame, y: Any) -> Any:
+    def _fit_inner(self, inner: Any, X: pd.DataFrame, y: object) -> Any:  # noqa: ANN401
         """Fit the inner transformer on X (and optionally y).
 
         Args:
             inner (Any): Unfitted inner transformer from _build_inner.
             X (pd.DataFrame): Training features.
-            y (Any): Target from fit(), passed to inner.fit() for supervised transformers.
+            y (object): Target from fit(), passed to inner.fit() for supervised transformers.
 
         Returns:
             Any: Fitted inner transformer.
         """
 
     @abc.abstractmethod
-    def _transform_inner(self, inner: Any, X: pd.DataFrame) -> pd.DataFrame:
+    def _transform_inner(self, inner: Any, X: pd.DataFrame) -> pd.DataFrame:  # noqa: ANN401
         """Apply the fitted inner transformer to X.
 
         Args:
@@ -96,12 +97,12 @@ class _WithOriginalBase(BaseEstimator, TransformerMixin, abc.ABC):
             pd.DataFrame: Transformed features.
         """
 
-    def fit(self, X: pd.DataFrame, y: Any = None) -> "_WithOriginalBase":
+    def fit(self, X: pd.DataFrame, y: object = None) -> "_WithOriginalBase":
         """Fit the inner transformer on X.
 
         Args:
             X (pd.DataFrame): Training features.
-            y (Any, optional): Target forwarded to supervised inner transformers. Defaults to None.
+            y (object): Target forwarded to supervised inner transformers. Defaults to None.
 
         Returns:
             _WithOriginalBase: Fitted instance (self).
@@ -145,7 +146,7 @@ class _WithOriginalBase(BaseEstimator, TransformerMixin, abc.ABC):
         return {f"{var}_{self._suffix}": [var] for var in self.variables_}
 
     @contextlib.contextmanager
-    def _maybe_suppress_warnings(self):
+    def _maybe_suppress_warnings(self) -> Generator[None, None, None]:
         """Context manager that activates warning suppression when _suppress_warnings is True."""
         if self._suppress_warnings:
             with self._suppress_fe_datetime_warnings():
@@ -155,7 +156,7 @@ class _WithOriginalBase(BaseEstimator, TransformerMixin, abc.ABC):
 
     @staticmethod
     @contextlib.contextmanager
-    def _suppress_fe_datetime_warnings():
+    def _suppress_fe_datetime_warnings() -> Generator[None, None, None]:
         """Suppress the feature_engine UserWarning about datetime format inference.
 
         The warning fires in feature_engine/variable_handling/_variable_type_checks.py
@@ -205,7 +206,7 @@ class _WithOriginalSubsetBase(BaseEstimator, TransformerMixin, abc.ABC):
     _suppress_warnings: bool = False
 
     @abc.abstractmethod
-    def _build_inner(self) -> Any:
+    def _build_inner(self) -> Any:  # noqa: ANN401
         """Return a fresh, unfitted inner transformer.
 
         Returns:
@@ -223,12 +224,12 @@ class _WithOriginalSubsetBase(BaseEstimator, TransformerMixin, abc.ABC):
             list[str]: Column names to fit/transform.
         """
 
-    def fit(self, X: pd.DataFrame, y: Any = None) -> "_WithOriginalSubsetBase":
+    def fit(self, X: pd.DataFrame, y: object = None) -> "_WithOriginalSubsetBase":
         """Resolve the target variables and fit the inner transformer on that subset.
 
         Args:
             X (pd.DataFrame): Training features.
-            y (Any, optional): Target forwarded to supervised inner transformers. Defaults to None.
+            y (object): Target forwarded to supervised inner transformers. Defaults to None.
 
         Returns:
             _WithOriginalSubsetBase: Fitted instance (self).
@@ -305,7 +306,7 @@ class _WithOriginalSubsetBase(BaseEstimator, TransformerMixin, abc.ABC):
         return self._default_variables(X)
 
     @contextlib.contextmanager
-    def _maybe_suppress_warnings(self):
+    def _maybe_suppress_warnings(self) -> Generator[None, None, None]:
         """Context manager that activates warning suppression when _suppress_warnings is True."""
         if self._suppress_warnings:
             with self._suppress_kbins_benign_warnings():
@@ -315,7 +316,7 @@ class _WithOriginalSubsetBase(BaseEstimator, TransformerMixin, abc.ABC):
 
     @staticmethod
     @contextlib.contextmanager
-    def _suppress_kbins_benign_warnings():
+    def _suppress_kbins_benign_warnings() -> Generator[None, None, None]:
         """Suppress KBinsDiscretizer's UserWarnings for its own benign fallbacks.
 
         Both fire in sklearn/preprocessing/_discretization.py and are harmless -

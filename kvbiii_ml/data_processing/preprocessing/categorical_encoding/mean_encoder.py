@@ -68,7 +68,7 @@ class MeanEncoderWithOriginal(_WithOriginalBase):
             smoothing=self.smoothing,
         )
 
-    def _fit_inner(self, inner: MeanEncoder, X: pd.DataFrame, y: Any) -> MeanEncoder:
+    def _fit_inner(self, inner: MeanEncoder, X: pd.DataFrame, y: Any) -> MeanEncoder:  # noqa: ANN401
         """Fit the encoder on X and y.
 
         Args:

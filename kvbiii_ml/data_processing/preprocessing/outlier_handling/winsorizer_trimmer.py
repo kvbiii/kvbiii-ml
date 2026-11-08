@@ -1,5 +1,3 @@
-from typing import Any
-
 import pandas as pd
 from feature_engine.outliers import Winsorizer
 
@@ -51,13 +49,13 @@ class WinsorizerWithOriginal(_WithOriginalBase):
             missing_values="ignore",
         )
 
-    def _fit_inner(self, inner: Winsorizer, X: pd.DataFrame, y: Any) -> Winsorizer:
+    def _fit_inner(self, inner: Winsorizer, X: pd.DataFrame, y: object) -> Winsorizer:
         """Fit the Winsorizer on X.
 
         Args:
             inner (Winsorizer): Unfitted Winsorizer.
             X (pd.DataFrame): Training features.
-            y (Any): Unused; accepted for API consistency.
+            y (object): Unused; accepted for API consistency.
 
         Returns:
             Winsorizer: Fitted Winsorizer.

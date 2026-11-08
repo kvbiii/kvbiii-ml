@@ -1,4 +1,4 @@
-from typing import Any, Literal
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -51,12 +51,12 @@ class _NaNIgnoringKBinsDiscretizer:
         self.subsample = subsample
         self.random_state = random_state
 
-    def fit(self, X: pd.DataFrame, _y: Any = None) -> "_NaNIgnoringKBinsDiscretizer":
+    def fit(self, X: pd.DataFrame, _y: object = None) -> "_NaNIgnoringKBinsDiscretizer":
         """Fit one KBinsDiscretizer per column, using only that column's non-null rows.
 
         Args:
             X (pd.DataFrame): Training features, one column per variable to discretise.
-            _y (Any, optional): Unused; accepted for API consistency. Defaults to None.
+            _y (object, optional): Unused; accepted for API consistency. Defaults to None.
 
         Columns with no non-null values are fitted to ``None`` instead of raising,
         so their derived column is entirely NaN on transform.

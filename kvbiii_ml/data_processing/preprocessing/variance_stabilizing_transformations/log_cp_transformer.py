@@ -1,5 +1,3 @@
-from typing import Any
-
 import pandas as pd
 from feature_engine.transformation import LogCpTransformer
 
@@ -42,13 +40,13 @@ class LogCpTransformerWithOriginal(_WithOriginalBase):
         """
         return LogCpTransformer(variables=self.variables, base=self.base, C=self.C)
 
-    def _fit_inner(self, inner: LogCpTransformer, X: pd.DataFrame, y: Any) -> LogCpTransformer:
+    def _fit_inner(self, inner: LogCpTransformer, X: pd.DataFrame, y: object) -> LogCpTransformer:
         """Fit the transformer on X (learns C per variable if C='auto').
 
         Args:
             inner (LogCpTransformer): Unfitted transformer.
             X (pd.DataFrame): Training features.
-            y (Any): Unused; accepted for API consistency.
+            y (object): Unused; accepted for API consistency.
 
         Returns:
             LogCpTransformer: Fitted transformer.

@@ -1,5 +1,3 @@
-from typing import Any
-
 import pandas as pd
 from feature_engine.discretisation import EqualFrequencyDiscretiser
 
@@ -63,14 +61,14 @@ class EqualFrequencyDiscretiserWithOriginal(_WithOriginalBase):
         )
 
     def _fit_inner(
-        self, inner: EqualFrequencyDiscretiser, X: pd.DataFrame, y: Any
+        self, inner: EqualFrequencyDiscretiser, X: pd.DataFrame, y: object
     ) -> EqualFrequencyDiscretiser:
         """Fit the discretiser on X.
 
         Args:
             inner (EqualFrequencyDiscretiser): Unfitted discretiser.
             X (pd.DataFrame): Training features.
-            y (Any): Unused; accepted for API consistency.
+            y (object): Unused; accepted for API consistency.
 
         Returns:
             EqualFrequencyDiscretiser: Fitted discretiser.

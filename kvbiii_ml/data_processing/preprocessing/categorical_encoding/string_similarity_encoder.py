@@ -1,5 +1,3 @@
-from typing import Any
-
 import pandas as pd
 from feature_engine.encoding import StringSimilarityEncoder
 
@@ -62,14 +60,14 @@ class StringSimilarityEncoderWithOriginal(_WithOriginalBase):
         )
 
     def _fit_inner(
-        self, inner: StringSimilarityEncoder, X: pd.DataFrame, y: Any
+        self, inner: StringSimilarityEncoder, X: pd.DataFrame, y: object
     ) -> StringSimilarityEncoder:
         """Fit the encoder on X.
 
         Args:
             inner (StringSimilarityEncoder): Unfitted encoder.
             X (pd.DataFrame): Training features.
-            y (Any): Unused; accepted for API consistency.
+            y (object): Unused; accepted for API consistency.
 
         Returns:
             StringSimilarityEncoder: Fitted encoder.

@@ -1,5 +1,3 @@
-from typing import Any
-
 import pandas as pd
 from feature_engine.discretisation import ArbitraryDiscretiser
 
@@ -55,14 +53,14 @@ class ArbitraryDiscretiserWithOriginal(_WithOriginalBase):
         )
 
     def _fit_inner(
-        self, inner: ArbitraryDiscretiser, X: pd.DataFrame, y: Any
+        self, inner: ArbitraryDiscretiser, X: pd.DataFrame, y: object
     ) -> ArbitraryDiscretiser:
         """Fit the discretiser on X (stores the binning dict internally).
 
         Args:
             inner (ArbitraryDiscretiser): Unfitted discretiser.
             X (pd.DataFrame): Training features.
-            y (Any): Unused; accepted for API consistency.
+            y (object): Unused; accepted for API consistency.
 
         Returns:
             ArbitraryDiscretiser: Fitted discretiser.

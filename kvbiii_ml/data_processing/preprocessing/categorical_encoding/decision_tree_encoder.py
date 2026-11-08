@@ -80,7 +80,10 @@ class DecisionTreeEncoderWithOriginal(_WithOriginalBase):
         )
 
     def _fit_inner(
-        self, inner: DecisionTreeEncoder, X: pd.DataFrame, y: Any
+        self,
+        inner: DecisionTreeEncoder,
+        X: pd.DataFrame,
+        y: Any,  # noqa: ANN401
     ) -> DecisionTreeEncoder:
         """Fit the encoder on X and y.
 

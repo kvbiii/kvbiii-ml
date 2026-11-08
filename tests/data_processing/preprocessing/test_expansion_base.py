@@ -17,7 +17,7 @@ from kvbiii_ml.data_processing.preprocessing.discretisation.kbins_discretiser im
 from kvbiii_ml.data_processing.preprocessing.outlier_handling.outlier_trimmer import (
     OutlierTrimmerWithOriginal,
 )
-from kvbiii_ml.data_processing.preprocessing.variance_stabilizing_transformations.log_transformer import (
+from kvbiii_ml.data_processing.preprocessing.variance_stabilizing_transformations.log_transformer import (  # noqa: E501
     LogTransformerWithOriginal,
 )
 

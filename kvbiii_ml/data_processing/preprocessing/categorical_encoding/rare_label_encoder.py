@@ -1,5 +1,3 @@
-from typing import Any
-
 import pandas as pd
 from feature_engine.encoding import RareLabelEncoder
 
@@ -63,13 +61,13 @@ class RareLabelEncoderWithOriginal(_WithOriginalBase):
             ignore_format=self.ignore_format,
         )
 
-    def _fit_inner(self, inner: RareLabelEncoder, X: pd.DataFrame, y: Any) -> RareLabelEncoder:
+    def _fit_inner(self, inner: RareLabelEncoder, X: pd.DataFrame, y: object) -> RareLabelEncoder:
         """Fit the encoder on X.
 
         Args:
             inner (RareLabelEncoder): Unfitted encoder.
             X (pd.DataFrame): Training features.
-            y (Any): Unused; accepted for API consistency.
+            y (object): Unused; accepted for API consistency.
 
         Returns:
             RareLabelEncoder: Fitted encoder.

@@ -1,5 +1,3 @@
-from typing import Any
-
 import pandas as pd
 from feature_engine.outliers import OutlierTrimmer
 
@@ -54,13 +52,13 @@ class OutlierTrimmerWithOriginal(_WithOriginalBase):
             missing_values=self.missing_values,
         )
 
-    def _fit_inner(self, inner: OutlierTrimmer, X: pd.DataFrame, y: Any) -> OutlierTrimmer:
+    def _fit_inner(self, inner: OutlierTrimmer, X: pd.DataFrame, y: object) -> OutlierTrimmer:
         """Fit the trimmer on X.
 
         Args:
             inner (OutlierTrimmer): Unfitted trimmer.
             X (pd.DataFrame): Training features.
-            y (Any): Unused; accepted for API consistency.
+            y (object): Unused; accepted for API consistency.
 
         Returns:
             OutlierTrimmer: Fitted trimmer.

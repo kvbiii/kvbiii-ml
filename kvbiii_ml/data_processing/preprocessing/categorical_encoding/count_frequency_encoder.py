@@ -66,7 +66,10 @@ class CountFrequencyEncoderWithOriginal(_WithOriginalBase):
         )
 
     def _fit_inner(
-        self, inner: CountFrequencyEncoder, X: pd.DataFrame, y: Any
+        self,
+        inner: CountFrequencyEncoder,
+        X: pd.DataFrame,
+        y: Any,  # noqa: ANN401
     ) -> CountFrequencyEncoder:
         """Fit the encoder on X.
 

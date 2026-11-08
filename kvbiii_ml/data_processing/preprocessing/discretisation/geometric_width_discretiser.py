@@ -1,5 +1,3 @@
-from typing import Any
-
 import pandas as pd
 from feature_engine.discretisation import GeometricWidthDiscretiser
 
@@ -55,14 +53,14 @@ class GeometricWidthDiscretiserWithOriginal(_WithOriginalBase):
         )
 
     def _fit_inner(
-        self, inner: GeometricWidthDiscretiser, X: pd.DataFrame, y: Any
+        self, inner: GeometricWidthDiscretiser, X: pd.DataFrame, y: object
     ) -> GeometricWidthDiscretiser:
         """Fit the discretiser on X.
 
         Args:
             inner (GeometricWidthDiscretiser): Unfitted discretiser.
             X (pd.DataFrame): Training features.
-            y (Any): Unused; accepted for API consistency.
+            y (object): Unused; accepted for API consistency.
 
         Returns:
             GeometricWidthDiscretiser: Fitted discretiser.

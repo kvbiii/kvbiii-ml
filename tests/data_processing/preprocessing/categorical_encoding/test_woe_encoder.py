@@ -67,7 +67,7 @@ def test_woeencoderwithoriginal_fit_raises_valueerror_when_category_missing_a_cl
     X = pd.DataFrame({"city": ["Warsaw", "Warsaw", "Warsaw", "Krakow", "Krakow", "Krakow"]})
     y = pd.Series([1, 1, 1, 0, 0, 0], name="target")
     encoder = WoEEncoderWithOriginal(variables=["city"])
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="WoE calculation"):
         encoder.fit(X, y)
 
 

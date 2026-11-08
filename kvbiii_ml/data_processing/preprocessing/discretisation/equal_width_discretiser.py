@@ -1,5 +1,3 @@
-from typing import Any
-
 import pandas as pd
 from feature_engine.discretisation import EqualWidthDiscretiser
 
@@ -63,14 +61,14 @@ class EqualWidthDiscretiserWithOriginal(_WithOriginalBase):
         )
 
     def _fit_inner(
-        self, inner: EqualWidthDiscretiser, X: pd.DataFrame, y: Any
+        self, inner: EqualWidthDiscretiser, X: pd.DataFrame, y: object
     ) -> EqualWidthDiscretiser:
         """Fit the discretiser on X.
 
         Args:
             inner (EqualWidthDiscretiser): Unfitted discretiser.
             X (pd.DataFrame): Training features.
-            y (Any): Unused; accepted for API consistency.
+            y (object): Unused; accepted for API consistency.
 
         Returns:
             EqualWidthDiscretiser: Fitted discretiser.

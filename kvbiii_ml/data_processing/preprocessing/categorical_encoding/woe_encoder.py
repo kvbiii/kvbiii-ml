@@ -54,7 +54,7 @@ class WoEEncoderWithOriginal(_WithOriginalBase):
             fill_value=self.fill_value,
         )
 
-    def _fit_inner(self, inner: WoEEncoder, X: pd.DataFrame, y: Any) -> WoEEncoder:
+    def _fit_inner(self, inner: WoEEncoder, X: pd.DataFrame, y: Any) -> WoEEncoder:  # noqa: ANN401
         """Fit the encoder on X and y.
 
         Args:
