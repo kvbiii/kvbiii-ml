@@ -20,4 +20,4 @@ Every public function, method, and class needs a Google-style docstring (Args/Re
 
 ## Scope
 
-Do not flag formatting (quote style, line length, trailing commas) or naming conventions — those are already enforced by `black` and `pylint` in CI. Focus review comments on correctness, the rules above, and algorithmic complexity (e.g., O(n²) patterns where a set/dict lookup would suffice).
+Do not flag formatting (quote style, line length, trailing commas) or naming conventions — those are already enforced by `ruff` in CI. Focus review comments on correctness, the rules above, and algorithmic complexity (e.g., O(n²) patterns where a set/dict lookup would suffice).
