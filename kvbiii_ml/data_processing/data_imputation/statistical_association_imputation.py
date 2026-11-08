@@ -70,12 +70,12 @@ class StatisticalAssociationImputer:
             print(f"Preparing imputation statistics for all features: {all_features}")
         self.impute_stats = {}
         for feature in all_features:
-            self.rank_metrics(df, feature)
+            rankings = self.rank_metrics(df, feature)
             selected_cols = self.select_grouping_columns()
             self.impute_stats[feature] = {
                 "stats": self.calculate_stats(df, feature, selected_cols),
                 "selected_cols": selected_cols.copy(),
-                "rankings": self.rankings.copy(),
+                "rankings": rankings.copy(),
             }
 
         return self
