@@ -94,9 +94,7 @@ def predict_with_offset(
     elif class_name.startswith(CATBOOST_PREFIX):
         raw = estimator.predict(X, prediction_type="RawFormulaVal") + offset
     else:
-        raise TypeError(
-            f"offset_column supports LightGBM, XGBoost and CatBoost, got {class_name}."
-        )
+        raise TypeError(f"offset_column supports LightGBM, XGBoost and CatBoost, got {class_name}.")
     raw = np.asarray(raw, dtype=float)
     if raw.ndim > 1:
         raise NotImplementedError("offset_column is not supported for multiclass.")
@@ -230,9 +228,7 @@ class BaseTrainer:
         return estimator
 
     @staticmethod
-    def _lgbm_cuda_categorical_override(
-        estimator: BaseEstimator, sig: Signature
-    ) -> dict:
+    def _lgbm_cuda_categorical_override(estimator: BaseEstimator, sig: Signature) -> dict:
         """Disable LightGBM's categorical auto-detection when training on CUDA.
 
         LightGBM's CUDA tree learner has a reproducible illegal-memory-access crash
@@ -292,16 +288,13 @@ class BaseTrainer:
         class_name = type(estimator).__name__
         log_period = BaseTrainer._resolve_verbose_period(verbose)
         if LGBM_PREFIX in class_name:
-
             fit_kwargs: dict = {"callbacks": [log_evaluation(log_period)]}
             if "eval_X" in signature(estimator.fit).parameters:
                 fit_kwargs["eval_X"] = X_valid
                 fit_kwargs["eval_y"] = y_valid
             else:
                 fit_kwargs["eval_set"] = [(X_valid, y_valid)]
-            cat_cols = X_valid.select_dtypes(
-                include=["category", "object"]
-            ).columns.tolist()
+            cat_cols = X_valid.select_dtypes(include=["category", "object"]).columns.tolist()
             if cat_cols:
                 fit_kwargs["categorical_feature"] = cat_cols
             return fit_kwargs
@@ -332,9 +325,7 @@ class BaseTrainer:
             TypeError: If the estimator is not a LightGBM, XGBoost or CatBoost model.
         """
         class_name = type(estimator).__name__
-        eval_offsets = (
-            (offset_train, offset_valid) if eval_on_train else (offset_valid,)
-        )
+        eval_offsets = (offset_train, offset_valid) if eval_on_train else (offset_valid,)
         has_eval = "eval_set" in fit_params or "eval_X" in fit_params
         if class_name.startswith(LGBM_PREFIX):
             fit_params["init_score"] = offset_train
@@ -525,13 +516,9 @@ class BaseTrainer:
         ):
             fit_params["eval_X"] = (X_train, X_valid) if eval_on_train else (X_valid,)
             fit_params["eval_y"] = (y_train, y_valid) if eval_on_train else (y_valid,)
-        elif (
-            "eval_set" in sig.parameters and X_valid is not None and y_valid is not None
-        ):
+        elif "eval_set" in sig.parameters and X_valid is not None and y_valid is not None:
             eval_set = (
-                [(X_train, y_train), (X_valid, y_valid)]
-                if eval_on_train
-                else [(X_valid, y_valid)]
+                [(X_train, y_train), (X_valid, y_valid)] if eval_on_train else [(X_valid, y_valid)]
             )
 
             if (
@@ -557,9 +544,7 @@ class BaseTrainer:
             fit_params["sample_weight"] = sample_weight
 
         if "categorical_feature" not in fit_params:
-            fit_params.update(
-                BaseTrainer._lgbm_cuda_categorical_override(estimator, sig)
-            )
+            fit_params.update(BaseTrainer._lgbm_cuda_categorical_override(estimator, sig))
         if offset_train is not None:
             BaseTrainer._add_offset_fit_params(
                 estimator, fit_params, offset_train, offset_valid, eval_on_train
@@ -621,9 +606,7 @@ class BaseTrainer:
             y_valid_pred = BaseTrainer.predict_proba(fitted_estimator, X_valid)
             y_test_pred = BaseTrainer.predict_proba(fitted_estimator, X_test)
         else:
-            raise ValueError(
-                f"Unknown metric type '{metric_type}'. Must be 'preds' or 'probs'."
-            )
+            raise ValueError(f"Unknown metric type '{metric_type}'. Must be 'preds' or 'probs'.")
 
         return y_train_pred, y_valid_pred, y_test_pred, fitted_estimator
 
@@ -668,9 +651,7 @@ class BaseTrainer:
         return estimator.predict_proba(X)
 
     @staticmethod
-    def _set_categorical_params(
-        estimator: BaseEstimator, X_train: pd.DataFrame
-    ) -> BaseEstimator:
+    def _set_categorical_params(estimator: BaseEstimator, X_train: pd.DataFrame) -> BaseEstimator:
         """Assign categorical feature parameters for supported estimators.
 
         For CatBoost: only auto-detects from X_train dtypes when ``cat_features``

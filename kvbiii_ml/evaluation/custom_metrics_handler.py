@@ -76,9 +76,7 @@ class CustomMetricsHandler:
         metric_direction = custom_metric["direction"]
         kwargs = custom_metric.get("kwargs", {})
 
-        def wrapped_metric(
-            y_true: pd.Series | np.ndarray, y_pred: pd.Series | np.ndarray
-        ) -> float:
+        def wrapped_metric(y_true: pd.Series | np.ndarray, y_pred: pd.Series | np.ndarray) -> float:
             """Wrapped metric function that injects parameters."""
             return metric_function(y_true, y_pred, **kwargs)
 

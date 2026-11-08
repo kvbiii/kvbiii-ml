@@ -106,9 +106,7 @@ def test_modelimportancerfe_compute_removal_schedule_returns_empty_for_zero_step
         raise AssertionError()
 
 
-def _build_history(
-    metric_values: list[float], feature_names: list[str | None]
-) -> pd.DataFrame:
+def _build_history(metric_values: list[float], feature_names: list[str | None]) -> pd.DataFrame:
     """Builds a hand-crafted step-wise history DataFrame for weighted-score tests.
 
     Args:
@@ -146,9 +144,7 @@ def test_modelimportancerfe_select_features_weighted_score_operates_per_removed_
     selector = ModelImportanceRecursiveFeatureElimination(
         estimator=_build_estimator(), cross_validator=_build_cv(), steps=2, alpha=1.0
     )
-    history = _build_history(
-        metric_values=[0.70, 0.72, 0.75], feature_names=[None, "f_a", "f_b"]
-    )
+    history = _build_history(metric_values=[0.70, 0.72, 0.75], feature_names=[None, "f_a", "f_b"])
 
     selected, best_metric = selector.select_features_weighted_score(history, alpha=1.0)
 
@@ -171,9 +167,7 @@ def test_modelimportancerfe_select_features_weighted_score_direction_aware_for_m
         steps=2,
         alpha=1.0,
     )
-    history = _build_history(
-        metric_values=[10.0, 8.0, 5.0], feature_names=[None, "f_a", "f_b"]
-    )
+    history = _build_history(metric_values=[10.0, 8.0, 5.0], feature_names=[None, "f_a", "f_b"])
 
     selected, best_metric = selector.select_features_weighted_score(history, alpha=1.0)
 
@@ -197,9 +191,7 @@ def test_modelimportancerfe_select_features_weighted_score_includes_protected_fe
         alpha=1.0,
         protected_features=["f_protected"],
     )
-    history = _build_history(
-        metric_values=[0.70, 0.72, 0.75], feature_names=[None, "f_a", "f_b"]
-    )
+    history = _build_history(metric_values=[0.70, 0.72, 0.75], feature_names=[None, "f_a", "f_b"])
 
     selected, _ = selector.select_features_weighted_score(history, alpha=1.0)
 
@@ -307,9 +299,7 @@ def test_modelimportancerfe_run_with_pipeline_expansion_discovers_derived_column
 
     if not any("_PREPROCESS_EQ_WIDTH" in f for f in selector.all_processed_features):
         raise AssertionError()
-    if not set(result["selected_features"]).issubset(
-        set(selector.all_processed_features)
-    ):
+    if not set(result["selected_features"]).issubset(set(selector.all_processed_features)):
         raise AssertionError()
 
 
@@ -331,14 +321,10 @@ def test_modelimportancerfe_run_with_string_similarity_encoder_survives_raw_colu
     """
     products = ["apple", "orange", "grape", "melon"] * 10
     rng = np.random.default_rng(17)
-    X = pd.DataFrame(
-        {"product": pd.Categorical(products), "num": rng.normal(size=len(products))}
-    )
+    X = pd.DataFrame({"product": pd.Categorical(products), "num": rng.normal(size=len(products))})
     y = pd.Series((X["num"] > 0).astype(int), name="target")
 
-    pipeline = Pipeline(
-        [("sse", StringSimilarityEncoderWithOriginal(variables=["product"]))]
-    )
+    pipeline = Pipeline([("sse", StringSimilarityEncoderWithOriginal(variables=["product"]))])
     estimator = LGBMClassifier(n_estimators=5, max_depth=2, verbose=-1, random_state=17)
     selector = ModelImportanceRecursiveFeatureElimination(
         estimator=estimator,

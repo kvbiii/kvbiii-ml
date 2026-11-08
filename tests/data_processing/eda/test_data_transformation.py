@@ -26,9 +26,7 @@ def sample_mixed_dataframe(test_settings):
             "float64_col": np.random.randn(n_samples) * 1000,
             "small_int_col": np.random.randint(0, 10, n_samples),
             "small_float_col": np.random.randn(n_samples) * 0.1,
-            "categorical_col": pd.Categorical(
-                np.random.choice(["A", "B", "C", "D"], n_samples)
-            ),
+            "categorical_col": pd.Categorical(np.random.choice(["A", "B", "C", "D"], n_samples)),
             "object_col": np.random.choice(["X", "Y", "Z"], n_samples),
             "date_col": pd.date_range("2020-01-01", periods=n_samples, freq="D"),
         }
@@ -136,9 +134,7 @@ def test_optimize_memory_converts_object_to_categorical(sample_mixed_dataframe):
         raise AssertionError()
 
     # Values should be preserved, plus the default "Unknown" fill category
-    if set(optimized_df["object_col"].cat.categories) != set(
-        ["X", "Y", "Z", "Unknown"]
-    ):
+    if set(optimized_df["object_col"].cat.categories) != set(["X", "Y", "Z", "Unknown"]):
         raise AssertionError()
 
     # Check all values match
@@ -204,9 +200,7 @@ def test_encode_target_feature_returns_correct_id2label_mapping():
     """
     df = pd.DataFrame({"target": ["yes", "no", "yes", "no", "maybe"]})
 
-    encoded_df, id2label = DataTransformer.encode_target_feature(
-        df, "target", verbose=False
-    )
+    encoded_df, id2label = DataTransformer.encode_target_feature(df, "target", verbose=False)
 
     if id2label != {0: "maybe", 1: "no", 2: "yes"}:
         raise AssertionError()
@@ -230,9 +224,7 @@ def test_encode_target_feature_replaces_target_with_integer_codes():
         }
     )
 
-    encoded_df, id2label = DataTransformer.encode_target_feature(
-        df, "target", verbose=False
-    )
+    encoded_df, id2label = DataTransformer.encode_target_feature(df, "target", verbose=False)
 
     if not pd.api.types.is_integer_dtype(encoded_df["target"]):
         raise AssertionError()

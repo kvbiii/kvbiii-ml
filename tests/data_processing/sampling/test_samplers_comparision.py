@@ -73,9 +73,7 @@ class TestFoldwiseSampler:
             raise AssertionError()
 
     @patch("kvbiii_ml.data_processing.sampling.samplers_comparision.SMOTENC")
-    def test_foldwisesampler_fit_smote_strategy(
-        self, mock_smotenc, binary_classification_data
-    ):
+    def test_foldwisesampler_fit_smote_strategy(self, mock_smotenc, binary_classification_data):
         """Tests fit method with 'smote' strategy.
 
         Args:
@@ -96,9 +94,7 @@ class TestFoldwiseSampler:
             raise AssertionError()
 
     @patch("kvbiii_ml.data_processing.sampling.samplers_comparision.RandomOverSampler")
-    def test_foldwisesampler_fit_random_over_strategy(
-        self, mock_ros, binary_classification_data
-    ):
+    def test_foldwisesampler_fit_random_over_strategy(self, mock_ros, binary_classification_data):
         """Tests fit method with 'random_over' strategy.
 
         Args:
@@ -119,9 +115,7 @@ class TestFoldwiseSampler:
             raise AssertionError()
 
     @patch("kvbiii_ml.data_processing.sampling.samplers_comparision.RandomUnderSampler")
-    def test_foldwisesampler_fit_random_under_strategy(
-        self, mock_rus, binary_classification_data
-    ):
+    def test_foldwisesampler_fit_random_under_strategy(self, mock_rus, binary_classification_data):
         """Tests fit method with 'random_under' strategy.
 
         Args:
@@ -141,9 +135,7 @@ class TestFoldwiseSampler:
         if sampler.sampler != mock_rus.return_value:
             raise AssertionError()
 
-    def test_foldwisesampler_fit_unknown_strategy_raises_error(
-        self, binary_classification_data
-    ):
+    def test_foldwisesampler_fit_unknown_strategy_raises_error(self, binary_classification_data):
         """Tests fit method with unknown strategy raises ValueError.
 
         Args:
@@ -155,14 +147,10 @@ class TestFoldwiseSampler:
         X, y = binary_classification_data
         sampler = FoldwiseSampler(strategy="unknown_strategy")
 
-        with pytest.raises(
-            ValueError, match="Unknown sampling strategy: unknown_strategy"
-        ):
+        with pytest.raises(ValueError, match="Unknown sampling strategy: unknown_strategy"):
             sampler.fit(X, y)
 
-    def test_foldwisesampler_fit_resample_none_strategy(
-        self, binary_classification_data
-    ):
+    def test_foldwisesampler_fit_resample_none_strategy(self, binary_classification_data):
         """Tests fit_resample method with 'none' strategy returns original data.
 
         Args:
@@ -180,9 +168,7 @@ class TestFoldwiseSampler:
         pd.testing.assert_frame_equal(resampled_x, X)
         pd.testing.assert_series_equal(resampled_y, y)
 
-    def test_foldwisesampler_fit_resample_with_mock_sampler(
-        self, binary_classification_data
-    ):
+    def test_foldwisesampler_fit_resample_with_mock_sampler(self, binary_classification_data):
         """Tests fit_resample method with mock sampler.
 
         Args:
@@ -242,9 +228,7 @@ class TestFoldwiseSampler:
         pd.testing.assert_series_equal(result1[1], result2[1])
 
     @patch("kvbiii_ml.data_processing.sampling.samplers_comparision.RandomOverSampler")
-    def test_foldwisesampler_integration_random_over(
-        self, mock_ros, binary_classification_data
-    ):
+    def test_foldwisesampler_integration_random_over(self, mock_ros, binary_classification_data):
         """Tests complete workflow with RandomOverSampler strategy.
 
         Args:
@@ -262,17 +246,13 @@ class TestFoldwiseSampler:
         mock_ros.return_value = mock_instance
         mock_instance.fit_resample.return_value = (X.values, y.values)
 
-        sampler = FoldwiseSampler(
-            strategy="random_over", sampler_params={"random_state": 42}
-        )
+        sampler = FoldwiseSampler(strategy="random_over", sampler_params={"random_state": 42})
         sampler.fit_transform(X, y)
 
         mock_ros.assert_called_once_with(random_state=42)
         mock_instance.fit_resample.assert_called_once_with(X, y)
 
-    def test_foldwisesampler_preserves_dataframe_structure(
-        self, binary_classification_data
-    ):
+    def test_foldwisesampler_preserves_dataframe_structure(self, binary_classification_data):
         """Tests that DataFrame structure is preserved after resampling.
 
         Args:
@@ -297,9 +277,7 @@ class TestFoldwiseSampler:
         if not all(result_x.dtypes == X.dtypes):
             raise AssertionError()
 
-    def test_foldwisesampler_empty_sampler_params_handling(
-        self, binary_classification_data
-    ):
+    def test_foldwisesampler_empty_sampler_params_handling(self, binary_classification_data):
         """Tests handling of empty sampler parameters.
 
         Args:
@@ -319,9 +297,7 @@ class TestFoldwiseSampler:
 
             mock_ros.assert_called_once_with()
 
-    def test_foldwisesampler_strategy_case_sensitivity(
-        self, binary_classification_data
-    ):
+    def test_foldwisesampler_strategy_case_sensitivity(self, binary_classification_data):
         """Tests that strategy parameter is case-sensitive.
 
         Args:

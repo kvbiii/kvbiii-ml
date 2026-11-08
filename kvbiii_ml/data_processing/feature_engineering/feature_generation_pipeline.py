@@ -36,14 +36,11 @@ class FeatureGenerationPipeline:
             final_features (list[str], optional): List of final feature names to retain after processing.
         """
         self.features_names = features_names if features_names is not None else []
-        self.preprocessing_steps = (
-            preprocessing_steps if preprocessing_steps is not None else []
-        )
+        self.preprocessing_steps = preprocessing_steps if preprocessing_steps is not None else []
         self.final_features = final_features
 
-        if (
-            custom_features_generation_before_preprocessing is not None
-            and not callable(custom_features_generation_before_preprocessing)
+        if custom_features_generation_before_preprocessing is not None and not callable(
+            custom_features_generation_before_preprocessing
         ):
             raise ValueError(
                 "custom_features_generation_before_preprocessing must be callable or None."
@@ -76,9 +73,7 @@ class FeatureGenerationPipeline:
         return df
 
     @staticmethod
-    def _coerce_to_dataframe(
-        result: object, step: object, x_before: pd.DataFrame
-    ) -> pd.DataFrame:
+    def _coerce_to_dataframe(result: object, step: object, x_before: pd.DataFrame) -> pd.DataFrame:
         """Coerce a step's transform() output back into a pd.DataFrame.
 
         Plain sklearn transformers (e.g. sklearn.preprocessing.TargetEncoder) return
@@ -144,13 +139,9 @@ class FeatureGenerationPipeline:
                         if cross_new_cols is not None:
                             step.features_names = list(cross_new_cols)
                         else:
-                            step.features_names = [
-                                c for c in X.columns if c not in base_cols
-                            ]
+                            step.features_names = [c for c in X.columns if c not in base_cols]
                     else:
-                        step.features_names = [
-                            c for c in X.columns if c in encodable_cols
-                        ]
+                        step.features_names = [c for c in X.columns if c in encodable_cols]
 
             fit = getattr(step, "fit", None)
             if fit is None:

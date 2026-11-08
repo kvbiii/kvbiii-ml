@@ -82,9 +82,7 @@ class StringSimilarityEncoderWithOriginal(_WithOriginalBase):
         """
         return inner.fit(X)
 
-    def _transform_inner(
-        self, inner: StringSimilarityEncoder, X: pd.DataFrame
-    ) -> pd.DataFrame:
+    def _transform_inner(self, inner: StringSimilarityEncoder, X: pd.DataFrame) -> pd.DataFrame:
         """Apply the fitted encoder to X.
 
         Args:
@@ -183,14 +181,10 @@ if __name__ == "__main__":
     print("=== StringSimilarityEncoder (replace) ===")
     print(enc.fit_transform(df[["product", "brand", "price"]]))
 
-    enc_exp = StringSimilarityEncoderWithOriginal(
-        variables=["product", "brand"], top_categories=3
-    )
+    enc_exp = StringSimilarityEncoderWithOriginal(variables=["product", "brand"], top_categories=3)
     print("\n=== StringSimilarityEncoderWithOriginal (append) ===")
     print(enc_exp.fit_transform(df[["product", "brand", "price"]]))
 
-    pipe = Pipeline(
-        [("str_sim", StringSimilarityEncoderWithOriginal(top_categories=2))]
-    )
+    pipe = Pipeline([("str_sim", StringSimilarityEncoderWithOriginal(top_categories=2))])
     print("\n=== Inside sklearn Pipeline ===")
     print(pipe.fit_transform(df[["product", "brand", "price"]]))

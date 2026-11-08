@@ -62,9 +62,7 @@ class ShapRecursiveFeatureElimination:
         self._cv_cache_key = None
         self._cv_cache_result = None
 
-    def run(
-        self, X: pd.DataFrame, y: pd.Series | np.ndarray
-    ) -> dict[str, list | pd.DataFrame]:
+    def run(self, X: pd.DataFrame, y: pd.Series | np.ndarray) -> dict[str, list | pd.DataFrame]:
         """Run SHAP-RFE and return the selection summary.
 
         Args:
@@ -81,16 +79,12 @@ class ShapRecursiveFeatureElimination:
         current_features = list(X.columns)
         missing_protected = set(self.protected_features) - set(current_features)
         if missing_protected:
-            raise ValueError(
-                f"Protected features not found in dataset: {missing_protected}"
-            )
+            raise ValueError(f"Protected features not found in dataset: {missing_protected}")
 
         summary_df = {
             "selected_features": [],
             "selected_features_names": [],
-            "history": pd.DataFrame(columns=self.history_schema.keys()).astype(
-                self.history_schema
-            ),
+            "history": pd.DataFrame(columns=self.history_schema.keys()).astype(self.history_schema),
         }
 
         avg_base_metric, _ = self._cross_val_base_metric(X, y, current_features)
@@ -113,9 +107,7 @@ class ShapRecursiveFeatureElimination:
             ignore_index=True,
         )
 
-        removable_features = [
-            f for f in current_features if f not in self.protected_features
-        ]
+        removable_features = [f for f in current_features if f not in self.protected_features]
         removal_schedule = self.compute_removal_schedule(len(removable_features))
         if self.verbose:
             print(
@@ -136,9 +128,7 @@ class ShapRecursiveFeatureElimination:
                     f"📊 Average {self.cross_validator.metric_name}: {fold_base_metric:.6f} ± {fold_base_metric_std:.6f}"
                 )
             removable_metrics = {
-                k: v
-                for k, v in avg_metric_feature.items()
-                if k not in self.protected_features
+                k: v for k, v in avg_metric_feature.items() if k not in self.protected_features
             }
             feature_metric_diffs_df = pd.DataFrame(
                 list(removable_metrics.items()), columns=["feature", "metric_change"]
@@ -147,9 +137,7 @@ class ShapRecursiveFeatureElimination:
             feature_metric_diffs_df = feature_metric_diffs_df.sort_values(
                 by="metric_change", ascending=ascending
             )
-            n_actually_removable = min(
-                n_features_to_remove, len(feature_metric_diffs_df)
-            )
+            n_actually_removable = min(n_features_to_remove, len(feature_metric_diffs_df))
             features_to_remove = feature_metric_diffs_df.head(n_actually_removable)[
                 "feature"
             ].tolist()
@@ -168,8 +156,8 @@ class ShapRecursiveFeatureElimination:
                     print("⏹️  Stopping early - only protected features remain")
                 break
 
-        summary_df["selected_features"], metric_selected = (
-            self.select_features_weighted_score(summary_df["history"], self.alpha)
+        summary_df["selected_features"], metric_selected = self.select_features_weighted_score(
+            summary_df["history"], self.alpha
         )
         if self.verbose:
             print(f"\n🎯 Selected features: {summary_df['selected_features']}")
@@ -185,9 +173,7 @@ class ShapRecursiveFeatureElimination:
             n_features_selected = len(summary_df["selected_features"])
             n_removed = n_features_initial - n_features_selected
             pct_removed = 100 * n_removed / n_features_initial
-            print(
-                f"🗑️ Features removed: {n_removed} of {n_features_initial} ({pct_removed:.2f}%)"
-            )
+            print(f"🗑️ Features removed: {n_removed} of {n_features_initial} ({pct_removed:.2f}%)")
         gc.collect()
         return summary_df
 
@@ -202,9 +188,7 @@ class ShapRecursiveFeatureElimination:
         """
         x_converted = X.copy()
         for col in x_converted.select_dtypes(include=["category"]).columns:
-            x_converted[col] = (
-                x_converted[col].cat.codes.astype("object").astype("category")
-            )
+            x_converted[col] = x_converted[col].cat.codes.astype("object").astype("category")
         return x_converted
 
     def _handle_large_dataset(
@@ -250,9 +234,7 @@ class ShapRecursiveFeatureElimination:
         if self._cv_cache_key == key and self._cv_cache_result is not None:
             valid_scores = self._cv_cache_result["valid_scores"]
             return float(np.mean(valid_scores)), float(np.std(valid_scores))
-        _, valid_scores, _ = self.cross_validator.fit(
-            self.estimator, X[current_features], y
-        )
+        _, valid_scores, _ = self.cross_validator.fit(self.estimator, X[current_features], y)
         fitted = getattr(self.cross_validator, "fitted_estimators_", None)
         self._cv_cache_key = key
         self._cv_cache_result = {
@@ -329,9 +311,7 @@ class ShapRecursiveFeatureElimination:
                 getattr(self.cross_validator, "fitted_estimators_", []),
             )
         else:
-            _, valid_scores, _ = self.cross_validator.fit(
-                self.estimator, X[current_features], y
-            )
+            _, valid_scores, _ = self.cross_validator.fit(self.estimator, X[current_features], y)
             fitted_estimators = getattr(self.cross_validator, "fitted_estimators_", [])
             self._cv_cache_key = key
             self._cv_cache_result = {
@@ -370,13 +350,9 @@ class ShapRecursiveFeatureElimination:
         avg_metric_feature = {}
         for feature in current_features:
             if fold_features_metric_monitor[feature]:
-                avg_metric_feature[feature] = float(
-                    np.mean(fold_features_metric_monitor[feature])
-                )
+                avg_metric_feature[feature] = float(np.mean(fold_features_metric_monitor[feature]))
             else:
-                avg_metric_feature[feature] = float(
-                    np.mean(self._cv_cache_result["valid_scores"])
-                )
+                avg_metric_feature[feature] = float(np.mean(self._cv_cache_result["valid_scores"]))
 
         return (
             avg_metric_feature,
@@ -414,9 +390,7 @@ class ShapRecursiveFeatureElimination:
                 )
             else:
                 if self.verbose:
-                    print(
-                        f"⚠️ Unsupported SHAP values dimension: {vals.ndim}. Skipping fold."
-                    )
+                    print(f"⚠️ Unsupported SHAP values dimension: {vals.ndim}. Skipping fold.")
                 return
         finally:
             del vals, base, shap_values
@@ -461,9 +435,7 @@ class ShapRecursiveFeatureElimination:
                     ):
                         final_pred_matrix = (pred_prob_matrix >= 0.5).astype(int)
                     else:
-                        final_pred_matrix = np.argmax(pred_prob_matrix, axis=-1).astype(
-                            int
-                        )
+                        final_pred_matrix = np.argmax(pred_prob_matrix, axis=-1).astype(int)
             else:
                 final_pred_matrix = pred_matrix
             for feat_idx, feature in enumerate(current_features):
@@ -483,9 +455,7 @@ class ShapRecursiveFeatureElimination:
 
         except (FloatingPointError, OverflowError, TypeError, ValueError) as exc:
             if self.verbose:
-                print(
-                    f"⚠️ Vectorized processing failed, falling back to iterative method: {exc}"
-                )
+                print(f"⚠️ Vectorized processing failed, falling back to iterative method: {exc}")
 
         finally:
             if "total" in locals():
@@ -500,9 +470,7 @@ class ShapRecursiveFeatureElimination:
                 del final_pred_matrix
             gc.collect()
 
-    def _process_3d_shap(
-        self, vals, base, y_valid, current_features, fold_features_metric_monitor
-    ):
+    def _process_3d_shap(self, vals, base, y_valid, current_features, fold_features_metric_monitor):
         """Process 3D SHAP values with vectorized operations for efficiency."""
         try:
             total = vals.sum(axis=1)
@@ -514,9 +482,7 @@ class ShapRecursiveFeatureElimination:
                 pred_matrix = base_arr.item() + reduced_vals_matrix
             else:
                 if base_arr.ndim == 1 and reduced_vals_matrix.ndim == 3:
-                    pred_matrix = (
-                        base_arr[:, np.newaxis, np.newaxis] + reduced_vals_matrix
-                    )
+                    pred_matrix = base_arr[:, np.newaxis, np.newaxis] + reduced_vals_matrix
                 else:
                     pred_matrix = base_arr[:, np.newaxis, :] + reduced_vals_matrix
             if self.problem_type == "classification":
@@ -530,9 +496,7 @@ class ShapRecursiveFeatureElimination:
                     final_pred_matrix = pred_prob_matrix
                 else:
                     if pred_prob_matrix.ndim == 3:
-                        final_pred_matrix = np.argmax(pred_prob_matrix, axis=-1).astype(
-                            int
-                        )
+                        final_pred_matrix = np.argmax(pred_prob_matrix, axis=-1).astype(int)
                     else:
                         final_pred_matrix = (pred_prob_matrix >= 0.5).astype(int)
             else:
@@ -563,9 +527,7 @@ class ShapRecursiveFeatureElimination:
                     continue
         except (FloatingPointError, OverflowError, TypeError, ValueError) as exc:
             if self.verbose:
-                print(
-                    f"⚠️ Vectorized 3D processing failed, falling back to iterative method: {exc}"
-                )
+                print(f"⚠️ Vectorized 3D processing failed, falling back to iterative method: {exc}")
             self._process_3d_shap_fallback(
                 vals, base, y_valid, current_features, fold_features_metric_monitor
             )
@@ -614,14 +576,11 @@ class ShapRecursiveFeatureElimination:
                         [
                             {
                                 "step": step_idx,
-                                "n_features_removed": len(X.columns)
-                                - len(current_features)
-                                + 1,
+                                "n_features_removed": len(X.columns) - len(current_features) + 1,
                                 "n_features_remaining": len(current_features) - 1,
                                 "removed_feature_name": feature,
                                 "metric_value": avg_metric_feature[feature],
-                                "metric_change": avg_metric_feature[feature]
-                                - fold_base_metric,
+                                "metric_change": avg_metric_feature[feature] - fold_base_metric,
                             }
                         ]
                     ),
@@ -653,9 +612,7 @@ class ShapRecursiveFeatureElimination:
         df["features_norm"] = 1 - (df["n_features_remaining"] - feat_min) / denom_feat
         df["score"] = alpha * df["metric_norm"] + (1 - alpha) * df["features_norm"]
         best_row = df.loc[df["score"].idxmax()]
-        selected = set(
-            history[history["step"] >= best_row["step"]]["removed_feature_name"]
-        )
+        selected = set(history[history["step"] >= best_row["step"]]["removed_feature_name"])
         selected.update(self.protected_features)
         gc.collect()
         return list(sorted(selected)), best_row["metric_value"]

@@ -24,9 +24,7 @@ def categorical_training_data(test_settings) -> pd.DataFrame:
     return pd.DataFrame(
         {
             "color": pd.Categorical(["red", "blue", "green", "red", "blue"]),
-            "fuel": pd.Categorical(
-                ["petrol", "diesel", "electric", "diesel", "petrol"]
-            ),
+            "fuel": pd.Categorical(["petrol", "diesel", "electric", "diesel", "petrol"]),
             "numeric": [10, 20, 30, 40, 50],
         }
     )

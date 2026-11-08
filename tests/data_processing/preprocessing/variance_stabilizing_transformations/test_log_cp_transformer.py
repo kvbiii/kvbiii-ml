@@ -39,9 +39,7 @@ def test_logcptransformerwithoriginal_transform_matches_log_x_plus_c_formula(
         - Derived column values equal numpy_log(x + C) within tolerance.
     """
     constant_shift = 5.0
-    transformer = LogCpTransformerWithOriginal(
-        variables=["sales"], base=base, C=constant_shift
-    )
+    transformer = LogCpTransformerWithOriginal(variables=["sales"], base=base, C=constant_shift)
     transformer.fit(skewed_with_zero_and_negative_dataframe)
     result = transformer.transform(skewed_with_zero_and_negative_dataframe)
     expected = numpy_log(

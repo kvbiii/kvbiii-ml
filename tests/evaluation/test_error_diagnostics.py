@@ -56,9 +56,7 @@ def test_get_top_regression_under_over_errors_truncates_to_top_n():
     y_true = pd.Series([10.0] * 5, index=range(5))
     y_pred = pd.Series([8.0, 7.0, 6.0, 12.0, 10.0], index=range(5))
 
-    underestimated, overestimated = get_top_regression_under_over_errors(
-        y_true, y_pred, top_n=2
-    )
+    underestimated, overestimated = get_top_regression_under_over_errors(y_true, y_pred, top_n=2)
 
     if len(underestimated) != 2:
         raise AssertionError()
@@ -80,9 +78,7 @@ def test_get_top_regression_under_over_errors_adds_exponentiated_columns_when_lo
     y_true = pd.Series([1.0, 2.0, 3.0])
     y_pred = pd.Series([0.8, 2.5, 2.7])
 
-    underestimated, overestimated = get_top_regression_under_over_errors(
-        y_true, y_pred, log=True
-    )
+    underestimated, overestimated = get_top_regression_under_over_errors(y_true, y_pred, log=True)
 
     expected_cols = {
         "True Value (exp)",
@@ -181,9 +177,7 @@ def test_get_top_classification_errors_stacks_1d_binary_probabilities():
     y_pred_proba_1d = np.array([0.2, 0.9, 0.7, 0.3, 0.4])
     id2label = {0: "neg", 1: "pos"}
 
-    result = get_top_classification_errors(
-        y_true, y_pred_proba_1d, class_id=1, id2label=id2label
-    )
+    result = get_top_classification_errors(y_true, y_pred_proba_1d, class_id=1, id2label=id2label)
 
     if len(result) != 1:
         raise AssertionError()
@@ -214,9 +208,7 @@ def test_get_top_classification_errors_only_considers_false_negatives():
     )
     id2label = {0: "neg", 1: "pos"}
 
-    result = get_top_classification_errors(
-        y_true, y_pred_proba, class_id=1, id2label=id2label
-    )
+    result = get_top_classification_errors(y_true, y_pred_proba, class_id=1, id2label=id2label)
 
     if 12 in result.index:
         raise AssertionError()
@@ -235,9 +227,7 @@ def test_get_top_classification_errors_returns_empty_dataframe_for_zero_false_ne
     y_pred_proba = np.array([[0.9, 0.1], [0.1, 0.9]])
     id2label = {0: "neg", 1: "pos"}
 
-    result = get_top_classification_errors(
-        y_true, y_pred_proba, class_id=0, id2label=id2label
-    )
+    result = get_top_classification_errors(y_true, y_pred_proba, class_id=0, id2label=id2label)
 
     if not result.empty:
         raise AssertionError()

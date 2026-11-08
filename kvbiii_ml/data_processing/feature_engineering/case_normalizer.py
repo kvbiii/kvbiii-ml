@@ -42,9 +42,7 @@ class CaseNormalizer(BaseEstimator, TransformerMixin):
             raise ValueError("features_names must be None or a list of strings.")
         if self.normalization not in self._NORMALIZATIONS:
             raise ValueError(
-                "normalization must be one of: "
-                + ", ".join(sorted(self._NORMALIZATIONS))
-                + "."
+                "normalization must be one of: " + ", ".join(sorted(self._NORMALIZATIONS)) + "."
             )
 
     def fit(
@@ -68,9 +66,7 @@ class CaseNormalizer(BaseEstimator, TransformerMixin):
                 include=["object", "string", "category"]
             ).columns.tolist()
         else:
-            self.features_names_ = [
-                name for name in self.features_names if name in df.columns
-            ]
+            self.features_names_ = [name for name in self.features_names if name in df.columns]
         return self
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:

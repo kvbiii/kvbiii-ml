@@ -100,9 +100,7 @@ class CrossFeatureGenerator:
         """
         return all(pd.api.types.is_numeric_dtype(df[col]) for col in columns)
 
-    def _create_combined_string(
-        self, df: pd.DataFrame, columns: list[str]
-    ) -> np.ndarray:
+    def _create_combined_string(self, df: pd.DataFrame, columns: list[str]) -> np.ndarray:
         """
         Create combined string efficiently using numpy operations.
 
@@ -113,10 +111,7 @@ class CrossFeatureGenerator:
         Returns:
             np.ndarray: Array of combined strings.
         """
-        arrays = [
-            df[col].astype("string").fillna("<NA>").to_numpy(dtype=str)
-            for col in columns
-        ]
+        arrays = [df[col].astype("string").fillna("<NA>").to_numpy(dtype=str) for col in columns]
 
         if len(arrays) == 2:
             return np.char.add(np.char.add(arrays[0], self.separator), arrays[1])
@@ -147,9 +142,7 @@ class CrossFeatureGenerator:
                     f"degree ({self.degree})."
                 )
 
-        self.feature_combinations_ = list(
-            combinations(sorted(self.features_names), self.degree)
-        )
+        self.feature_combinations_ = list(combinations(sorted(self.features_names), self.degree))
         self.encoding_maps_ = {}
         self.numerical_combos_ = set()
 
@@ -165,9 +158,7 @@ class CrossFeatureGenerator:
             else:
                 combined = self._create_combined_string(df, combo_list)
                 unique_vals = np.unique(combined)
-                self.encoding_maps_[combo_name] = {
-                    val: idx for idx, val in enumerate(unique_vals)
-                }
+                self.encoding_maps_[combo_name] = {val: idx for idx, val in enumerate(unique_vals)}
                 del combined, unique_vals
 
             if len(self.encoding_maps_) % 10 == 0:
@@ -176,9 +167,7 @@ class CrossFeatureGenerator:
         gc.collect()
         return self
 
-    def _transform_chunk(
-        self, chunk: pd.DataFrame, combo: tuple[str, ...]
-    ) -> pd.Series:
+    def _transform_chunk(self, chunk: pd.DataFrame, combo: tuple[str, ...]) -> pd.Series:
         """
         Transform a single chunk for a given combination.
 
@@ -233,23 +222,17 @@ class CrossFeatureGenerator:
             self.separator.join(combo): np.empty(
                 n_rows,
                 dtype=(
-                    np.float32
-                    if self.separator.join(combo) in self.numerical_combos_
-                    else np.int32
+                    np.float32 if self.separator.join(combo) in self.numerical_combos_ else np.int32
                 ),
             )
             for combo in self.feature_combinations_
         }
 
         total_combos = len(self.feature_combinations_)
-        pbar_combos = tqdm(
-            total=total_combos, desc=f"Transforming {self.degree}-way combinations"
-        )
+        pbar_combos = tqdm(total=total_combos, desc=f"Transforming {self.degree}-way combinations")
 
         for combo_idx in range(0, total_combos, self.batch_size):
-            batch_combos = self.feature_combinations_[
-                combo_idx : combo_idx + self.batch_size
-            ]
+            batch_combos = self.feature_combinations_[combo_idx : combo_idx + self.batch_size]
             self._transform_batch(
                 df,
                 batch_combos,

@@ -36,11 +36,7 @@ def _root_mean_squared_percentage_error(
     filtered_y_pred = y_pred_array[non_zero_mask]
     if filtered_y_true.size == 0:
         raise ValueError("RMSPE is undefined when all true values are equal to zero.")
-    return float(
-        np.sqrt(
-            np.mean(np.square((filtered_y_true - filtered_y_pred) / filtered_y_true))
-        )
-    )
+    return float(np.sqrt(np.mean(np.square((filtered_y_true - filtered_y_pred) / filtered_y_true))))
 
 
 def _brier_score(y_true: np.ndarray, y_prob: np.ndarray) -> float:
@@ -80,26 +76,14 @@ METRICS_NAMES: dict[str, MetricFunction] = {
     "F1": f1_score,
     "F1 (Micro)": lambda y_true, y_pred: f1_score(y_true, y_pred, average="micro"),
     "F1 (Macro)": lambda y_true, y_pred: f1_score(y_true, y_pred, average="macro"),
-    "F1 (Weighted)": lambda y_true, y_pred: f1_score(
-        y_true, y_pred, average="weighted"
-    ),
+    "F1 (Weighted)": lambda y_true, y_pred: f1_score(y_true, y_pred, average="weighted"),
     "Recall": recall_score,
-    "Recall (Micro)": lambda y_true, y_pred: recall_score(
-        y_true, y_pred, average="micro"
-    ),
-    "Recall (Macro)": lambda y_true, y_pred: recall_score(
-        y_true, y_pred, average="macro"
-    ),
-    "Recall (Weighted)": lambda y_true, y_pred: recall_score(
-        y_true, y_pred, average="weighted"
-    ),
+    "Recall (Micro)": lambda y_true, y_pred: recall_score(y_true, y_pred, average="micro"),
+    "Recall (Macro)": lambda y_true, y_pred: recall_score(y_true, y_pred, average="macro"),
+    "Recall (Weighted)": lambda y_true, y_pred: recall_score(y_true, y_pred, average="weighted"),
     "Precision": precision_score,
-    "Precision (Micro)": lambda y_true, y_pred: precision_score(
-        y_true, y_pred, average="micro"
-    ),
-    "Precision (Macro)": lambda y_true, y_pred: precision_score(
-        y_true, y_pred, average="macro"
-    ),
+    "Precision (Micro)": lambda y_true, y_pred: precision_score(y_true, y_pred, average="micro"),
+    "Precision (Macro)": lambda y_true, y_pred: precision_score(y_true, y_pred, average="macro"),
     "Precision (Weighted)": lambda y_true, y_pred: precision_score(
         y_true, y_pred, average="weighted"
     ),
@@ -107,9 +91,7 @@ METRICS_NAMES: dict[str, MetricFunction] = {
         y_true,
         (
             y_score[:, 1]
-            if (
-                hasattr(y_score, "ndim") and y_score.ndim == 2 and y_score.shape[1] == 2
-            )
+            if (hasattr(y_score, "ndim") and y_score.ndim == 2 and y_score.shape[1] == 2)
             else y_score
         ),
     ),
@@ -131,9 +113,7 @@ METRICS_NAMES: dict[str, MetricFunction] = {
     ),
 }
 
-PROBS_METRICS = frozenset(
-    {"Roc AUC", "Roc AUC (Multi-class)", "Log Loss", "Brier Score"}
-)
+PROBS_METRICS = frozenset({"Roc AUC", "Roc AUC (Multi-class)", "Log Loss", "Brier Score"})
 MINIMIZE_METRICS = frozenset(
     {
         "MAE",

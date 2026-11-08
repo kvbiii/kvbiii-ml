@@ -72,9 +72,7 @@ def regression_feature_data(test_settings):
 
     # Create target that depends on predictive features
     y = pd.Series(
-        2 * X["predictive_1"]
-        + X["predictive_2"]
-        + np.random.randn(test_settings.N_SAMPLES) * 0.1,
+        2 * X["predictive_1"] + X["predictive_2"] + np.random.randn(test_settings.N_SAMPLES) * 0.1,
         name="target",
     )
 
@@ -373,9 +371,7 @@ def test_mutualinformationfiltering_prepare_x_y_for_mi_handles_categorical_featu
         - discrete_features parameter is set appropriately for MI computation
         - Non-categorical features remain unchanged
     """
-    X = pd.DataFrame(
-        {"numeric": [1.0, 2.0, 3.0], "categorical": pd.Categorical(["A", "B", "A"])}
-    )
+    X = pd.DataFrame({"numeric": [1.0, 2.0, 3.0], "categorical": pd.Categorical(["A", "B", "A"])})
     y = pd.Series([0, 1, 0])
 
     mif = MutualInformationFiltering(problem_type="classification")
@@ -411,9 +407,7 @@ def test_mutualinformationfiltering_compute_mi_scores_handles_nan_values(
     mif = MutualInformationFiltering(problem_type="classification")
 
     # Mock MI computation to return NaN values
-    with patch(
-        "kvbiii_ml.data_processing.eda.data_analysis.mutual_info_classif"
-    ) as mock_mi:
+    with patch("kvbiii_ml.data_processing.eda.data_analysis.mutual_info_classif") as mock_mi:
         mock_mi.return_value = np.array([0.5, np.nan, 0.3, np.inf, 0.1])
 
         scores = mif._compute_mi_scores(X, y)
@@ -453,9 +447,7 @@ def test_mutualinformationfiltering_verbose_mode_prints_selection_info(
         raise AssertionError()
 
     # Test top-k selection
-    mif_topk = MutualInformationFiltering(
-        problem_type="classification", keep_top_k=2, verbose=True
-    )
+    mif_topk = MutualInformationFiltering(problem_type="classification", keep_top_k=2, verbose=True)
     mif_topk.fit(X, y)
 
     captured = capsys.readouterr()

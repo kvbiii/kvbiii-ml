@@ -71,9 +71,7 @@ class CountEncodingFeatureGenerator:
 
         for feature_name in features_to_process:
             if feature_name not in df.columns:
-                raise ValueError(
-                    f"Feature '{feature_name}' not found in DataFrame columns."
-                )
+                raise ValueError(f"Feature '{feature_name}' not found in DataFrame columns.")
 
         self.count_maps_ = {}
         for feature_name in tqdm(
@@ -128,9 +126,7 @@ class CountEncodingFeatureGenerator:
             ValueError: If the encoder has not been fitted yet.
         """
         if not self.count_maps_:
-            raise ValueError(
-                "CountEncodingFeatureGenerator must be fitted before transform."
-            )
+            raise ValueError("CountEncodingFeatureGenerator must be fitted before transform.")
 
         n_rows = len(df)
         n_chunks = (n_rows + self.chunk_size - 1) // self.chunk_size
@@ -146,9 +142,7 @@ class CountEncodingFeatureGenerator:
         )
 
         for batch_start in range(0, len(self.features_names), self.batch_size):
-            batch_features = self.features_names[
-                batch_start : batch_start + self.batch_size
-            ]
+            batch_features = self.features_names[batch_start : batch_start + self.batch_size]
             self._transform_batch(
                 df,
                 batch_features,
@@ -228,9 +222,7 @@ if __name__ == "__main__":
     }
     df_temp = pd.DataFrame(data)
 
-    count_encoder = CountEncodingFeatureGenerator(
-        features_names=["A", "B", "C"], batch_size=2
-    )
+    count_encoder = CountEncodingFeatureGenerator(features_names=["A", "B", "C"], batch_size=2)
     transformed_df = count_encoder.fit_transform(df_temp)
     print(transformed_df)
     test_data = {"A": ["x", "b", "c"], "B": ["x", "y", "z"], "C": ["1", "s", "3"]}

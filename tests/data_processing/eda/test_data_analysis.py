@@ -83,16 +83,12 @@ def test_base_information_computes_dataset_overview(sample_dataframe):
         raise AssertionError()
 
     # Check unique value counts
-    binary_unique = result_df[result_df["Feature"] == "binary_feature"][
-        "Unique values"
-    ].values[0]
+    binary_unique = result_df[result_df["Feature"] == "binary_feature"]["Unique values"].values[0]
     if binary_unique != 2:
         raise AssertionError()
 
     # Check counts (non-missing values)
-    num_feature_count = result_df[result_df["Feature"] == "numerical_feature"][
-        "Count"
-    ].values[0]
+    num_feature_count = result_df[result_df["Feature"] == "numerical_feature"]["Count"].values[0]
     if num_feature_count != len(sample_dataframe) - 11:
         raise AssertionError()
 
@@ -196,9 +192,7 @@ def test_describe_numerical_feature_computes_correct_statistics(sample_dataframe
         - Values match manually computed statistics
         - Missing values are correctly reported
     """
-    result = DataAnalyzer.describe_numerical_feature(
-        sample_dataframe, "numerical_feature"
-    )
+    result = DataAnalyzer.describe_numerical_feature(sample_dataframe, "numerical_feature")
 
     # Extract the raw DataFrame from the styled DataFrame
     result_df = result.data
@@ -260,9 +254,7 @@ def test_describe_categorical_feature_provides_distribution_analysis(sample_data
         - Missing values are included when requested
     """
     # Test with default parameters
-    result = DataAnalyzer.describe_categorical_feature(
-        sample_dataframe, "categorical_feature"
-    )
+    result = DataAnalyzer.describe_categorical_feature(sample_dataframe, "categorical_feature")
 
     # Extract the raw DataFrame from the styled DataFrame
     result_df = result.data

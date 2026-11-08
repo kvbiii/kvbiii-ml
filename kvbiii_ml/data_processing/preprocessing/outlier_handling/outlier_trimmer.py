@@ -60,9 +60,7 @@ class OutlierTrimmerWithOriginal(_WithOriginalBase):
             missing_values=self.missing_values,
         )
 
-    def _fit_inner(
-        self, inner: OutlierTrimmer, X: pd.DataFrame, y: Any
-    ) -> OutlierTrimmer:
+    def _fit_inner(self, inner: OutlierTrimmer, X: pd.DataFrame, y: Any) -> OutlierTrimmer:
         """Fit the trimmer on X.
 
         Args:

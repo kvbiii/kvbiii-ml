@@ -64,9 +64,7 @@ def test_woeencoderwithoriginal_fit_raises_valueerror_when_category_missing_a_cl
     Asserts:
         - fit() raises ValueError due to the missing class per category.
     """
-    X = pd.DataFrame(
-        {"city": ["Warsaw", "Warsaw", "Warsaw", "Krakow", "Krakow", "Krakow"]}
-    )
+    X = pd.DataFrame({"city": ["Warsaw", "Warsaw", "Warsaw", "Krakow", "Krakow", "Krakow"]})
     y = pd.Series([1, 1, 1, 0, 0, 0], name="target")
     encoder = WoEEncoderWithOriginal(variables=["city"])
     with pytest.raises(ValueError):

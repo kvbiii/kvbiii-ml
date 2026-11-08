@@ -37,9 +37,7 @@ def test_arcsintransformerwithoriginal_transform_preserves_original_columns(
     Asserts:
         - Original columns are present in the output with identical values.
     """
-    transformer = ArcsinTransformerWithOriginal(
-        variables=["click_rate", "conversion_rate"]
-    )
+    transformer = ArcsinTransformerWithOriginal(variables=["click_rate", "conversion_rate"])
     transformer.fit(proportion_dataframe)
     result = transformer.transform(proportion_dataframe)
     pd.testing.assert_frame_equal(
@@ -58,19 +56,13 @@ def test_arcsintransformerwithoriginal_transform_appends_derived_columns_named_c
     Asserts:
         - Derived column names follow the ``{original}_PREPROCESS_ARCSIN`` pattern.
     """
-    transformer = ArcsinTransformerWithOriginal(
-        variables=["click_rate", "conversion_rate"]
-    )
+    transformer = ArcsinTransformerWithOriginal(variables=["click_rate", "conversion_rate"])
     transformer.fit(proportion_dataframe)
     result = transformer.transform(proportion_dataframe)
     if "click_rate_PREPROCESS_ARCSIN" not in result.columns:
-        raise AssertionError(
-            "Expected derived column click_rate_PREPROCESS_ARCSIN missing."
-        )
+        raise AssertionError("Expected derived column click_rate_PREPROCESS_ARCSIN missing.")
     if "conversion_rate_PREPROCESS_ARCSIN" not in result.columns:
-        raise AssertionError(
-            "Expected derived column conversion_rate_PREPROCESS_ARCSIN missing."
-        )
+        raise AssertionError("Expected derived column conversion_rate_PREPROCESS_ARCSIN missing.")
 
 
 def test_arcsintransformerwithoriginal_transform_matches_arcsin_sqrt_formula(
@@ -84,9 +76,7 @@ def test_arcsintransformerwithoriginal_transform_matches_arcsin_sqrt_formula(
     Asserts:
         - Derived column values equal np.arcsin(np.sqrt(x)) within tolerance.
     """
-    transformer = ArcsinTransformerWithOriginal(
-        variables=["click_rate", "conversion_rate"]
-    )
+    transformer = ArcsinTransformerWithOriginal(variables=["click_rate", "conversion_rate"])
     transformer.fit(proportion_dataframe)
     result = transformer.transform(proportion_dataframe)
     expected = np.arcsin(np.sqrt(proportion_dataframe["click_rate"].to_numpy()))

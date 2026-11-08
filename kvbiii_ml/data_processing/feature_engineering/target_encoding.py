@@ -155,9 +155,7 @@ class TargetEncodingFeatureGenerator:
             self._state["target_bin_edges"] = target_bin_edges
 
         labels = list(range(self.target_bins))
-        return pd.cut(
-            y, bins=target_bin_edges, labels=labels, include_lowest=True
-        ).astype(int)
+        return pd.cut(y, bins=target_bin_edges, labels=labels, include_lowest=True).astype(int)
 
     def _prepare_target(self, y: pd.Series) -> pd.Series:
         """
@@ -211,9 +209,9 @@ class TargetEncodingFeatureGenerator:
             self.bin_edges_[feature_name] = bin_edges
 
         labels = [f"bin_{idx}" for idx in range(len(bin_edges) - 1)]
-        return pd.cut(
-            df[feature_name], bins=bin_edges, labels=labels, include_lowest=True
-        ).astype(str)
+        return pd.cut(df[feature_name], bins=bin_edges, labels=labels, include_lowest=True).astype(
+            str
+        )
 
     def _compute_feature_stats(
         self, df: pd.DataFrame, y: pd.Series, feature_name: str
@@ -238,17 +236,15 @@ class TargetEncodingFeatureGenerator:
         )
 
         group_stats = (
-            prepared_target.groupby(
-                feature_values.rename(feature_name), sort=True, observed=True
-            )
+            prepared_target.groupby(feature_values.rename(feature_name), sort=True, observed=True)
             .agg([self.aggregation, "count"])
             .reset_index()
         )
 
         if self.aggregation == "nunique":
-            group_stats["te_value"] = (
-                group_stats[self.aggregation] / group_stats["count"]
-            ).astype("float32")
+            group_stats["te_value"] = (group_stats[self.aggregation] / group_stats["count"]).astype(
+                "float32"
+            )
         else:
             group_stats["te_value"] = (
                 (group_stats[self.aggregation] * group_stats["count"])
@@ -277,9 +273,7 @@ class TargetEncodingFeatureGenerator:
             if self._is_float_feature(chunk, feature_name)
             else chunk[feature_name]
         )
-        return (
-            feature_series.map(mapping).fillna(self.global_stat).astype("float32")
-        ).values
+        return (feature_series.map(mapping).fillna(self.global_stat).astype("float32")).values
 
     def _fit_single_feature(
         self,
@@ -298,13 +292,9 @@ class TargetEncodingFeatureGenerator:
                 target_train = prepared_target.iloc[train_idx]
                 df_valid = df.iloc[valid_idx]
 
-                fold_stats = self._compute_feature_stats(
-                    df_train, target_train, feature_name
-                )
+                fold_stats = self._compute_feature_stats(df_train, target_train, feature_name)
                 mapping = fold_stats.set_index(feature_name)["te_value"]
-                te_values[valid_idx] = self._encode_feature_chunk(
-                    df_valid, feature_name, mapping
-                )
+                te_values[valid_idx] = self._encode_feature_chunk(df_valid, feature_name, mapping)
                 del fold_stats, mapping
         else:
             full_mapping = self.group_stats_[feature_name]
@@ -337,14 +327,10 @@ class TargetEncodingFeatureGenerator:
 
         for feature_name in self.features_names:
             full_stats = self._compute_feature_stats(df, prepared_target, feature_name)
-            self.group_stats_[feature_name] = full_stats.set_index(feature_name)[
-                "te_value"
-            ]
+            self.group_stats_[feature_name] = full_stats.set_index(feature_name)["te_value"]
             del full_stats
 
-            te_col_name, te_values = self._fit_single_feature(
-                df, prepared_target, feature_name
-            )
+            te_col_name, te_values = self._fit_single_feature(df, prepared_target, feature_name)
             te_columns_dict[te_col_name] = te_values
             pbar.update(1)
             gc.collect()
@@ -372,9 +358,7 @@ class TargetEncodingFeatureGenerator:
         for start_idx in range(0, n_rows, self.chunk_size):
             end_idx = min(start_idx + self.chunk_size, n_rows)
             chunk = df.iloc[start_idx:end_idx]
-            encoded[start_idx:end_idx] = self._encode_feature_chunk(
-                chunk, feature_name, mapping
-            )
+            encoded[start_idx:end_idx] = self._encode_feature_chunk(chunk, feature_name, mapping)
 
         return te_col_name, encoded
 
@@ -392,29 +376,19 @@ class TargetEncodingFeatureGenerator:
             ValueError: If the encoder has not been fitted yet.
         """
         if not self.group_stats_:
-            raise ValueError(
-                "TargetEncodingFeatureGenerator must be fitted before transform."
-            )
+            raise ValueError("TargetEncodingFeatureGenerator must be fitted before transform.")
 
         fitted_index = self._state["fitted_index"]
         fitted_te_df = self._state["fitted_te_df"]
-        if (
-            fitted_index is not None
-            and fitted_te_df is not None
-            and df.index.equals(fitted_index)
-        ):
+        if fitted_index is not None and fitted_te_df is not None and df.index.equals(fitted_index):
             return pd.concat([df, fitted_te_df], axis=1)
 
         n_rows = len(df)
         te_columns_dict: dict[str, np.ndarray] = {}
-        pbar = tqdm(
-            total=len(self.features_names), desc="Transforming with target encoding"
-        )
+        pbar = tqdm(total=len(self.features_names), desc="Transforming with target encoding")
 
         for feature_name in self.features_names:
-            te_col_name, encoded = self._transform_single_feature(
-                df, n_rows, feature_name
-            )
+            te_col_name, encoded = self._transform_single_feature(df, n_rows, feature_name)
             te_columns_dict[te_col_name] = encoded
             pbar.update(1)
             gc.collect()
@@ -442,9 +416,7 @@ class TargetEncodingFeatureGenerator:
         """
         return self.fit(df, y).transform(df)
 
-    def get_feature_stats(
-        self, df: pd.DataFrame, y: pd.Series, feature_name: str
-    ) -> pd.DataFrame:
+    def get_feature_stats(self, df: pd.DataFrame, y: pd.Series, feature_name: str) -> pd.DataFrame:
         """
         Compute statistics for the target variable grouped by a feature.
 
@@ -481,9 +453,7 @@ class TargetEncodingFeatureGenerator:
                 f"df and y must have the same number of rows. "
                 f"Got len(df)={len(df)} and len(y)={y_len}."
             )
-        missing = [
-            feature for feature in self.features_names if feature not in df.columns
-        ]
+        missing = [feature for feature in self.features_names if feature not in df.columns]
         if missing:
             raise KeyError(f"Missing features in df: {missing}")
 

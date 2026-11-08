@@ -15,9 +15,7 @@ def rare_label_data() -> pd.DataFrame:
     Returns:
         pd.DataFrame: DataFrame with a single `city` categorical column.
     """
-    return pd.DataFrame(
-        {"city": ["Warsaw"] * 6 + ["Krakow"] * 2 + ["Gdansk"] * 1 + ["Poznan"] * 1}
-    )
+    return pd.DataFrame({"city": ["Warsaw"] * 6 + ["Krakow"] * 2 + ["Gdansk"] * 1 + ["Poznan"] * 1})
 
 
 def test_rarelabelencoderwithoriginal_transform_groups_categories_below_tol(
@@ -58,15 +56,11 @@ def test_rarelabelencoderwithoriginal_transform_respects_n_categories_threshold(
         - No category is grouped into "Rare" when n_categories exceeds the
           number of distinct categories present.
     """
-    encoder = RareLabelEncoderWithOriginal(
-        tol=0.15, n_categories=10, variables=["city"]
-    )
+    encoder = RareLabelEncoderWithOriginal(tol=0.15, n_categories=10, variables=["city"])
     encoder.fit(rare_label_data)
     result = encoder.transform(rare_label_data)
     if (result["city_PREPROCESS_RARE"] == "Rare").any():
-        raise AssertionError(
-            "Grouping occurred despite n_categories threshold not being met."
-        )
+        raise AssertionError("Grouping occurred despite n_categories threshold not being met.")
 
 
 def test_rarelabelencoderwithoriginal_transform_respects_max_n_categories(
@@ -90,9 +84,7 @@ def test_rarelabelencoderwithoriginal_transform_respects_max_n_categories(
     if not (encoded[rare_label_data["city"] == "Warsaw"] == "Warsaw").all():
         raise AssertionError("Warsaw should have remained the sole frequent category.")
     if not (encoded[rare_label_data["city"] != "Warsaw"] == "Rare").all():
-        raise AssertionError(
-            "Non-Warsaw categories should have been grouped into 'Rare'."
-        )
+        raise AssertionError("Non-Warsaw categories should have been grouped into 'Rare'.")
 
 
 def test_rarelabelencoderwithoriginal_transform_uses_custom_replace_with(

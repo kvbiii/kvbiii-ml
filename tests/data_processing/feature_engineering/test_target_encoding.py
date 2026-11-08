@@ -113,18 +113,12 @@ def test_targetencodingfeaturegenerator_validate_init_params_raises_error_for_in
     """
     features = ["category"]
 
-    with pytest.raises(
-        ValueError, match="Unsupported aggregation method.*Supported methods are"
-    ):
-        TargetEncodingFeatureGenerator(
-            features_names=features, aggregation="invalid_method"
-        )
+    with pytest.raises(ValueError, match="Unsupported aggregation method.*Supported methods are"):
+        TargetEncodingFeatureGenerator(features_names=features, aggregation="invalid_method")
 
     # Test valid aggregations don't raise errors
     for valid_agg in ["mean", "median", "nunique"]:
-        generator = TargetEncodingFeatureGenerator(
-            features_names=features, aggregation=valid_agg
-        )
+        generator = TargetEncodingFeatureGenerator(features_names=features, aggregation=valid_agg)
         if generator.aggregation != valid_agg:
             raise AssertionError()
 
@@ -151,9 +145,7 @@ def test_targetencodingfeaturegenerator_validate_init_params_raises_error_for_in
         raise AssertionError()
 
     for valid_smooth in [0, 1, 10, 100]:
-        generator = TargetEncodingFeatureGenerator(
-            features_names=features, smooth=valid_smooth
-        )
+        generator = TargetEncodingFeatureGenerator(features_names=features, smooth=valid_smooth)
         if generator.smooth != valid_smooth:
             raise AssertionError()
 
@@ -271,9 +263,7 @@ def test_targetencodingfeaturegenerator_fit_applies_smoothing_correctly(
     X, y = target_encoding_data
 
     # Test with different smoothing values
-    generator_low_smooth = TargetEncodingFeatureGenerator(
-        features_names=["category_a"], smooth=1
-    )
+    generator_low_smooth = TargetEncodingFeatureGenerator(features_names=["category_a"], smooth=1)
 
     generator_high_smooth = TargetEncodingFeatureGenerator(
         features_names=["category_a"], smooth=100
@@ -300,9 +290,7 @@ def test_targetencodingfeaturegenerator_transform_generates_encoded_features(
         - Encoding values are numeric and finite
     """
     X, y = target_encoding_data
-    generator = TargetEncodingFeatureGenerator(
-        features_names=["category_a", "category_b"]
-    )
+    generator = TargetEncodingFeatureGenerator(features_names=["category_a", "category_b"])
 
     generator.fit(X, y)
     transformed_x = generator.transform(X)
@@ -439,16 +427,10 @@ def test_targetencodingfeaturegenerator_different_aggregations_produce_different
 
     # At least one pair should be different
     different_mean_median = not np.allclose(mean_values, median_values, equal_nan=True)
-    different_mean_nunique = not np.allclose(
-        mean_values, nunique_values, equal_nan=True
-    )
-    different_median_nunique = not np.allclose(
-        median_values, nunique_values, equal_nan=True
-    )
+    different_mean_nunique = not np.allclose(mean_values, nunique_values, equal_nan=True)
+    different_median_nunique = not np.allclose(median_values, nunique_values, equal_nan=True)
 
-    if not (
-        different_mean_median or different_mean_nunique or different_median_nunique
-    ):
+    if not (different_mean_median or different_mean_nunique or different_median_nunique):
         raise AssertionError()
 
 
@@ -468,9 +450,7 @@ def test_targetencodingfeaturegenerator_handles_missing_feature_names(
     X, y = target_encoding_data
 
     # Include one existing and one non-existing feature
-    generator = TargetEncodingFeatureGenerator(
-        features_names=["category_a", "nonexistent_feature"]
-    )
+    generator = TargetEncodingFeatureGenerator(features_names=["category_a", "nonexistent_feature"])
 
     # Should raise KeyError for missing features
     with pytest.raises(KeyError, match="Missing features in df"):

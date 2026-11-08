@@ -8,9 +8,7 @@ import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 
 
-def _cast_numeric_variables_to_object(
-    X: pd.DataFrame, variables: list[str] | None
-) -> pd.DataFrame:
+def _cast_numeric_variables_to_object(X: pd.DataFrame, variables: list[str] | None) -> pd.DataFrame:
     """Recast any numeric columns among `variables` to object dtype.
 
     Several encoders in this package only accept object/categorical input and
@@ -132,9 +130,7 @@ class _WithOriginalBase(BaseEstimator, TransformerMixin, abc.ABC):
         x_orig = X.copy()
         with self._maybe_suppress_warnings():
             x_transformed = self._transform_inner(self._inner, X.copy())
-        new_cols = {
-            f"{var}_{self._suffix}": x_transformed[var] for var in self.variables_
-        }
+        new_cols = {f"{var}_{self._suffix}": x_transformed[var] for var in self.variables_}
         return pd.concat([x_orig, pd.DataFrame(new_cols, index=x_orig.index)], axis=1)
 
     def get_derived_column_dependencies(self) -> dict[str, list[str]]:
@@ -243,9 +239,7 @@ class _WithOriginalSubsetBase(BaseEstimator, TransformerMixin, abc.ABC):
         """
         self.variables_ = self._resolve_variables(X)
         with self._maybe_suppress_warnings():
-            self._inner = self._build_inner().fit(
-                self._prepare_variables(X)[self.variables_], y
-            )
+            self._inner = self._build_inner().fit(self._prepare_variables(X)[self.variables_], y)
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:

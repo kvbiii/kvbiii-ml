@@ -121,9 +121,7 @@ class ModelImportanceRecursiveFeatureElimination:
         updated.set_params(cat_features=active_cats if active_cats else None)
         return updated
 
-    def run(
-        self, X: pd.DataFrame, y: pd.Series | np.ndarray
-    ) -> dict[str, list | pd.DataFrame]:
+    def run(self, X: pd.DataFrame, y: pd.Series | np.ndarray) -> dict[str, list | pd.DataFrame]:
         """
         Run Model Importance RFE and return the selection summary.
 
@@ -154,13 +152,9 @@ class ModelImportanceRecursiveFeatureElimination:
         all_raw_features: list[str] = sorted(X.columns.tolist())
 
         pipeline = self.cross_validator.preprocessing_pipeline
-        dependency_graph = PipelineDependencyGraph.build(
-            pipeline, X[all_raw_features], y
-        )
+        dependency_graph = PipelineDependencyGraph.build(pipeline, X[all_raw_features], y)
 
-        avg_base_metric, _ = self._cross_val_base_metric(
-            X[all_raw_features], y, dependency_graph
-        )
+        avg_base_metric, _ = self._cross_val_base_metric(X[all_raw_features], y, dependency_graph)
 
         self.all_processed_features = list(dependency_graph.processed_columns)
         all_processed_set = set(self.all_processed_features)
@@ -176,9 +170,7 @@ class ModelImportanceRecursiveFeatureElimination:
         summary_df = {
             "selected_features": [],
             "selected_features_names": [],
-            "history": pd.DataFrame(columns=self.history_schema.keys()).astype(
-                self.history_schema
-            ),
+            "history": pd.DataFrame(columns=self.history_schema.keys()).astype(self.history_schema),
         }
 
         summary_df["history"] = pd.concat(
@@ -201,9 +193,7 @@ class ModelImportanceRecursiveFeatureElimination:
             ignore_index=True,
         )
 
-        removable_features = [
-            f for f in current_features if f not in self.protected_features
-        ]
+        removable_features = [f for f in current_features if f not in self.protected_features]
         removal_schedule = self.compute_removal_schedule(len(removable_features))
         if self.verbose:
             print(
@@ -219,9 +209,7 @@ class ModelImportanceRecursiveFeatureElimination:
             )
 
         for step_idx, n_features_to_remove in enumerate(removal_schedule, start=1):
-            current_raw_features, restricted_pipeline = dependency_graph.restrict(
-                current_features
-            )
+            current_raw_features, restricted_pipeline = dependency_graph.restrict(current_features)
             step_estimator = self._restrict_catboost_cat_features(
                 self.estimator,
                 set(current_features),
@@ -239,8 +227,7 @@ class ModelImportanceRecursiveFeatureElimination:
             )
             if self.verbose:
                 print(
-                    f"\n🔁 Step {step_idx} | Number of features remaining: "
-                    f"{len(current_features)}"
+                    f"\n🔁 Step {step_idx} | Number of features remaining: {len(current_features)}"
                 )
                 print(f"\n🔬 Features remaining: {current_features}\n")
                 print(
@@ -249,23 +236,17 @@ class ModelImportanceRecursiveFeatureElimination:
                 )
 
             removable_scores = {
-                k: v
-                for k, v in importance_scores.items()
-                if k not in self.protected_features
+                k: v for k, v in importance_scores.items() if k not in self.protected_features
             }
             importance_df = pd.DataFrame(
                 list(removable_scores.items()),
                 columns=["feature", "importance_score"],
             )
 
-            importance_df = importance_df.sort_values(
-                by="importance_score", ascending=True
-            )
+            importance_df = importance_df.sort_values(by="importance_score", ascending=True)
 
             n_actually_removable = min(n_features_to_remove, len(importance_df))
-            features_to_remove = importance_df.head(n_actually_removable)[
-                "feature"
-            ].tolist()
+            features_to_remove = importance_df.head(n_actually_removable)["feature"].tolist()
 
             if self.verbose:
                 print("Most important features:")
@@ -291,19 +272,15 @@ class ModelImportanceRecursiveFeatureElimination:
                     print("⏹️  Stopping early - only protected features remain")
                 break
 
-        summary_df["selected_features"], metric_selected = (
-            self.select_features_weighted_score(summary_df["history"], self.alpha)
+        summary_df["selected_features"], metric_selected = self.select_features_weighted_score(
+            summary_df["history"], self.alpha
         )
         summary_df["selected_features_names"] = summary_df["selected_features"]
 
         if self.verbose:
             print(f"\n🎯 Selected features: {summary_df['selected_features']}")
             base_val = summary_df["history"].iloc[0]["metric_value"]
-            diff_pct = (
-                100 * (metric_selected - base_val) / base_val
-                if base_val != 0
-                else np.nan
-            )
+            diff_pct = 100 * (metric_selected - base_val) / base_val if base_val != 0 else np.nan
             print(
                 f"📈 Final {self.cross_validator.metric_name} score (approximated): "
                 f"{metric_selected:.6f} | Base: {base_val:.6f} | "
@@ -312,13 +289,8 @@ class ModelImportanceRecursiveFeatureElimination:
             n_features_initial = summary_df["history"].iloc[0]["n_features_remaining"]
             n_features_selected = len(summary_df["selected_features"])
             n_removed = n_features_initial - n_features_selected
-            pct_removed = (
-                100 * n_removed / n_features_initial if n_features_initial else 0.0
-            )
-            print(
-                f"🗑️ Features removed: {n_removed} of {n_features_initial} "
-                f"({pct_removed:.2f}%)"
-            )
+            pct_removed = 100 * n_removed / n_features_initial if n_features_initial else 0.0
+            print(f"🗑️ Features removed: {n_removed} of {n_features_initial} ({pct_removed:.2f}%)")
         gc.collect()
         return summary_df
 
@@ -394,8 +366,7 @@ class ModelImportanceRecursiveFeatureElimination:
 
         avg_importances = np.nan_to_num(np.mean(importances, axis=0), nan=0.0)
         avg_importance_map = {
-            feature: float(imp)
-            for feature, imp in zip(current_processed_features, avg_importances)
+            feature: float(imp) for feature, imp in zip(current_processed_features, avg_importances)
         }
         gc.collect()
         return (
@@ -509,9 +480,7 @@ class ModelImportanceRecursiveFeatureElimination:
         df["features_norm"] = 1 - (df["n_features_remaining"] - feat_min) / denom_feat
         df["score"] = alpha * df["metric_norm"] + (1 - alpha) * df["features_norm"]
         best_row = df.loc[df["score"].idxmax()]
-        selected = set(
-            history[history["step"] >= best_row["step"]]["removed_feature_name"]
-        )
+        selected = set(history[history["step"] >= best_row["step"]]["removed_feature_name"])
         selected.update(self.protected_features)
         gc.collect()
         return list(sorted(selected)), best_row["metric_value"]

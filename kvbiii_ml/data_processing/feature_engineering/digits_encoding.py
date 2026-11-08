@@ -88,8 +88,7 @@ class DigitsEncodingFeatureGenerator(BaseEstimator, TransformerMixin):
         """
         if (self.min_digits == AUTO_DIGITS) != (self.max_digits == AUTO_DIGITS):
             raise ValueError(
-                'min_digits and max_digits must either both be "auto" '
-                "or both be explicit integers."
+                'min_digits and max_digits must either both be "auto" or both be explicit integers.'
             )
         columns = self.features_names if self.features_names else list(df.columns)
         columns = [c for c in columns if pd.api.types.is_numeric_dtype(df[c])]
@@ -119,9 +118,7 @@ class DigitsEncodingFeatureGenerator(BaseEstimator, TransformerMixin):
         digits_df = pd.DataFrame(digit_data, index=df.index).astype(self.dtype)
         return pd.concat([df, digits_df], axis=1)
 
-    def get_feature_names_out(
-        self, input_features: list[str] | None = None
-    ) -> np.ndarray:
+    def get_feature_names_out(self, input_features: list[str] | None = None) -> np.ndarray:
         """
         Get output feature names: original columns plus generated digit columns.
 
@@ -232,15 +229,11 @@ if __name__ == "__main__":
     transformed_df = digits_generator.fit_transform(demo_df)
     print("Transformed DataFrame:")
     print("\nColumns containing 'annual_income':")
-    annual_income_cols = [
-        col for col in transformed_df.columns if "annual_income" in col
-    ]
+    annual_income_cols = [col for col in transformed_df.columns if "annual_income" in col]
     print(transformed_df[annual_income_cols])
 
     print("\nColumns containing 'interest_rate':")
-    interest_rate_cols = [
-        col for col in transformed_df.columns if "interest_rate" in col
-    ]
+    interest_rate_cols = [col for col in transformed_df.columns if "interest_rate" in col]
     print(transformed_df[interest_rate_cols])
 
     print("\nget_feature_names_out():")

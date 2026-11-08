@@ -33,9 +33,7 @@ class BoxCoxTransformerWithOriginal(_WithOriginalBase):
         """
         return BoxCoxTransformer(variables=self.variables)
 
-    def _fit_inner(
-        self, inner: BoxCoxTransformer, X: pd.DataFrame, y: Any
-    ) -> BoxCoxTransformer:
+    def _fit_inner(self, inner: BoxCoxTransformer, X: pd.DataFrame, y: Any) -> BoxCoxTransformer:
         """Fit the transformer on X (estimates lambda per variable).
 
         Args:
@@ -48,9 +46,7 @@ class BoxCoxTransformerWithOriginal(_WithOriginalBase):
         """
         return inner.fit(X)
 
-    def _transform_inner(
-        self, inner: BoxCoxTransformer, X: pd.DataFrame
-    ) -> pd.DataFrame:
+    def _transform_inner(self, inner: BoxCoxTransformer, X: pd.DataFrame) -> pd.DataFrame:
         """Apply the Box-Cox transformation to X.
 
         Args:

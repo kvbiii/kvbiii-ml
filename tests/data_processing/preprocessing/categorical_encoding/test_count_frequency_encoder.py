@@ -34,15 +34,11 @@ def test_countfrequencyencoderwithoriginal_transform_encodes_counts(city_revenue
     Asserts:
         - Derived column values match the absolute occurrence count per category.
     """
-    encoder = CountFrequencyEncoderWithOriginal(
-        encoding_method="count", variables=["city"]
-    )
+    encoder = CountFrequencyEncoderWithOriginal(encoding_method="count", variables=["city"])
     encoder.fit(city_revenue_data)
     result = encoder.transform(city_revenue_data)
     expected = [3, 3, 3, 2, 2, 1]
-    if not np.allclose(
-        result["city_PREPROCESS_CNT_FREQ"].to_numpy(dtype=float), expected
-    ):
+    if not np.allclose(result["city_PREPROCESS_CNT_FREQ"].to_numpy(dtype=float), expected):
         raise AssertionError("Count encoding did not match expected occurrence counts.")
 
 
@@ -57,18 +53,12 @@ def test_countfrequencyencoderwithoriginal_transform_encodes_frequencies(
     Asserts:
         - Derived column values match the relative frequency per category.
     """
-    encoder = CountFrequencyEncoderWithOriginal(
-        encoding_method="frequency", variables=["city"]
-    )
+    encoder = CountFrequencyEncoderWithOriginal(encoding_method="frequency", variables=["city"])
     encoder.fit(city_revenue_data)
     result = encoder.transform(city_revenue_data)
     expected = [0.5, 0.5, 0.5, 1 / 3, 1 / 3, 1 / 6]
-    if not np.allclose(
-        result["city_PREPROCESS_CNT_FREQ"].to_numpy(dtype=float), expected
-    ):
-        raise AssertionError(
-            "Frequency encoding did not match expected relative frequencies."
-        )
+    if not np.allclose(result["city_PREPROCESS_CNT_FREQ"].to_numpy(dtype=float), expected):
+        raise AssertionError("Frequency encoding did not match expected relative frequencies.")
 
 
 def test_countfrequencyencoderwithoriginal_fit_missing_values_raise_rejects_nan(
@@ -84,9 +74,7 @@ def test_countfrequencyencoderwithoriginal_fit_missing_values_raise_rejects_nan(
     """
     data_with_nan = city_revenue_data.copy()
     data_with_nan.loc[0, "city"] = None
-    encoder = CountFrequencyEncoderWithOriginal(
-        variables=["city"], missing_values="raise"
-    )
+    encoder = CountFrequencyEncoderWithOriginal(variables=["city"], missing_values="raise")
     with pytest.raises(ValueError):
         encoder.fit(data_with_nan)
 
@@ -104,9 +92,7 @@ def test_countfrequencyencoderwithoriginal_fit_missing_values_ignore_accepts_nan
     """
     data_with_nan = city_revenue_data.copy()
     data_with_nan.loc[0, "city"] = None
-    encoder = CountFrequencyEncoderWithOriginal(
-        variables=["city"], missing_values="ignore"
-    )
+    encoder = CountFrequencyEncoderWithOriginal(variables=["city"], missing_values="ignore")
     encoder.fit(data_with_nan)
     result = encoder.transform(data_with_nan)
     if "city_PREPROCESS_CNT_FREQ" not in result.columns:
@@ -148,9 +134,7 @@ def test_countfrequencyencoderwithoriginal_transform_unseen_ignore_encodes_as_na
     unseen_data = pd.DataFrame({"city": ["Poznan"], "revenue": [90]})
     result = encoder.transform(unseen_data)
     if not pd.isna(result["city_PREPROCESS_CNT_FREQ"].iloc[0]):
-        raise AssertionError(
-            "Unseen category was not encoded as NaN under unseen='ignore'."
-        )
+        raise AssertionError("Unseen category was not encoded as NaN under unseen='ignore'.")
 
 
 @pytest.fixture
@@ -197,20 +181,14 @@ def test_countfrequencyencoderwithoriginal_transform_accepts_explicit_numeric_va
         - transform() succeeds and encodes counts correctly.
         - The original numeric column's dtype is left untouched in the output.
     """
-    encoder = CountFrequencyEncoderWithOriginal(
-        encoding_method="count", variables=["num_cat"]
-    )
+    encoder = CountFrequencyEncoderWithOriginal(encoding_method="count", variables=["num_cat"])
     encoder.fit(numeric_category_data)
     result = encoder.transform(numeric_category_data)
     expected = [3, 3, 3, 2, 3, 3, 2, 3]
-    if not np.allclose(
-        result["num_cat_PREPROCESS_CNT_FREQ"].to_numpy(dtype=float), expected
-    ):
+    if not np.allclose(result["num_cat_PREPROCESS_CNT_FREQ"].to_numpy(dtype=float), expected):
         raise AssertionError("Count encoding did not match expected occurrence counts.")
     if not pd.api.types.is_numeric_dtype(result["num_cat"]):
-        raise AssertionError(
-            "Original numeric column dtype was altered by transform()."
-        )
+        raise AssertionError("Original numeric column dtype was altered by transform().")
 
 
 def test_countfrequencyencoderwithoriginal_auto_detect_ignores_numeric_columns(

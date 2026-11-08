@@ -223,9 +223,7 @@ def get_top_classification_errors(
     if np.sum(false_negatives) == 0:
         return pd.DataFrame()
     error_indices = np.where(false_negatives)[0]
-    error_magnitudes = (
-        predicted_confidences[error_indices] - true_class_probs[error_indices]
-    )
+    error_magnitudes = predicted_confidences[error_indices] - true_class_probs[error_indices]
     top_error_pos = np.argsort(error_magnitudes)[::-1][:top_n]
     selected_indices = error_indices[top_error_pos]
 
@@ -249,9 +247,7 @@ def get_top_classification_errors(
     return df
 
 
-def display_classification_errors(
-    errors_by_class: dict, id2label: dict[int, str]
-) -> None:
+def display_classification_errors(errors_by_class: dict, id2label: dict[int, str]) -> None:
     """Display styled tables of classification errors for each class.
 
     Args:
@@ -274,18 +270,12 @@ def display_classification_errors(
         else:
             styler = df.style.set_caption(title).format(fmt)
 
-        prob_cols = [
-            c for c in df.columns if "Probability" in c and df[c].dtype.kind in "fc"
-        ]
+        prob_cols = [c for c in df.columns if "Probability" in c and df[c].dtype.kind in "fc"]
         if prob_cols:
-            styler = styler.background_gradient(
-                subset=prob_cols, cmap="RdYlGn", vmin=0, vmax=1
-            )
+            styler = styler.background_gradient(subset=prob_cols, cmap="RdYlGn", vmin=0, vmax=1)
 
         if "Error" in df.columns:
-            styler = styler.bar(
-                subset=["Error"], align="mid", color="#d65f5f", vmin=0, vmax=1
-            )
+            styler = styler.bar(subset=["Error"], align="mid", color="#d65f5f", vmin=0, vmax=1)
 
         styler = styler.set_properties(
             **{
@@ -335,9 +325,7 @@ if __name__ == "__main__":
     # Regression example
     y_true_reg = pd.Series(rng.normal(loc=100.0, scale=10.0, size=50))
     y_pred_reg = y_true_reg + rng.normal(loc=0.0, scale=5.0, size=50)
-    under_df, over_df = get_top_regression_under_over_errors(
-        y_true_reg, y_pred_reg, top_n=5
-    )
+    under_df, over_df = get_top_regression_under_over_errors(y_true_reg, y_pred_reg, top_n=5)
     display_regression_under_over_errors(under_df, over_df)
 
     # Classification example (binary)

@@ -120,14 +120,8 @@ def _binary_ece(y_bin: np.ndarray, p: np.ndarray, n_bins: int) -> float:
     bin_counts = np.bincount(bin_ids, minlength=n_bins).astype(float)
     nonempty = bin_counts > 0
 
-    bin_conf = (
-        np.bincount(bin_ids, weights=p, minlength=n_bins)[nonempty]
-        / bin_counts[nonempty]
-    )
-    bin_acc = (
-        np.bincount(bin_ids, weights=y_bin, minlength=n_bins)[nonempty]
-        / bin_counts[nonempty]
-    )
+    bin_conf = np.bincount(bin_ids, weights=p, minlength=n_bins)[nonempty] / bin_counts[nonempty]
+    bin_acc = np.bincount(bin_ids, weights=y_bin, minlength=n_bins)[nonempty] / bin_counts[nonempty]
     bin_weights = bin_counts[nonempty] / n_samples
     return float(np.sum(bin_weights * np.abs(bin_acc - bin_conf)))
 
@@ -221,9 +215,7 @@ def _eval_calibrator_oof(
     cal_probas = np.zeros_like(oof_probas)
     for train_idx, val_idx in fold_splits:
         cal = _fit_calibrator(oof_probas[train_idx], y_oof[train_idx], method, classes)
-        cal_probas[val_idx] = _apply_calibrator(
-            cal, oof_probas[val_idx], classes, method
-        )
+        cal_probas[val_idx] = _apply_calibrator(cal, oof_probas[val_idx], classes, method)
     return cal_probas
 
 
@@ -306,9 +298,7 @@ class ClassificationCalibrator:
         self.calibrated_valid_scores_: list[float] = []
         self.calibration_scores_df_: pd.DataFrame = pd.DataFrame()
         self.best_method_: str = ""
-        self.best_calibrator_: IsotonicRegression | LogisticRegression | list | None = (
-            None
-        )
+        self.best_calibrator_: IsotonicRegression | LogisticRegression | list | None = None
         self.best_estimator_: CalibratedModel | BaseEstimator | None = None
 
         self._oof_probas_by_method: dict[str, np.ndarray] = {}
@@ -373,12 +363,8 @@ class ClassificationCalibrator:
         if self._fitted_full_estimator is None:
             raise RuntimeError("Call fit() before predict_proba().")
 
-        x_proc = CrossValidationTrainer._transform_with_pipeline(
-            self._fitted_full_pipeline, X
-        )
-        x_ord = CrossValidationTrainer._order_x_for_estimator(
-            x_proc, self._fitted_full_estimator
-        )
+        x_proc = CrossValidationTrainer._transform_with_pipeline(self._fitted_full_pipeline, X)
+        x_ord = CrossValidationTrainer._order_x_for_estimator(x_proc, self._fitted_full_estimator)
         raw = self._fitted_full_estimator.predict_proba(x_ord)
         if raw.ndim == 1:
             raw = np.column_stack([1 - raw, raw])
@@ -437,9 +423,7 @@ class ClassificationCalibrator:
                 hist_ax = self._draw_reliability_panel(
                     ax, y_bin, self._oof_probas_by_method[name][:, 1], name, name
                 )
-                hist_ax.set_xlabel(
-                    "Mean predicted probability", fontsize=9, color=_PLOT_MUTED_INK
-                )
+                hist_ax.set_xlabel("Mean predicted probability", fontsize=9, color=_PLOT_MUTED_INK)
             fig.suptitle(
                 "Calibration Reliability Diagrams",
                 fontsize=15,
@@ -477,9 +461,7 @@ class ClassificationCalibrator:
                             textcoords="offset points",
                             fontsize=11,
                             fontweight="bold",
-                            color=(
-                                _PLOT_WIN if name == self.best_method_ else _PLOT_INK
-                            ),
+                            color=(_PLOT_WIN if name == self.best_method_ else _PLOT_INK),
                             ha="right",
                             va="center",
                             rotation=90,
@@ -546,9 +528,7 @@ class ClassificationCalibrator:
             Axes: The bin-density inset axes, so callers can attach the shared
                 x-axis label beneath it instead of beneath the curve above it.
         """
-        frac_pos, mean_pred = calibration_curve(
-            y_bin, p, n_bins=self.n_bins, strategy="uniform"
-        )
+        frac_pos, mean_pred = calibration_curve(y_bin, p, n_bins=self.n_bins, strategy="uniform")
 
         ax.plot(
             [0, 1],
@@ -558,9 +538,7 @@ class ClassificationCalibrator:
             linewidth=1.4,
             zorder=1,
         )
-        ax.fill_between(
-            mean_pred, frac_pos, mean_pred, color=_PLOT_ACCENT, alpha=0.16, zorder=2
-        )
+        ax.fill_between(mean_pred, frac_pos, mean_pred, color=_PLOT_ACCENT, alpha=0.16, zorder=2)
         ax.plot(
             mean_pred,
             frac_pos,
@@ -713,9 +691,7 @@ class ClassificationCalibrator:
             eval_probas = _eval_calibrator_oof(
                 oof_probas, y_oof, method, self._classes, fold_splits
             )
-            calibrators[method] = _fit_calibrator(
-                oof_probas, y_oof, method, self._classes
-            )
+            calibrators[method] = _fit_calibrator(oof_probas, y_oof, method, self._classes)
             method_name = method.capitalize()
             rows.append(_score_row(method_name, eval_probas))
             self._oof_probas_by_method[method_name] = eval_probas
@@ -779,9 +755,7 @@ class ClassificationCalibrator:
             fold_splits (list[tuple[np.ndarray, np.ndarray]]): Cached outer-CV folds.
         """
         scores = self.calibration_scores_df_[sel_col]
-        best_row = str(
-            scores.idxmax() if sel_direction == "maximize" else scores.idxmin()
-        )
+        best_row = str(scores.idxmax() if sel_direction == "maximize" else scores.idxmin())
         self.best_method_ = best_row
 
         best_probas = self._oof_probas_by_method[best_row]
@@ -792,9 +766,7 @@ class ClassificationCalibrator:
             float(
                 metric_fn(
                     y_arr[val_idx],
-                    self._probas_to_metric_input(
-                        best_probas[val_idx], metric_type, self._classes
-                    ),
+                    self._probas_to_metric_input(best_probas[val_idx], metric_type, self._classes),
                 )
             )
             for _, val_idx in fold_splits
@@ -835,9 +807,7 @@ class ClassificationCalibrator:
         """
         pipeline = self.cross_validator.preprocessing_pipeline
         fitted_pipeline = clone(pipeline) if pipeline is not None else None
-        x_proc = (
-            fitted_pipeline.fit_transform(X, y) if fitted_pipeline is not None else X
-        )
+        x_proc = fitted_pipeline.fit_transform(X, y) if fitted_pipeline is not None else X
         self._fitted_full_pipeline = fitted_pipeline
 
         X_valid, y_valid = OOFModel._parse_eval_set(eval_set)
@@ -943,9 +913,7 @@ if __name__ == "__main__":
             n_clusters_per_class=1,
             random_state=RANDOM_STATE,
         )
-        return pd.DataFrame(x_arr, columns=FEATURE_NAMES), pd.Series(
-            y_arr, name="target"
-        )
+        return pd.DataFrame(x_arr, columns=FEATURE_NAMES), pd.Series(y_arr, name="target")
 
     def _build_pipeline() -> Pipeline:
         """Build a preprocessing pipeline with outlier handling."""
@@ -962,16 +930,12 @@ if __name__ == "__main__":
             ]
         )
 
-    def _build_cv(
-        metric: str, pipeline: Pipeline | None = None
-    ) -> CrossValidationTrainer:
+    def _build_cv(metric: str, pipeline: Pipeline | None = None) -> CrossValidationTrainer:
         """Build a CrossValidationTrainer for the given metric."""
         return CrossValidationTrainer(
             metric_name=metric,
             problem_type="classification",
-            cv=StratifiedKFold(
-                n_splits=N_FOLDS, shuffle=True, random_state=RANDOM_STATE
-            ),
+            cv=StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=RANDOM_STATE),
             preprocessing_pipeline=pipeline,
             verbose=False,
         )
@@ -1004,9 +968,7 @@ if __name__ == "__main__":
         try:
             rng = np.random.RandomState(RANDOM_STATE)
             x_cat = x_bin.copy()
-            x_cat["cat_feat"] = pd.Categorical(
-                rng.choice(["A", "B", "C"], size=N_SAMPLES)
-            )
+            x_cat["cat_feat"] = pd.Categorical(rng.choice(["A", "B", "C"], size=N_SAMPLES))
             cat_cb = CatBoostClassifier(
                 iterations=200,
                 early_stopping_rounds=ES,
@@ -1079,18 +1041,12 @@ if __name__ == "__main__":
 
         start = time.perf_counter()
         _, valid_s_3, _ = cv_3.fit(cal_3.best_estimator_, x_bin, y_bin)
-        print(
-            f"  Time for CV fit with best_estimator_: {time.perf_counter() - start:.2f} seconds"
-        )
-        print(
-            f"  Calibrated CV valid: {np.mean(valid_s_3):.4f} ± {np.std(valid_s_3):.4f}"
-        )
+        print(f"  Time for CV fit with best_estimator_: {time.perf_counter() - start:.2f} seconds")
+        print(f"  Calibrated CV valid: {np.mean(valid_s_3):.4f} ± {np.std(valid_s_3):.4f}")
         cal_3.plot_calibration_curves()
 
         print("\n" + "=" * 75)
-        print(
-            "Scenario 4: Multiclass + LightGBM + eval_set for early stopping on final refit"
-        )
+        print("Scenario 4: Multiclass + LightGBM + eval_set for early stopping on final refit")
         print("=" * 75)
         x_mc, y_mc = _make_clf_data(n_classes=3)
         lgbm_mc = LGBMClassifier(
@@ -1110,9 +1066,7 @@ if __name__ == "__main__":
         print(cal_4.calibration_scores_df_)
         print("Passing best_estimator_ to cross_validator.fit():")
         _, valid_s_mc, _ = cv_4.fit(cal_4.best_estimator_, x_mc, y_mc)
-        print(
-            f"  Calibrated CV valid: {np.mean(valid_s_mc):.4f} ± {np.std(valid_s_mc):.4f}"
-        )
+        print(f"  Calibrated CV valid: {np.mean(valid_s_mc):.4f} ± {np.std(valid_s_mc):.4f}")
         cal_4.plot_calibration_curves()
 
     _run_demo()

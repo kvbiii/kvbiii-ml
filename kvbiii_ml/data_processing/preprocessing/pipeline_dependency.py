@@ -151,9 +151,7 @@ class PipelineDependencyGraph:
                     )
                 cols_after = list(x_after.columns)
                 before_set = set(cols_before)
-                new_sources = _resolve_new_column_sources(
-                    cloned_step, cols_before, cols_after
-                )
+                new_sources = _resolve_new_column_sources(cloned_step, cols_before, cols_after)
                 step_derivations.append((step_name, new_sources))
 
                 for column in cols_after:
@@ -178,9 +176,7 @@ class PipelineDependencyGraph:
             step_derivations,
         )
 
-    def restrict(
-        self, processed_features: list[str]
-    ) -> tuple[list[str], Pipeline | None]:
+    def restrict(self, processed_features: list[str]) -> tuple[list[str], Pipeline | None]:
         """Prunes the graph to the minimal raw inputs and pipeline needed.
 
         Steps with an explicit ``variables`` list are filtered to only the
@@ -225,9 +221,7 @@ class PipelineDependencyGraph:
         raw_needed: set[str] = set()
         for column in processed_features:
             raw_needed |= self.processed_to_raw.get(column, {column})
-        raw_needed_list = [
-            column for column in self.raw_columns if column in raw_needed
-        ]
+        raw_needed_list = [column for column in self.raw_columns if column in raw_needed]
 
         if self.pipeline is None:
             return raw_needed_list, None
@@ -237,9 +231,7 @@ class PipelineDependencyGraph:
         new_steps: list[tuple[str, BaseEstimator]] = [
             (
                 _RAW_SELECTOR_STEP,
-                FunctionTransformer(
-                    func=_select_columns, kw_args={"features": raw_needed_list}
-                ),
+                FunctionTransformer(func=_select_columns, kw_args={"features": raw_needed_list}),
             )
         ]
         for name, step in self.pipeline.steps:
@@ -255,9 +247,7 @@ class PipelineDependencyGraph:
                 if not filtered:
                     continue
                 cloned_step.set_params(variables=filtered)
-            elif variables is None and hasattr(
-                cloned_step, "get_derived_column_dependencies"
-            ):
+            elif variables is None and hasattr(cloned_step, "get_derived_column_dependencies"):
                 survivors = step_survivors.get(name, set())
                 if not survivors:
                     continue

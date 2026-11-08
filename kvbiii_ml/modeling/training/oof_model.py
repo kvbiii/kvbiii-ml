@@ -136,19 +136,14 @@ def _fit_calibrator(
             else LogisticRegression(C=1.0, solver="lbfgs", max_iter=1000)
         )
 
-    def _fit_one(
-        p: np.ndarray, y: np.ndarray
-    ) -> IsotonicRegression | LogisticRegression:
+    def _fit_one(p: np.ndarray, y: np.ndarray) -> IsotonicRegression | LogisticRegression:
         cal = _make_cal()
         cal.fit(p.reshape(-1, 1) if method == "sigmoid" else p, y)
         return cal
 
     if len(classes) == 2:
         return _fit_one(oof_probas[:, 1], (y_oof == classes[1]).astype(int))
-    return [
-        _fit_one(oof_probas[:, i], (y_oof == cls).astype(int))
-        for i, cls in enumerate(classes)
-    ]
+    return [_fit_one(oof_probas[:, i], (y_oof == cls).astype(int)) for i, cls in enumerate(classes)]
 
 
 def _apply_calibrator(
@@ -179,14 +174,8 @@ def _apply_calibrator(
         np.ndarray: Calibrated probabilities of shape (n_samples, n_classes), rows sum to 1.
     """
 
-    def _apply_one(
-        cal: IsotonicRegression | LogisticRegression, p: np.ndarray
-    ) -> np.ndarray:
-        return (
-            cal.predict_proba(p.reshape(-1, 1))[:, 1]
-            if method == "sigmoid"
-            else cal.predict(p)
-        )
+    def _apply_one(cal: IsotonicRegression | LogisticRegression, p: np.ndarray) -> np.ndarray:
+        return cal.predict_proba(p.reshape(-1, 1))[:, 1] if method == "sigmoid" else cal.predict(p)
 
     if len(classes) == 2:
         p_cal = np.clip(
@@ -199,9 +188,7 @@ def _apply_calibrator(
     cal_matrix = np.column_stack(
         [_apply_one(cal, raw_probas[:, i]) for i, cal in enumerate(calibrator)]
     )
-    cal_matrix = cal_matrix / np.clip(
-        cal_matrix.sum(axis=1, keepdims=True), _PROBA_SUM_FLOOR, None
-    )
+    cal_matrix = cal_matrix / np.clip(cal_matrix.sum(axis=1, keepdims=True), _PROBA_SUM_FLOOR, None)
     cal_matrix = np.clip(cal_matrix, _CALIBRATION_PROBA_EPS, None)
     return cal_matrix / cal_matrix.sum(axis=1, keepdims=True)
 
@@ -234,9 +221,7 @@ def _collect_oof_probas(
         cross_validator.fitted_estimators_,
         cross_validator.fitted_pipelines_,
     ):
-        x_val = CrossValidationTrainer._transform_with_pipeline(
-            fold_pipeline, X.iloc[val_idx]
-        )
+        x_val = CrossValidationTrainer._transform_with_pipeline(fold_pipeline, X.iloc[val_idx])
         x_val = CrossValidationTrainer._order_x_for_estimator(x_val, est)
         probas = est.predict_proba(x_val)
         if probas.ndim == 1:
@@ -281,13 +266,9 @@ class OOFModel:
                 Only used when calibrate=True. Defaults to "isotonic".
         """
         if problem_type not in {"classification", "regression"}:
-            raise ValueError(
-                "problem_type must be either 'classification' or 'regression'."
-            )
+            raise ValueError("problem_type must be either 'classification' or 'regression'.")
         if calibrate and problem_type != "classification":
-            raise ValueError(
-                "calibrate=True is only supported for problem_type='classification'."
-            )
+            raise ValueError("calibrate=True is only supported for problem_type='classification'.")
 
         self.estimator = estimator
         self.cross_validator = cross_validator
@@ -342,18 +323,14 @@ class OOFModel:
             )
             X_valid, y_valid = self._parse_eval_set(eval_set)
             n_iter_list = [
-                n
-                for est in self.fitted_estimators_
-                if (n := _get_n_iterations(est)) is not None
+                n for est in self.fitted_estimators_ if (n := _get_n_iterations(est)) is not None
             ]
             final_est = deepcopy(self.estimator)
             if n_iter_list:
                 _set_n_iterations(final_est, int(np.mean(n_iter_list)))
             if X_valid is None:
                 _disable_early_stopping(final_est)
-            self.fitted_estimator_ = BaseTrainer.fit_estimator(
-                final_est, X, y, X_valid, y_valid
-            )
+            self.fitted_estimator_ = BaseTrainer.fit_estimator(final_est, X, y, X_valid, y_valid)
 
         return self
 
@@ -405,24 +382,16 @@ class OOFModel:
             ValueError: If called for a regression problem.
         """
         if self.problem_type != "classification":
-            raise ValueError(
-                "predict_proba is only available for classification problems."
-            )
+            raise ValueError("predict_proba is only available for classification problems.")
         if not self.fitted_estimators_:
-            raise RuntimeError(
-                "OOFModel must be fitted before calling predict_proba()."
-            )
+            raise RuntimeError("OOFModel must be fitted before calling predict_proba().")
 
         if self.calibrate and self.fitted_estimator_ is not None:
-            x_ord = CrossValidationTrainer._order_x_for_estimator(
-                X, self.fitted_estimator_
-            )
+            x_ord = CrossValidationTrainer._order_x_for_estimator(X, self.fitted_estimator_)
             raw = self.fitted_estimator_.predict_proba(x_ord)
             if raw.ndim == 1:
                 raw = np.column_stack([1 - raw, raw])
-            return _apply_calibrator(
-                self.calibrator_, raw, self.classes_, self.calibration_method
-            )
+            return _apply_calibrator(self.calibrator_, raw, self.classes_, self.calibration_method)
 
         probs = [
             est.predict_proba(CrossValidationTrainer._order_x_for_estimator(X, est))

@@ -84,9 +84,7 @@ def build_fast_estimator() -> RandomForestClassifier:
     Returns:
         RandomForestClassifier: Small, fast-fitting estimator with feature_importances_.
     """
-    return RandomForestClassifier(
-        n_estimators=5, max_depth=2, random_state=RANDOM_STATE
-    )
+    return RandomForestClassifier(n_estimators=5, max_depth=2, random_state=RANDOM_STATE)
 
 
 def assert_valid_rfe_run_result_keys(result: dict) -> None:
@@ -123,9 +121,7 @@ def assert_selected_features_subset_of_columns(result: dict, X: pd.DataFrame) ->
         raise AssertionError("selected_features is not a subset of X.columns.")
 
 
-def assert_empty_history_returns_no_selection(
-    selected: list, best_metric: float | None
-) -> None:
+def assert_empty_history_returns_no_selection(selected: list, best_metric: float | None) -> None:
     """Asserts select_features_weighted_score returns ([], None) for an empty history.
 
     Args:
@@ -141,9 +137,7 @@ def assert_empty_history_returns_no_selection(
         raise AssertionError("Expected best_metric to be None for an empty history.")
 
 
-def assert_rfe_run_summary_starts_with_full_feature_set(
-    result: dict, X: pd.DataFrame
-) -> None:
+def assert_rfe_run_summary_starts_with_full_feature_set(result: dict, X: pd.DataFrame) -> None:
     """Asserts the run() summary starts at step 0 with the full feature set selected.
 
     Shared by the RFE variants (model importance, permutation) that report step 0
@@ -192,9 +186,7 @@ def assert_rfe_run_result_has_nonempty_history(result: dict) -> pd.DataFrame:
     return history
 
 
-def assert_selection_is_nonnull_list_with_metric(
-    selected: list, best_metric: float | None
-) -> None:
+def assert_selection_is_nonnull_list_with_metric(selected: list, best_metric: float | None) -> None:
     """Asserts select_features_weighted_score returned a list selection with a real metric.
 
     Args:

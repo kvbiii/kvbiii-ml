@@ -80,16 +80,12 @@ def test_metrics_dictionary_structure_is_valid():
             "preds",
             "probs",
         ]:
-            raise AssertionError(
-                f"Metric {metric_name} pred_type must be 'preds' or 'probs'"
-            )
+            raise AssertionError(f"Metric {metric_name} pred_type must be 'preds' or 'probs'")
         if direction not in [
             "minimize",
             "maximize",
         ]:
-            raise AssertionError(
-                f"Metric {metric_name} direction must be 'minimize' or 'maximize'"
-            )
+            raise AssertionError(f"Metric {metric_name} direction must be 'minimize' or 'maximize'")
 
 
 def test_get_metric_function_returns_valid_callable_for_accuracy():
@@ -340,9 +336,7 @@ def test_classification_metrics_handle_binary_targets(sample_predictions):
             raise AssertionError(f"{metric_name} should be between 0 and 1")
 
 
-def test_roc_auc_metric_requires_probabilities(
-    sample_predictions, sample_probabilities
-):
+def test_roc_auc_metric_requires_probabilities(sample_predictions, sample_probabilities):
     """Tests ROC AUC metric works with probability predictions.
 
     Args:

@@ -92,9 +92,7 @@ class CountFrequencyEncoderWithOriginal(_WithOriginalBase):
         with self._suppress_fe_datetime_warnings():
             return inner.fit(_cast_numeric_variables_to_object(X, self.variables), y)
 
-    def _transform_inner(
-        self, inner: CountFrequencyEncoder, X: pd.DataFrame
-    ) -> pd.DataFrame:
+    def _transform_inner(self, inner: CountFrequencyEncoder, X: pd.DataFrame) -> pd.DataFrame:
         """Apply the fitted encoder to X.
 
         Args:
@@ -133,8 +131,6 @@ if __name__ == "__main__":
     print("\n=== CountFrequencyEncoderWithOriginal (append) ===")
     print(enc_exp.fit_transform(df[["city", "tier", "revenue"]]))
 
-    pipe = Pipeline(
-        [("enc", CountFrequencyEncoderWithOriginal(encoding_method="count"))]
-    )
+    pipe = Pipeline([("enc", CountFrequencyEncoderWithOriginal(encoding_method="count"))])
     print("\n=== Inside sklearn Pipeline ===")
     print(pipe.fit_transform(df[["city", "tier", "revenue"]]))

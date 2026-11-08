@@ -164,9 +164,7 @@ def _per_class_roc_auc(
     classes: np.ndarray,
 ) -> np.ndarray:
     """Compute one-vs-rest ROC-AUC for each class, returning nan on failure."""
-    proba_matrix = (
-        np.column_stack([1 - y_proba, y_proba]) if y_proba.ndim == 1 else y_proba
-    )
+    proba_matrix = np.column_stack([1 - y_proba, y_proba]) if y_proba.ndim == 1 else y_proba
     results = []
     for i, cls in enumerate(classes):
         y_binary = (y_true == cls).astype(int)
@@ -196,9 +194,7 @@ def _build_per_class_split(
         (split_label, "Support"): support.astype(float),
     }
     if y_proba is not None:
-        cols[(split_label, "ROC-AUC")] = _per_class_roc_auc(
-            np.asarray(y_true), y_proba, classes
-        )
+        cols[(split_label, "ROC-AUC")] = _per_class_roc_auc(np.asarray(y_true), y_proba, classes)
     df = pd.DataFrame(cols, index=classes)
     df.columns = pd.MultiIndex.from_tuples(df.columns)
     return df
@@ -263,8 +259,7 @@ def _apply_cutoff(
     cutoff_array = np.array(cutoff_val)
     if y_proba.shape[1] != len(cutoff_array):
         raise ValueError(
-            f"Cutoff count ({len(cutoff_array)}) must match classes "
-            f"({y_proba.shape[1]})"
+            f"Cutoff count ({len(cutoff_array)}) must match classes ({y_proba.shape[1]})"
         )
     return np.argmax(y_proba / cutoff_array, axis=1)
 
@@ -356,9 +351,7 @@ def _build_per_class_table(
     train_per_class = _build_per_class_split(
         y_train_true, y_train_pred, y_train_proba, classes, "Train"
     )
-    test_per_class = _build_per_class_split(
-        y_test_true, y_test_pred, y_test_proba, classes, "Test"
-    )
+    test_per_class = _build_per_class_split(y_test_true, y_test_pred, y_test_proba, classes, "Test")
 
     per_class_df = pd.concat([train_per_class, test_per_class], axis=1)
     per_class_df.index = [f"Class {c}" for c in classes]
@@ -418,14 +411,10 @@ def classification_results(
         ValueError: If ``cutoffs`` is provided but probabilities or ``id2label`` are missing.
         ValueError: If cutoff list length does not match number of classes.
     """
-    if cutoffs is not None and (
-        y_train_proba is None or y_test_proba is None or id2label is None
-    ):
+    if cutoffs is not None and (y_train_proba is None or y_test_proba is None or id2label is None):
         raise ValueError("Probabilities and class labels are required for cutoff")
 
-    classes = np.unique(
-        np.concatenate([np.asarray(y_train_true), np.asarray(y_test_true)])
-    )
+    classes = np.unique(np.concatenate([np.asarray(y_train_true), np.asarray(y_test_true)]))
 
     overall_default = _build_overall_table(
         y_train_true,

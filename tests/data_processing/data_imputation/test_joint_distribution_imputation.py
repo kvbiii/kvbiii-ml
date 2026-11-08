@@ -313,9 +313,7 @@ def test_impute_missing_values_returns_copy_of_dataframe():
         raise AssertionError()
 
 
-@patch(
-    "kvbiii_ml.data_processing.data_imputation.joint_distribution_imputation.multivariate_plots"
-)
+@patch("kvbiii_ml.data_processing.data_imputation.joint_distribution_imputation.multivariate_plots")
 def test_impute_missing_values_creates_visualization(mock_plots):
     """Tests impute_missing_values creates heatmap visualization when imputation occurs.
 

@@ -177,9 +177,7 @@ if __name__ == "__main__":
         print("=== TargetEncoder (replace) ===")
         print(enc.fit_transform(df[["city", "tier"]], y)[:5])
 
-        enc_exp = TargetEncoderWithOriginal(
-            variables=["city", "tier"], target_type="binary"
-        )
+        enc_exp = TargetEncoderWithOriginal(variables=["city", "tier"], target_type="binary")
         print("\n=== TargetEncoderWithOriginal (append, cross-fitted) ===")
         print(enc_exp.fit_transform(df[["city", "tier", "revenue"]], y).head())
 

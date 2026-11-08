@@ -17,9 +17,7 @@ from kvbiii_ml.modeling.training.base_trainer import (
 )
 
 
-def test_basetrainer_fit_estimator_basic_fitting(
-    sample_dataframe, sample_series, mock_estimator
-):
+def test_basetrainer_fit_estimator_basic_fitting(sample_dataframe, sample_series, mock_estimator):
     """Tests fit_estimator method performs basic estimator fitting.
 
     Args:
@@ -39,9 +37,7 @@ def test_basetrainer_fit_estimator_basic_fitting(
         raise AssertionError()
 
 
-def test_basetrainer_fit_estimator_handles_eval_set_parameter(
-    sample_dataframe, sample_series
-):
+def test_basetrainer_fit_estimator_handles_eval_set_parameter(sample_dataframe, sample_series):
     """Tests fit_estimator method includes eval_set when estimator supports it.
 
     Args:
@@ -83,9 +79,7 @@ def test_basetrainer_fit_estimator_handles_eval_set_parameter(
             raise AssertionError()
 
 
-def test_basetrainer_fit_estimator_handles_validation_parameters(
-    sample_dataframe, sample_series
-):
+def test_basetrainer_fit_estimator_handles_validation_parameters(sample_dataframe, sample_series):
     """Tests fit_estimator method includes X_val/y_val parameters when supported.
 
     Args:
@@ -121,9 +115,7 @@ def test_basetrainer_fit_estimator_handles_validation_parameters(
             raise AssertionError()
 
 
-def test_basetrainer_fit_estimator_handles_sample_weight_parameter(
-    sample_dataframe, sample_series
-):
+def test_basetrainer_fit_estimator_handles_sample_weight_parameter(sample_dataframe, sample_series):
     """Tests fit_estimator method includes sample_weight when supported.
 
     Args:
@@ -431,9 +423,7 @@ def test_basetrainer_fit_estimator_xgb_caps_verbose_to_log_period(
         verbose_kwarg = mock_fit.call_args.kwargs["verbose"]
 
     if verbose_kwarg != VERBOSE_LOG_PERIOD:
-        raise AssertionError(
-            f"Expected verbose={VERBOSE_LOG_PERIOD}, got {verbose_kwarg!r}."
-        )
+        raise AssertionError(f"Expected verbose={VERBOSE_LOG_PERIOD}, got {verbose_kwarg!r}.")
 
 
 def test_basetrainer_fit_estimator_catboost_caps_verbose_to_log_period(
@@ -455,9 +445,7 @@ def test_basetrainer_fit_estimator_catboost_caps_verbose_to_log_period(
         verbose_kwarg = mock_fit.call_args.kwargs["verbose"]
 
     if verbose_kwarg != VERBOSE_LOG_PERIOD:
-        raise AssertionError(
-            f"Expected verbose={VERBOSE_LOG_PERIOD}, got {verbose_kwarg!r}."
-        )
+        raise AssertionError(f"Expected verbose={VERBOSE_LOG_PERIOD}, got {verbose_kwarg!r}.")
 
 
 def test_basetrainer_fit_estimator_histgb_enables_plain_verbose(
@@ -484,9 +472,7 @@ def test_basetrainer_fit_estimator_histgb_enables_plain_verbose(
         fitted_self = mock_fit.call_args.args[0]
 
     if fitted_self.get_params()["verbose"] != 1:
-        raise AssertionError(
-            f"Expected verbose=1, got {fitted_self.get_params()['verbose']!r}."
-        )
+        raise AssertionError(f"Expected verbose=1, got {fitted_self.get_params()['verbose']!r}.")
 
 
 def test_basetrainer_fit_estimator_realigns_cuda_xgb_device_to_cpu(
@@ -515,16 +501,12 @@ def test_basetrainer_fit_estimator_realigns_cuda_xgb_device_to_cpu(
         """Record the device configured on self at call time, skipping real fit."""
         devices_at_fit_call.append(self.get_params()["device"])
 
-    with patch.object(
-        type(estimator), "fit", autospec=True, side_effect=_record_device_and_fit
-    ):
+    with patch.object(type(estimator), "fit", autospec=True, side_effect=_record_device_and_fit):
         fitted = BaseTrainer.fit_estimator(estimator, X, y)
     fit_time_device = devices_at_fit_call[0]
 
     if fit_time_device != "cuda":
-        raise AssertionError(
-            f"Expected fit-time device='cuda', got {fit_time_device!r}."
-        )
+        raise AssertionError(f"Expected fit-time device='cuda', got {fit_time_device!r}.")
     if fitted.get_params()["device"] != "cpu":
         raise AssertionError(
             f"Expected post-fit device='cpu', got {fitted.get_params()['device']!r}."
@@ -549,9 +531,7 @@ def test_basetrainer_fit_estimator_leaves_cpu_xgb_device_untouched(
         fitted = BaseTrainer.fit_estimator(estimator, X, y)
 
     if fitted.get_params()["device"] is not None:
-        raise AssertionError(
-            f"Expected device=None, got {fitted.get_params()['device']!r}."
-        )
+        raise AssertionError(f"Expected device=None, got {fitted.get_params()['device']!r}.")
 
 
 if __name__ == "__main__":

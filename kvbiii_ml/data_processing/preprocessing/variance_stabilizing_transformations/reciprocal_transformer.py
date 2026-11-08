@@ -48,9 +48,7 @@ class ReciprocalTransformerWithOriginal(_WithOriginalBase):
         """
         return inner.fit(X)
 
-    def _transform_inner(
-        self, inner: ReciprocalTransformer, X: pd.DataFrame
-    ) -> pd.DataFrame:
+    def _transform_inner(self, inner: ReciprocalTransformer, X: pd.DataFrame) -> pd.DataFrame:
         """Apply 1/x transformation to X.
 
         Args:
@@ -82,8 +80,6 @@ if __name__ == "__main__":
     print("=== ReciprocalTransformer (replace) ===")
     print(enc.fit_transform(df).describe())
 
-    enc_exp = ReciprocalTransformerWithOriginal(
-        variables=["response_time_ms", "request_size_kb"]
-    )
+    enc_exp = ReciprocalTransformerWithOriginal(variables=["response_time_ms", "request_size_kb"])
     print("\n=== ReciprocalTransformerWithOriginal (append) ===")
     print(enc_exp.fit_transform(df).describe())

@@ -30,9 +30,7 @@ def test_custom_metrics_handler_validate_raises_error_for_non_dict_input():
         CustomMetricsHandler.validate_custom_metric_config(["not", "a", "dict"])
 
 
-@pytest.mark.parametrize(
-    "missing_key", ["name", "function", "metric_type", "direction"]
-)
+@pytest.mark.parametrize("missing_key", ["name", "function", "metric_type", "direction"])
 def test_custom_metrics_handler_validate_raises_error_for_missing_required_key(
     missing_key,
 ):
@@ -104,13 +102,8 @@ def test_custom_metrics_handler_validate_accepts_a_well_formed_config():
     Asserts:
         - validate_custom_metric_config returns None without raising for a valid config.
     """
-    if (
-        CustomMetricsHandler.validate_custom_metric_config(_valid_metric_config())
-        is not None
-    ):
-        raise AssertionError(
-            "validate_custom_metric_config should return None on success."
-        )
+    if CustomMetricsHandler.validate_custom_metric_config(_valid_metric_config()) is not None:
+        raise AssertionError("validate_custom_metric_config should return None on success.")
 
 
 def test_custom_metrics_handler_extract_metric_details_returns_expected_tuple():
@@ -121,9 +114,7 @@ def test_custom_metrics_handler_extract_metric_details_returns_expected_tuple():
         - The returned wrapped function is callable.
     """
     config = _valid_metric_config()
-    name, wrapped_fn, metric_type, direction = (
-        CustomMetricsHandler.extract_metric_details(config)
-    )
+    name, wrapped_fn, metric_type, direction = CustomMetricsHandler.extract_metric_details(config)
     if name != "custom_sum":
         raise AssertionError("Unexpected metric name.")
     if metric_type != "preds":

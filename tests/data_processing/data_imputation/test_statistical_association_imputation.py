@@ -44,9 +44,7 @@ def dataset_with_missing(test_settings):
 
 def test_rank_metrics_identifies_top_related_features(dataset_with_missing):
     """Ranking should prioritise the truly correlated feature."""
-    imputer = StatisticalAssociationImputer(
-        metrics=["mutual_info", "cramers_v"], top_n=3
-    )
+    imputer = StatisticalAssociationImputer(metrics=["mutual_info", "cramers_v"], top_n=3)
     # rank_metrics expects categorical_columns to be identified (normally done in fit)
     imputer.categorical_columns = imputer._get_categorical_columns(dataset_with_missing)
     rankings = imputer.rank_metrics(dataset_with_missing, "feature_with_missing")
@@ -63,9 +61,7 @@ def test_cramers_v_and_theils_u_behave(dataset_with_missing):
     imputer = StatisticalAssociationImputer()
     cat = dataset_with_missing["categorical"]
     # Create another categorical by binning a numeric
-    binned = pd.qcut(
-        dataset_with_missing["independent_feature"], q=3, duplicates="drop"
-    )
+    binned = pd.qcut(dataset_with_missing["independent_feature"], q=3, duplicates="drop")
     cv = imputer.cramers_v(cat, binned)
     tu = imputer.theils_u(cat, binned)
     if not 0.0 <= cv <= 1.0:

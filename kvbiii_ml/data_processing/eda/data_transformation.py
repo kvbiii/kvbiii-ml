@@ -47,9 +47,7 @@ class DataTransformer:
         if categorical_features:
             if verbose:
                 cat_start_mem = df.memory_usage(deep=True).sum() / 1024**2
-            aligner = CategoricalAligner(
-                variables=categorical_features, warn_on_unknown=False
-            )
+            aligner = CategoricalAligner(variables=categorical_features, warn_on_unknown=False)
             df = aligner.fit_transform(df)
             if verbose:
                 cat_end_mem = df.memory_usage(deep=True).sum() / 1024**2
@@ -85,9 +83,7 @@ class DataTransformer:
                 - id2label mapping dictionary {id: label}
         """
         if target_feature not in df.columns:
-            raise ValueError(
-                f"Target feature '{target_feature}' not found in DataFrame"
-            )
+            raise ValueError(f"Target feature '{target_feature}' not found in DataFrame")
         df = df.copy()
         df[target_feature] = df[target_feature].astype(str).astype("category")
         id2label = dict(enumerate(df[target_feature].cat.categories))

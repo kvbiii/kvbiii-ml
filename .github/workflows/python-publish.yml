@@ -49,9 +49,7 @@ jobs:
         with:
           enable-cache: true
           python-version: ${{ env.PYTHON_VERSION }}
-      # Advisory until the repo-wide format PR lands; remove continue-on-error to enforce.
       - name: Check formatting with ruff
-        continue-on-error: true
         run: uv run --only-group dev ruff format --check --diff
       # Advisory until the lint baseline is clean; remove continue-on-error to enforce.
       - name: Lint with ruff

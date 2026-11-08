@@ -87,9 +87,7 @@ class DecisionTreeDiscretiserWithOriginal(_WithOriginalBase):
         """
         return inner.fit(X, y)
 
-    def _transform_inner(
-        self, inner: DecisionTreeDiscretiser, X: pd.DataFrame
-    ) -> pd.DataFrame:
+    def _transform_inner(self, inner: DecisionTreeDiscretiser, X: pd.DataFrame) -> pd.DataFrame:
         """Apply the fitted discretiser to X.
 
         Args:
@@ -121,9 +119,7 @@ if __name__ == "__main__":
         )
         y = pd.Series((df["income"] > 50_000).astype(int), name="target")
 
-        enc = DecisionTreeDiscretiser(
-            variables=["age", "income"], regression=False, cv=3
-        )
+        enc = DecisionTreeDiscretiser(variables=["age", "income"], regression=False, cv=3)
         print("=== DecisionTreeDiscretiser (replace) ===")
         print(enc.fit_transform(df, y).head())
 

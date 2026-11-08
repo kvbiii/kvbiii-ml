@@ -132,12 +132,6 @@ if __name__ == "__main__":
     print("\n=== MeanEncoderWithOriginal (append) ===")
     print(enc_exp.fit_transform(df[["city", "tier", "revenue"]], y))
 
-    pipe = Pipeline(
-        [("enc", MeanEncoderWithOriginal(variables=["city", "tier"], smoothing=1.0))]
-    )
+    pipe = Pipeline([("enc", MeanEncoderWithOriginal(variables=["city", "tier"], smoothing=1.0))])
     print("\n=== Inside sklearn Pipeline ===")
-    print(
-        pipe.fit(df[["city", "tier", "revenue"]], y).transform(
-            df[["city", "tier", "revenue"]]
-        )
-    )
+    print(pipe.fit(df[["city", "tier", "revenue"]], y).transform(df[["city", "tier", "revenue"]]))

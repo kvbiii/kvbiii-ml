@@ -60,9 +60,7 @@ def test_boxcoxtransformerwithoriginal_transform_preserves_original_columns(
     transformer = BoxCoxTransformerWithOriginal(variables=["income", "price"])
     transformer.fit(positive_dataframe)
     result = transformer.transform(positive_dataframe)
-    pd.testing.assert_frame_equal(
-        result[positive_dataframe.columns.tolist()], positive_dataframe
-    )
+    pd.testing.assert_frame_equal(result[positive_dataframe.columns.tolist()], positive_dataframe)
 
 
 def test_boxcoxtransformerwithoriginal_transform_appends_derived_columns_named_correctly(
@@ -80,13 +78,9 @@ def test_boxcoxtransformerwithoriginal_transform_appends_derived_columns_named_c
     transformer.fit(positive_dataframe)
     result = transformer.transform(positive_dataframe)
     if "income_PREPROCESS_BOX_COX" not in result.columns:
-        raise AssertionError(
-            "Expected derived column income_PREPROCESS_BOX_COX missing."
-        )
+        raise AssertionError("Expected derived column income_PREPROCESS_BOX_COX missing.")
     if "price_PREPROCESS_BOX_COX" not in result.columns:
-        raise AssertionError(
-            "Expected derived column price_PREPROCESS_BOX_COX missing."
-        )
+        raise AssertionError("Expected derived column price_PREPROCESS_BOX_COX missing.")
 
 
 def test_boxcoxtransformerwithoriginal_fit_stores_variables_used(positive_dataframe):

@@ -370,9 +370,7 @@ def test_randomsearchcv_tune_supports_regression_problems():
         - selection_source_ reports one of the two possible sources
         - best_params_ carries the searched hyperparameter
     """
-    x_arr, y_arr = make_regression(
-        n_samples=150, n_features=5, n_informative=3, random_state=17
-    )
+    x_arr, y_arr = make_regression(n_samples=150, n_features=5, n_informative=3, random_state=17)
     X = pd.DataFrame(x_arr, columns=[f"col_{i}" for i in range(5)])
     y = pd.Series(y_arr, name="target")
     trainer = CrossValidationTrainer(
@@ -609,9 +607,7 @@ def test_randomsearchcv_guard_accepts_a_consistent_gain_across_uneven_folds(
     searched = _frozen_trial(0.559, [0.50, 0.555, 0.622], [100, 120, 140])
     plan = Mock(train_rows=100.0, refit_rows=150)
 
-    tuner._select_best(
-        plan, LGBMClassifier(), _study_of([searched], direction="minimize")
-    )
+    tuner._select_best(plan, LGBMClassifier(), _study_of([searched], direction="minimize"))
 
     if tuner.selection_source_ != "tuned":
         raise AssertionError()
@@ -712,9 +708,7 @@ def test_randomsearchcv_get_param_samples_expected_types(
     """
     tuner = RandomSearchCV(cross_validator=Mock(), n_trials=1, seed=17)
 
-    value = tuner.get_param(
-        real_optuna_trial, "param", (param_type, param_value, param_kwargs)
-    )
+    value = tuner.get_param(real_optuna_trial, "param", (param_type, param_value, param_kwargs))
 
     if not isinstance(value, expected_type):
         raise AssertionError()
@@ -781,9 +775,7 @@ def test_randomsearchcv_tune_prints_trial_and_summary_lines_when_verbose(
         - The final best-trial summary is printed
     """
     X, y = hyperparam_classification_data
-    tuner = RandomSearchCV(
-        cross_validator=hyperparam_cv_trainer, n_trials=3, seed=17, verbose=True
-    )
+    tuner = RandomSearchCV(cross_validator=hyperparam_cv_trainer, n_trials=3, seed=17, verbose=True)
     params_grid = {"C": ("float", [0.01, 1.0], {"log": True})}
 
     tuner.tune(logistic_regression_estimator, X, y, params_grid)
@@ -1106,9 +1098,7 @@ def test_randomsearchcv_confirm_stage_searches_beyond_the_shortlist(
     if len(study.trials) != 6:
         raise AssertionError()
     warm_started = {round(t.params["C"], 12) for t in study.trials[:2]}
-    fresh = [
-        t for t in study.trials[2:] if round(t.params["C"], 12) not in warm_started
-    ]
+    fresh = [t for t in study.trials[2:] if round(t.params["C"], 12) not in warm_started]
     if not fresh:
         raise AssertionError()
 
@@ -1178,9 +1168,7 @@ def test_randomsearchcv_detects_iteration_censoring_at_the_round_ceiling(
         - Iterations stopping well short of the ceiling leave it False
         - A tree budget is still returned in both cases
     """
-    tuner = _tuner_with_grid(
-        hyperparam_cv_trainer, {"n_estimators": ("constant", [4000])}
-    )
+    tuner = _tuner_with_grid(hyperparam_cv_trainer, {"n_estimators": ("constant", [4000])})
     estimator = LGBMClassifier(n_estimators=4000, verbose=-1)
 
     censored = tuner._resolve_n_estimators(
@@ -1258,18 +1246,14 @@ def test_randomsearchcv_falls_back_to_frame_dtypes_when_no_declaration_survives(
         pd.DataFrame({"CIRCUIT": pd.Categorical(["MONZA", "SPA"]), "LAP": [1.0, 2.0]})
     )
 
-    reconciled = tuner._reconcile_categorical_params(
-        {"cat_features": ["RACE", "COMPOUND"]}
-    )
+    reconciled = tuner._reconcile_categorical_params({"cat_features": ["RACE", "COMPOUND"]})
     if reconciled["cat_features"] != ["CIRCUIT"]:
         raise AssertionError()
 
     tuner._remember_transformed_columns(
         pd.DataFrame({"RACE_TARGET_ENCODED": [0.4, 0.6], "LAP": [1.0, 2.0]})
     )
-    encoded_away = tuner._reconcile_categorical_params(
-        {"cat_features": ["RACE", "COMPOUND"]}
-    )
+    encoded_away = tuner._reconcile_categorical_params({"cat_features": ["RACE", "COMPOUND"]})
     if encoded_away["cat_features"] != []:
         raise AssertionError()
 
@@ -1426,9 +1410,7 @@ def test_randomsearchcv_holdout_refit_scale_ignores_the_cv_fold_count(
         - The refit scale equals training rows over rows left after the carve-out.
     """
     X, y = hyperparam_classification_data
-    X_train, X_valid, y_train, y_valid = train_test_split(
-        X, y, test_size=0.25, random_state=17
-    )
+    X_train, X_valid, y_train, y_valid = train_test_split(X, y, test_size=0.25, random_state=17)
     tuner = RandomSearchCV(cross_validator=hyperparam_cv_trainer, n_trials=1, seed=17)
 
     plan = tuner._build_holdout_plan(X_train, y_train, X_valid, y_valid)

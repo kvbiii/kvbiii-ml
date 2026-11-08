@@ -103,9 +103,7 @@ def test_categoricalcleaner_fit_transform_combines_operations(messy_categorical_
         - fit_transform produces same result as separate fit and transform
         - Method works correctly with all cleaning options
     """
-    cleaner = CategoricalCleaner(
-        {"Not Provided": ["messy_spaces", "messy_case", "messy_special"]}
-    )
+    cleaner = CategoricalCleaner({"Not Provided": ["messy_spaces", "messy_case", "messy_special"]})
 
     # Get result using fit_transform
     result1 = cleaner.fit_transform(messy_categorical_data)

@@ -79,9 +79,7 @@ def test_powertransformerwithoriginal_transform_preserves_original_columns(
     transformer = PowerTransformerWithOriginal(variables=["count", "duration_sec"])
     transformer.fit(positive_dataframe)
     result = transformer.transform(positive_dataframe)
-    pd.testing.assert_frame_equal(
-        result[positive_dataframe.columns.tolist()], positive_dataframe
-    )
+    pd.testing.assert_frame_equal(result[positive_dataframe.columns.tolist()], positive_dataframe)
 
 
 def test_powertransformerwithoriginal_transform_appends_derived_columns_named_correctly(
@@ -101,9 +99,7 @@ def test_powertransformerwithoriginal_transform_appends_derived_columns_named_co
     if "count_PREPROCESS_POWER" not in result.columns:
         raise AssertionError("Expected derived column count_PREPROCESS_POWER missing.")
     if "duration_sec_PREPROCESS_POWER" not in result.columns:
-        raise AssertionError(
-            "Expected derived column duration_sec_PREPROCESS_POWER missing."
-        )
+        raise AssertionError("Expected derived column duration_sec_PREPROCESS_POWER missing.")
 
 
 if __name__ == "__main__":

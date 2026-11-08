@@ -55,9 +55,7 @@ def small_regression_data() -> tuple[pd.DataFrame, pd.Series]:
     """Provides a small linear regression dataset."""
     rng = np.random.default_rng(42)
     X = pd.DataFrame(rng.normal(size=(50, 5)), columns=[f"r{i}" for i in range(5)])
-    y = pd.Series(
-        2 * X["r0"] - 1.5 * X["r1"] + rng.normal(scale=0.5, size=50), name="target"
-    )
+    y = pd.Series(2 * X["r0"] - 1.5 * X["r1"] + rng.normal(scale=0.5, size=50), name="target")
     return X, y
 
 
@@ -160,9 +158,7 @@ def test_tune_never_selects_weights_worse_than_uniform(small_classification_data
 
     y_true, preds_list, fold_boundaries = tuner._perform_cv(X, y)
     n = len(estimators)
-    uniform_score = tuner._score_weights(
-        np.full(n, 1.0 / n), y_true, preds_list, fold_boundaries
-    )
+    uniform_score = tuner._score_weights(np.full(n, 1.0 / n), y_true, preds_list, fold_boundaries)
 
     if tuner.best_score_ < uniform_score - 1e-9:
         raise AssertionError()

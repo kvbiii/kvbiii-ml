@@ -115,9 +115,7 @@ def test_build_attributes_withoriginal_derived_column_to_its_single_source():
             "f1": [10.0, 20.0, 30.0, 40.0, 50.0, 60.0],
         }
     )
-    pipeline = Pipeline(
-        [("eq_width", EqualWidthDiscretiserWithOriginal(variables=["f0"], bins=3))]
-    )
+    pipeline = Pipeline([("eq_width", EqualWidthDiscretiserWithOriginal(variables=["f0"], bins=3))])
     graph = PipelineDependencyGraph.build(pipeline, X)
 
     if graph.processed_to_raw["f0_PREPROCESS_EQ_WIDTH_3"] != frozenset({"f0"}):
@@ -148,9 +146,7 @@ def test_build_attributes_string_similarity_derived_columns_to_single_source():
             ]
         }
     )
-    pipeline = Pipeline(
-        [("sse", StringSimilarityEncoderWithOriginal(variables=["product"]))]
-    )
+    pipeline = Pipeline([("sse", StringSimilarityEncoderWithOriginal(variables=["product"]))])
     graph = PipelineDependencyGraph.build(pipeline, X)
 
     derived_columns = [c for c in graph.processed_columns if c != "product"]
@@ -325,9 +321,7 @@ def test_restrict_never_drops_a_raw_column_still_needed_transitively():
         raise AssertionError(raw_needed)
     result = restricted.fit_transform(X[raw_needed])
     if "age_PREPROCESS_WINSORIZER" not in result.columns:
-        raise AssertionError(
-            "restricted pipeline failed to produce the still-needed column"
-        )
+        raise AssertionError("restricted pipeline failed to produce the still-needed column")
 
 
 def test_restrict_narrows_a_steps_variables_to_only_its_own_still_needed_derived_output():
@@ -356,9 +350,7 @@ def test_restrict_narrows_a_steps_variables_to_only_its_own_still_needed_derived
         [
             (
                 "count_freq",
-                CountFrequencyEncoderWithOriginal(
-                    variables=["cat_a", "cat_b", "cat_c"]
-                ),
+                CountFrequencyEncoderWithOriginal(variables=["cat_a", "cat_b", "cat_c"]),
             ),
             ("rare_c", RareLabelEncoderWithOriginal(variables=["cat_c"])),
         ]
@@ -413,9 +405,7 @@ def test_restrict_narrows_a_variables_none_steps_own_survivors():
         raise AssertionError(raw_needed)
     step_names = [name for name, _ in restricted.steps]
     if "target_enc" in step_names:
-        raise AssertionError(
-            "expected the auto-detect target encoder step to be dropped entirely"
-        )
+        raise AssertionError("expected the auto-detect target encoder step to be dropped entirely")
     result = restricted.fit_transform(X)
     if list(result.columns) != processed_features:
         raise AssertionError(list(result.columns))
@@ -523,18 +513,14 @@ def test_build_restricted_pipeline_matches_manual_build_and_restrict():
             "other": [1, 2, 3, 4, 5, 6],
         }
     )
-    pipeline = Pipeline(
-        [("count_freq", CountFrequencyEncoderWithOriginal(variables=["cat"]))]
-    )
+    pipeline = Pipeline([("count_freq", CountFrequencyEncoderWithOriginal(variables=["cat"]))])
     selected_features = ["cat_PREPROCESS_CNT_FREQ"]
 
     manual_graph = PipelineDependencyGraph.build(pipeline, X)
     _, manual_restricted = manual_graph.restrict(selected_features)
     manual_result = manual_restricted.fit_transform(X)
 
-    convenience_result = build_restricted_pipeline(
-        pipeline, X, selected_features
-    ).fit_transform(X)
+    convenience_result = build_restricted_pipeline(pipeline, X, selected_features).fit_transform(X)
 
     if list(convenience_result.columns) != list(manual_result.columns):
         raise AssertionError((convenience_result.columns, manual_result.columns))
@@ -566,12 +552,8 @@ def test_build_on_already_restricted_pipeline_reports_true_processed_columns():
             "unused_extra": [7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
         }
     )
-    pipeline = Pipeline(
-        [("count_freq", CountFrequencyEncoderWithOriginal(variables=["cat"]))]
-    )
-    once_restricted = build_restricted_pipeline(
-        pipeline, X, ["cat_PREPROCESS_CNT_FREQ", "num"]
-    )
+    pipeline = Pipeline([("count_freq", CountFrequencyEncoderWithOriginal(variables=["cat"]))])
+    once_restricted = build_restricted_pipeline(pipeline, X, ["cat_PREPROCESS_CNT_FREQ", "num"])
 
     second_graph = PipelineDependencyGraph.build(once_restricted, X)
 
@@ -611,13 +593,9 @@ def test_build_restricted_pipeline_chains_without_duplicate_step_names():
             ),
         ]
     )
-    once_restricted = build_restricted_pipeline(
-        pipeline, X, ["cat_PREPROCESS_CNT_FREQ", "num"]
-    )
+    once_restricted = build_restricted_pipeline(pipeline, X, ["cat_PREPROCESS_CNT_FREQ", "num"])
 
-    twice_restricted = build_restricted_pipeline(
-        once_restricted, X, ["cat_PREPROCESS_CNT_FREQ"]
-    )
+    twice_restricted = build_restricted_pipeline(once_restricted, X, ["cat_PREPROCESS_CNT_FREQ"])
 
     step_names = [name for name, _ in twice_restricted.steps]
     if len(step_names) != len(set(step_names)):

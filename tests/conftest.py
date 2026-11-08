@@ -60,9 +60,7 @@ def sample_dataframe(test_settings: TestSettings) -> pd.DataFrame:
         {
             "numeric_1": np.random.rand(test_settings.N_SAMPLES),
             "numeric_2": np.random.rand(test_settings.N_SAMPLES),
-            "categorical_1": np.random.choice(
-                ["A", "B", "C"], size=test_settings.N_SAMPLES
-            ),
+            "categorical_1": np.random.choice(["A", "B", "C"], size=test_settings.N_SAMPLES),
             "categorical_2": np.random.choice(["X", "Y"], size=test_settings.N_SAMPLES),
             "integer_1": np.random.randint(0, 10, size=test_settings.N_SAMPLES),
         }
@@ -100,9 +98,7 @@ def binary_classification_data(
         np.random.randn(test_settings.N_SAMPLES, test_settings.N_FEATURES),
         columns=[f"feature_{i}" for i in range(test_settings.N_FEATURES)],
     )
-    y = pd.Series(
-        (np.random.rand(test_settings.N_SAMPLES) > 0.5).astype(int), name="target"
-    )
+    y = pd.Series((np.random.rand(test_settings.N_SAMPLES) > 0.5).astype(int), name="target")
     return X, y
 
 
@@ -123,9 +119,7 @@ def multiclass_classification_data(
         np.random.randn(test_settings.N_SAMPLES, test_settings.N_FEATURES),
         columns=[f"feature_{i}" for i in range(test_settings.N_FEATURES)],
     )
-    y = pd.Series(
-        np.random.choice([0, 1, 2], size=test_settings.N_SAMPLES), name="target"
-    )
+    y = pd.Series(np.random.choice([0, 1, 2], size=test_settings.N_SAMPLES), name="target")
     return X, y
 
 
@@ -183,9 +177,7 @@ def mock_transformer() -> Mock:
     transformer = Mock()
     transformer.fit.return_value = transformer
     transformer.transform.return_value = pd.DataFrame({"transformed": [1, 2, 3, 4, 5]})
-    transformer.fit_transform.return_value = pd.DataFrame(
-        {"transformed": [1, 2, 3, 4, 5]}
-    )
+    transformer.fit_transform.return_value = pd.DataFrame({"transformed": [1, 2, 3, 4, 5]})
     transformer.fit_resample.return_value = (
         pd.DataFrame({"resampled": [1, 2, 3]}),
         pd.Series([0, 1, 0]),
@@ -219,9 +211,7 @@ def logistic_regression_estimator(test_settings: TestSettings) -> LogisticRegres
     Returns:
         LogisticRegression: Configured estimator with reproducible random state.
     """
-    return LogisticRegression(
-        max_iter=200, random_state=test_settings.SEED, solver="liblinear"
-    )
+    return LogisticRegression(max_iter=200, random_state=test_settings.SEED, solver="liblinear")
 
 
 @pytest.fixture
@@ -247,9 +237,7 @@ def random_forest_estimator(test_settings: TestSettings) -> RandomForestClassifi
     Returns:
         RandomForestClassifier: Configured estimator with reproducible random state.
     """
-    return RandomForestClassifier(
-        n_estimators=10, random_state=test_settings.SEED, max_depth=3
-    )
+    return RandomForestClassifier(n_estimators=10, random_state=test_settings.SEED, max_depth=3)
 
 
 @pytest.fixture

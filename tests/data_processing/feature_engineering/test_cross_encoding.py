@@ -196,9 +196,7 @@ def test_crossfeaturegenerator_fit_categorical_combo_uses_custom_separator():
         - Combined values inside the encoding map use the custom separator too
     """
     df = pd.DataFrame({"A": ["a", "b"], "B": ["x", "y"]})
-    generator = CrossFeatureGenerator(
-        features_names=["A", "B"], degree=2, separator="-"
-    )
+    generator = CrossFeatureGenerator(features_names=["A", "B"], degree=2, separator="-")
     generator.fit(df)
     if "A-B" not in generator.encoding_maps_:
         raise AssertionError()
@@ -266,9 +264,7 @@ def test_crossfeaturegenerator_transform_numerical_combo_is_elementwise_product(
     generator = CrossFeatureGenerator(features_names=["C", "D"], degree=2)
     generator.fit(mixed_dataframe)
     result = generator.transform(mixed_dataframe)
-    expected = (
-        (mixed_dataframe["C"] * mixed_dataframe["D"]).astype("float32").to_numpy()
-    )
+    expected = (mixed_dataframe["C"] * mixed_dataframe["D"]).astype("float32").to_numpy()
     if not np.allclose(result["C_D"].to_numpy(), expected):
         raise AssertionError()
 
@@ -299,9 +295,7 @@ def test_crossfeaturegenerator_transform_before_fit_raises_value_error():
     """
     df = pd.DataFrame({"A": ["a", "b"], "B": ["x", "y"]})
     generator = CrossFeatureGenerator()
-    with pytest.raises(
-        ValueError, match="CrossFeatureGenerator must be fitted before transform"
-    ):
+    with pytest.raises(ValueError, match="CrossFeatureGenerator must be fitted before transform"):
         generator.transform(df)
 
 
@@ -355,9 +349,7 @@ def test_crossfeaturegenerator_get_feature_names_reflects_separator(
         - Returned feature names match the expected separator-joined combo names
     """
     df = pd.DataFrame({"A": ["a", "b"], "B": ["x", "y"], "C": ["1", "2"]})
-    generator = CrossFeatureGenerator(
-        features_names=["A", "B", "C"], degree=2, separator=separator
-    )
+    generator = CrossFeatureGenerator(features_names=["A", "B", "C"], degree=2, separator=separator)
     generator.fit(df)
     if sorted(generator.get_feature_names()) != sorted(expected_names):
         raise AssertionError()
@@ -371,9 +363,7 @@ def test_crossfeaturegenerator_degree_three_combinations():
         - Every combination has exactly 3 features
         - Combo column names join 3 feature names with the separator
     """
-    df = pd.DataFrame(
-        {"A": ["a", "b"], "B": ["x", "y"], "C": ["1", "2"], "D": ["p", "q"]}
-    )
+    df = pd.DataFrame({"A": ["a", "b"], "B": ["x", "y"], "C": ["1", "2"], "D": ["p", "q"]})
     generator = CrossFeatureGenerator(features_names=["A", "B", "C", "D"], degree=3)
     result = generator.fit_transform(df)
     if len(generator.feature_combinations_) != 4:

@@ -32,9 +32,7 @@ class DataCleaner:
         categorical_cols = df.select_dtypes(include=["object", "category"]).columns
         nunique = df.nunique()
 
-        categorical_features = [
-            col for col in categorical_cols if nunique[col] < threshold
-        ]
+        categorical_features = [col for col in categorical_cols if nunique[col] < threshold]
         binary_features = [col for col in df.columns if nunique[col] == 2]
 
         return list(set(categorical_features) | set(binary_features))
@@ -162,7 +160,7 @@ class DataCleaner:
                 max_value = value_counts.idxmax()
                 print(
                     f"  - {feature} (value '{max_value}' with "
-                    f"{max_value_ratio*100:.2f}% of the data)"
+                    f"{max_value_ratio * 100:.2f}% of the data)"
                 )
                 feats_to_drop.append(feature)
 
@@ -171,7 +169,7 @@ class DataCleaner:
 
         print(
             f"Highly skewed categorical features with a distribution where "
-            f"one value is more than {threshold*100:.2f}% of the data:\n"
+            f"one value is more than {threshold * 100:.2f}% of the data:\n"
         )
         df = df.drop(columns=feats_to_drop)
         print(
@@ -198,9 +196,7 @@ class DataCleaner:
         columns_to_remove: set[str] = set()
 
         for n_unique, cols_in_group in count_groups.items():
-            DataCleaner._process_bijective_group(
-                df, n_unique, cols_in_group, columns_to_remove
-            )
+            DataCleaner._process_bijective_group(df, n_unique, cols_in_group, columns_to_remove)
 
         removed_features = list(columns_to_remove)
         if removed_features:
@@ -247,9 +243,7 @@ class DataCleaner:
         return factorized, valid_masks
 
     @staticmethod
-    def _are_codes_bijective(
-        codes_1: np.ndarray, codes_2: np.ndarray, n_unique: int
-    ) -> bool:
+    def _are_codes_bijective(codes_1: np.ndarray, codes_2: np.ndarray, n_unique: int) -> bool:
         """Checks whether two code arrays represent a bijective mapping."""
         if len(codes_1) != len(codes_2):
             return False
@@ -392,9 +386,7 @@ def _demonstrate_usage() -> None:
         {"A": "W", "B": "X", "C": "Y", "D": "Z"}
     )
     n_features = 2000
-    new_features = {
-        f"feature_{i}": np.random.randint(0, 10, n_samples) for i in range(n_features)
-    }
+    new_features = {f"feature_{i}": np.random.randint(0, 10, n_samples) for i in range(n_features)}
     sample_data = pd.concat([sample_data, pd.DataFrame(new_features)], axis=1)
 
     print("Original DataFrame shape:", sample_data.shape)
@@ -416,9 +408,7 @@ def _demonstrate_usage() -> None:
 
     cat_feats = cleaner.get_categorical_features(cleaned_data, threshold=50)
 
-    cat_categories = cleaner.categorize_categorical_features_by_missing(
-        cleaned_data, cat_feats
-    )
+    cat_categories = cleaner.categorize_categorical_features_by_missing(cleaned_data, cat_feats)
     print("\nCategorical features categorized by missing values:")
     for key, value in cat_categories.items():
         print(f"  {key}: {value}")

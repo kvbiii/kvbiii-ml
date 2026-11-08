@@ -66,12 +66,8 @@ def test_meanencoderwithoriginal_transform_higher_smoothing_shrinks_toward_globa
     high_smoothing.fit(X, y)
     low_result = low_smoothing.transform(X)
     high_result = high_smoothing.transform(X)
-    low_warsaw = low_result.loc[X["city"] == "Warsaw", "city_PREPROCESS_MEAN_ENC"].iloc[
-        0
-    ]
-    high_warsaw = high_result.loc[
-        X["city"] == "Warsaw", "city_PREPROCESS_MEAN_ENC"
-    ].iloc[0]
+    low_warsaw = low_result.loc[X["city"] == "Warsaw", "city_PREPROCESS_MEAN_ENC"].iloc[0]
+    high_warsaw = high_result.loc[X["city"] == "Warsaw", "city_PREPROCESS_MEAN_ENC"].iloc[0]
     if not abs(high_warsaw - global_mean) < abs(low_warsaw - global_mean):
         raise AssertionError(
             "Higher smoothing did not shrink the encoded value toward the global mean."
@@ -118,9 +114,7 @@ def test_meanencoderwithoriginal_transform_accepts_explicit_numeric_variable(
     if not np.allclose(result["num_cat_PREPROCESS_MEAN_ENC"].to_numpy(), expected):
         raise AssertionError("Mean encoding did not match expected per-category means.")
     if not pd.api.types.is_numeric_dtype(result["num_cat"]):
-        raise AssertionError(
-            "Original numeric column dtype was altered by transform()."
-        )
+        raise AssertionError("Original numeric column dtype was altered by transform().")
 
 
 if __name__ == "__main__":

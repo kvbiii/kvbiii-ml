@@ -15,9 +15,7 @@ from kvbiii_ml.modeling.training.oof_model import OOFModel, _fit_calibrator
 from ._test_support import assert_valid_binary_proba_matrix
 
 
-def test_oofmodel_init_creates_classification_instance(
-    logistic_regression_estimator, kfold_cv
-):
+def test_oofmodel_init_creates_classification_instance(logistic_regression_estimator, kfold_cv):
     """Tests OOFModel initialization for classification problems.
 
     Args:
@@ -53,9 +51,7 @@ def test_oofmodel_init_creates_classification_instance(
         raise AssertionError()
 
 
-def test_oofmodel_init_creates_regression_instance(
-    logistic_regression_estimator, kfold_cv
-):
+def test_oofmodel_init_creates_regression_instance(logistic_regression_estimator, kfold_cv):
     """Tests OOFModel initialization for regression problems.
 
     Args:
@@ -67,9 +63,7 @@ def test_oofmodel_init_creates_regression_instance(
         - Regression metrics are properly configured
         - Instance state is correctly initialized
     """
-    cv_trainer = CrossValidationTrainer(
-        metric_name="MAE", problem_type="regression", cv=kfold_cv
-    )
+    cv_trainer = CrossValidationTrainer(metric_name="MAE", problem_type="regression", cv=kfold_cv)
 
     oof = OOFModel(
         estimator=logistic_regression_estimator,
@@ -125,9 +119,7 @@ def test_oofmodel_init_raises_error_for_calibrate_with_regression(
         - ValueError is raised when calibrate=True and problem_type='regression'
         - Error message clarifies calibration is classification-only
     """
-    cv_trainer = CrossValidationTrainer(
-        metric_name="MAE", problem_type="regression", cv=kfold_cv
-    )
+    cv_trainer = CrossValidationTrainer(metric_name="MAE", problem_type="regression", cv=kfold_cv)
 
     with pytest.raises(
         ValueError,
@@ -325,9 +317,7 @@ def test_oofmodel_predict_raises_error_when_not_fitted(
         problem_type="classification",
     )
 
-    with pytest.raises(
-        RuntimeError, match="OOFModel must be fitted before calling predict"
-    ):
+    with pytest.raises(RuntimeError, match="OOFModel must be fitted before calling predict"):
         oof.predict(X)
 
 
@@ -380,9 +370,7 @@ def test_oofmodel_predict_proba_raises_error_for_regression(
         - Error message explains method is only for classification
     """
     X, _y = regression_data
-    cv_trainer = CrossValidationTrainer(
-        metric_name="MAE", problem_type="regression", cv=kfold_cv
-    )
+    cv_trainer = CrossValidationTrainer(metric_name="MAE", problem_type="regression", cv=kfold_cv)
 
     oof = OOFModel(
         estimator=logistic_regression_estimator,
@@ -390,9 +378,7 @@ def test_oofmodel_predict_proba_raises_error_for_regression(
         problem_type="regression",
     )
 
-    with pytest.raises(
-        ValueError, match="predict_proba is only available for classification"
-    ):
+    with pytest.raises(ValueError, match="predict_proba is only available for classification"):
         oof.predict_proba(X)
 
 
@@ -426,9 +412,7 @@ def test_oofmodel_predict_handles_estimators_without_predict_proba():
         verbose=False,
     )
 
-    oof = OOFModel(
-        estimator=estimator, cross_validator=cv_trainer, problem_type="classification"
-    )
+    oof = OOFModel(estimator=estimator, cross_validator=cv_trainer, problem_type="classification")
 
     # Fit and predict
     oof.fit(X, y)
