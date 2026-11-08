@@ -1,6 +1,6 @@
 import gc
 from copy import deepcopy
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 import pandas as pd
@@ -14,23 +14,16 @@ from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
 
 class ModelImportanceFiltering:
-    """Feature selection using stepwise model importance filtering.
+    """Feature selection by stepwise removal of low-importance features.
 
-    Iteratively fits a model on all folds, extracts ``feature_importances_``, and
-    removes features whose mean importance falls at or below ``threshold``.  This
-    repeats until no removable feature remains below the threshold or ``max_steps``
-    is reached.
+    Each step fits the model on all folds and removes features whose mean ``feature_importances_``
+    is at or below ``threshold``, until none remain or ``max_steps`` is reached.
 
-    When the cross-validator holds a column-expansion pipeline, the elimination
-    loop works in *processed* feature space - the post-pipeline column set. Raw
-    input features needed for each step are resolved via a
-    ``PipelineDependencyGraph`` built once from a real baseline pipeline fit.
-
-    ``protected_features`` must be specified as *processed* column names and are
-    validated after the baseline CV run when the processed column set is known.
+    With a column-expansion pipeline the loop works on processed (post-pipeline) columns, so
+    ``protected_features`` must be processed names, validated after the baseline CV run.
     """
 
-    history_schema = {
+    history_schema: ClassVar[dict[str, type]] = {
         "step": int,
         "n_features_removed": int,
         "n_features_remaining": int,
@@ -49,23 +42,15 @@ class ModelImportanceFiltering:
         max_steps: int = 10,
         verbose: bool = False,
     ) -> None:
-        """Initialize the model importance filter.
+        """Initialize the filter and validate the options.
 
         Args:
-            estimator (BaseEstimator): Estimator with ``feature_importances_`` attribute.
-            cross_validator (CrossValidationTrainer): Cross-validation trainer that
-                optionally holds a preprocessing pipeline.  The pipeline is re-fitted
-                per fold at each elimination step via a restricted clone.
-            threshold (float): Features with mean importance ≤ this value are removed
-                each step.  Defaults to 0.0.
-            protected_features (list[str] | None): Processed column names never removed.
-                Validated after the baseline CV run against the actual post-pipeline
-                column set.  Defaults to None.
-            max_steps (int): Maximum elimination iterations.  Defaults to 10.
-            verbose (bool): Print emoji-styled step-by-step progress.  Defaults to False.
-
-        Raises:
-            ValueError: If any parameter has an invalid type or value.
+            estimator (BaseEstimator): Estimator with a ``feature_importances_`` attribute.
+            cross_validator (CrossValidationTrainer): CV trainer, optionally holding a pipeline.
+            threshold (float): Remove features with mean importance ≤ this. Defaults to 0.0.
+            protected_features (list[str] | None): Processed names never removed. Defaults to None.
+            max_steps (int): Maximum elimination iterations. Defaults to 10.
+            verbose (bool): Print step-by-step progress. Defaults to False.
         """
         self.estimator = estimator
         self.cross_validator = cross_validator
@@ -97,15 +82,13 @@ class ModelImportanceFiltering:
         ):
             raise ValueError("protected_features must be a list of strings.")
 
-    # ─────────────────────────── static pipeline helpers ────────────────────────────
-
     @staticmethod
     def _restrict_catboost_cat_features(
         estimator: BaseEstimator,
         current_features: set[str],
         post_pipeline_dtypes: pd.Series | None = None,
     ) -> BaseEstimator:
-        """Return a cloned CatBoost estimator with cat_features filtered to active non-numeric columns.
+        """Return a CatBoost clone whose cat_features are limited to active non-numeric columns.
 
         A column is kept in cat_features only when all three conditions hold:
         - it is still present in the active feature set,
@@ -117,8 +100,7 @@ class ModelImportanceFiltering:
         Args:
             estimator (BaseEstimator): Estimator to potentially update.
             current_features (set[str]): Feature names still present in this step.
-            post_pipeline_dtypes (pd.Series | None): Column dtypes of the post-pipeline
-                validation data.  Defaults to None.
+            post_pipeline_dtypes (pd.Series | None): Post-pipeline column dtypes. Defaults to None.
 
         Returns:
             BaseEstimator: Updated estimator for CatBoost; original for all others.
@@ -142,14 +124,10 @@ class ModelImportanceFiltering:
         if set(active_cats) == set(original_cats):
             return estimator
         updated = deepcopy(estimator)
-        updated.set_params(cat_features=active_cats if active_cats else None)
+        updated.set_params(cat_features=active_cats or None)
         return updated
 
-    # ─────────────────────────────── summary helpers ────────────────────────────────
-
-    def _init_summary(
-        self, current_features: list[str], base_metric: float
-    ) -> dict[str, Any]:
+    def _init_summary(self, current_features: list[str], base_metric: float) -> dict[str, Any]:
         """Initialize summary object with step-0 baseline metrics.
 
         Args:
@@ -157,12 +135,9 @@ class ModelImportanceFiltering:
             base_metric (float): Baseline CV metric value.
 
         Returns:
-            dict[str, Any]: Summary dict with ``selected_features``, ``selected_features_names``,
-                and ``history`` pre-populated with the step-0 row.
+            dict[str, Any]: Summary with empty selections and the step-0 history row.
         """
-        history = pd.DataFrame(columns=self.history_schema.keys()).astype(
-            self.history_schema
-        )
+        history = pd.DataFrame(columns=list(self.history_schema)).astype(self.history_schema)
         history = pd.concat(
             [
                 history,
@@ -201,8 +176,7 @@ class ModelImportanceFiltering:
             history (pd.DataFrame): Existing history DataFrame.
             step_idx (int): Current step number.
             current_features (list[str]): Processed features before this removal.
-            step_state (dict[str, Any]): Step data including importance_scores,
-                fold_metric, metric_change, and features_to_remove.
+            step_state (dict[str, Any]): Step data: scores, metric change, features to remove.
 
         Returns:
             pd.DataFrame: Updated history with new rows appended.
@@ -225,9 +199,7 @@ class ModelImportanceFiltering:
         ]
         return pd.concat([history, pd.DataFrame(rows)], ignore_index=True)
 
-    def _select_features_to_remove(
-        self, importance_scores: dict[str, float]
-    ) -> list[str]:
+    def _select_features_to_remove(self, importance_scores: dict[str, float]) -> list[str]:
         """Select non-protected features at or below threshold, sorted ascending by importance.
 
         Args:
@@ -244,8 +216,6 @@ class ModelImportanceFiltering:
             ),
             key=lambda f: importance_scores[f],
         )
-
-    # ─────────────────────────────── logging helpers ────────────────────────────────
 
     def _log_start(
         self,
@@ -286,8 +256,7 @@ class ModelImportanceFiltering:
         Args:
             step_idx (int): Current step number.
             current_features (list[str]): Active processed feature names.
-            step_state (dict[str, Any]): Step data including importance_scores,
-                fold_metric, fold_std, and features_to_remove.
+            step_state (dict[str, Any]): Step data: scores, fold metric/std, features to remove.
         """
         if not self.verbose:
             return
@@ -298,10 +267,7 @@ class ModelImportanceFiltering:
         features_to_remove = step_state["features_to_remove"]
 
         print(f"\n🔁 Step {step_idx} | Features remaining: {len(current_features)}")
-        print(
-            f"📊 Average {self.cross_validator.metric_name}: "
-            f"{fold_metric:.6f} ± {fold_std:.6f}"
-        )
+        print(f"📊 Average {self.cross_validator.metric_name}: {fold_metric:.6f} ± {fold_std:.6f}")
 
         sorted_by_importance = sorted(
             importance_scores.items(), key=lambda item: item[1], reverse=True
@@ -315,10 +281,7 @@ class ModelImportanceFiltering:
             print(f"  • {feature_name}: {importance_scores[feature_name]:.6f}")
 
         pct = 100 * len(features_to_remove) / len(current_features)
-        print(
-            f"\n🗑️  Removing {len(features_to_remove)} "
-            f"({pct:.2f}%) features this step"
-        )
+        print(f"\n🗑️  Removing {len(features_to_remove)} ({pct:.2f}%) features this step")
 
     def _log_finish(self, summary: dict[str, Any]) -> None:
         """Print final selection summary when verbose mode is enabled.
@@ -331,9 +294,7 @@ class ModelImportanceFiltering:
 
         print(f"\n🎯 Selected features: {summary['selected_features']}")
         metric_series = summary["history"]["metric_value"].dropna()
-        final_metric = (
-            float(metric_series.iloc[-1]) if not metric_series.empty else np.nan
-        )
+        final_metric = float(metric_series.iloc[-1]) if not metric_series.empty else np.nan
         base_val = float(summary["history"].iloc[0]["metric_value"])
         diff = final_metric - base_val
         diff_pct = 100 * diff / base_val if base_val != 0 else np.nan
@@ -345,15 +306,8 @@ class ModelImportanceFiltering:
 
         initial_features = int(summary["history"].iloc[0]["n_features_remaining"])
         removed_count = initial_features - len(summary["selected_features"])
-        pct_removed = (
-            100 * removed_count / initial_features if initial_features else 0.0
-        )
-        print(
-            f"🗑️  Features removed: {removed_count} of {initial_features} "
-            f"({pct_removed:.2f}%)"
-        )
-
-    # ──────────────────────────── CV importance helper ──────────────────────────────
+        pct_removed = 100 * removed_count / initial_features if initial_features else 0.0
+        print(f"🗑️  Features removed: {removed_count} of {initial_features} ({pct_removed:.2f}%)")
 
     def _cross_val_model_importance(
         self,
@@ -385,7 +339,7 @@ class ModelImportanceFiltering:
             preprocessing_pipeline_override=pipeline_override,
         )
 
-        importances = []
+        importances: list[Any] = []
         for fitted_estimator in self.cross_validator.fitted_estimators_:
             if not hasattr(fitted_estimator, "feature_importances_"):
                 raise AttributeError(
@@ -397,12 +351,10 @@ class ModelImportanceFiltering:
         avg_importances = np.nan_to_num(np.mean(importances, axis=0), nan=0.0)
         importance_map = {
             feature: float(score)
-            for feature, score in zip(current_processed_features, avg_importances)
+            for feature, score in zip(current_processed_features, avg_importances, strict=False)
         }
         gc.collect()
         return importance_map, float(np.mean(valid_scores)), float(np.std(valid_scores))
-
-    # ──────────────────────────────── main methods ──────────────────────────────────
 
     def run(
         self,
@@ -412,12 +364,11 @@ class ModelImportanceFiltering:
         """Run stepwise model importance filtering and return selection summary.
 
         Algorithm:
-            1. Baseline CV - pipeline fit once via PipelineDependencyGraph.build();
-               processed column set and per-column raw dependencies discovered.
-            2. protected_features validated against post-pipeline column set.
-            3. Each step: dependency graph pruned via restrict(), CV run, importances extracted.
-            4. Features at or below threshold removed; loop repeats.
-            5. Never-removed non-protected features appended to history for completeness.
+            1. Fit the baseline once via PipelineDependencyGraph.build() to get processed columns.
+            2. Validate protected_features against the post-pipeline column set.
+            3. Each step: prune the graph via restrict(), run CV, extract importances.
+            4. Remove non-protected features at or below threshold; repeat until none remain.
+            5. Append never-removed non-protected features to history for completeness.
 
         Args:
             X (pd.DataFrame): Feature matrix (raw columns).
@@ -427,29 +378,22 @@ class ModelImportanceFiltering:
             dict[str, Any]: Keys:
                 - selected_features (list[str]): Final selected processed column names.
                 - selected_features_names (list[str]): Alias for selected_features.
-                - history (pd.DataFrame): Step-wise metrics and removals.  All
-                  non-protected features appear here, including surviving ones at
-                  a trailing virtual step for completeness.
+                - history (pd.DataFrame): Step-wise metrics and removed features.
 
         Raises:
-            ValueError: When protected features are not found in the post-pipeline
-                column set.
+            ValueError: When protected features are not in the post-pipeline column set.
         """
         all_raw_features: list[str] = sorted(X.columns.tolist())
 
         pipeline = self.cross_validator.preprocessing_pipeline
-        dependency_graph = PipelineDependencyGraph.build(
-            pipeline, X[all_raw_features], y
-        )
+        dependency_graph = PipelineDependencyGraph.build(pipeline, X[all_raw_features], y)
 
         baseline_estimator = self._restrict_catboost_cat_features(
             self.estimator,
             set(dependency_graph.processed_columns),
             dependency_graph.processed_dtypes,
         )
-        _, valid_scores, _ = self.cross_validator.fit(
-            baseline_estimator, X[all_raw_features], y
-        )
+        _, valid_scores, _ = self.cross_validator.fit(baseline_estimator, X[all_raw_features], y)
         baseline_metric = float(np.mean(valid_scores))
         baseline_std = float(np.std(valid_scores))
 
@@ -469,9 +413,7 @@ class ModelImportanceFiltering:
         self._log_start(current_processed_features, baseline_metric, baseline_std)
 
         prev_metric = baseline_metric
-        importance_scores: dict[str, float] = {
-            f: np.nan for f in current_processed_features
-        }
+        importance_scores: dict[str, float] = dict.fromkeys(current_processed_features, np.nan)
 
         for step_idx in range(1, self.max_steps + 1):
             if len(current_processed_features) <= len(self.protected_features):
@@ -522,9 +464,7 @@ class ModelImportanceFiltering:
             )
 
             current_processed_features = [
-                f
-                for f in current_processed_features
-                if f not in set(features_to_remove)
+                f for f in current_processed_features if f not in set(features_to_remove)
             ]
 
             gc.collect()
@@ -532,20 +472,14 @@ class ModelImportanceFiltering:
         protected_set = set(self.protected_features)
         logged_set = set(summary["history"]["removed_feature_name"].dropna())
         never_removed = [
-            f
-            for f in self.all_processed_features
-            if f not in protected_set and f not in logged_set
+            f for f in self.all_processed_features if f not in protected_set and f not in logged_set
         ]
         if never_removed:
             last_step = int(summary["history"]["step"].max())
-            last_n_removed = int(
-                summary["history"]["n_features_removed"].fillna(0).max()
-            )
+            last_n_removed = int(summary["history"]["n_features_removed"].fillna(0).max())
             metric_series = summary["history"]["metric_value"].dropna()
             final_metric = (
-                float(metric_series.iloc[-1])
-                if not metric_series.empty
-                else baseline_metric
+                float(metric_series.iloc[-1]) if not metric_series.empty else baseline_metric
             )
             never_removed_sorted = sorted(
                 never_removed, key=lambda f: importance_scores.get(f, 0.0)
@@ -594,17 +528,16 @@ class ModelImportanceFiltering:
 
 
 if __name__ == "__main__":
-
     import numpy as np
     import pandas as pd
+    from catboost import CatBoostClassifier, CatBoostRegressor
     from feature_engine.encoding import MeanEncoder
     from feature_engine.imputation import MeanMedianImputer
     from lightgbm import LGBMClassifier, LGBMRegressor
-    from catboost import CatBoostClassifier, CatBoostRegressor
-    from xgboost import XGBClassifier, XGBRegressor
     from sklearn.datasets import make_classification, make_regression
     from sklearn.model_selection import KFold, StratifiedKFold
     from sklearn.pipeline import Pipeline
+    from xgboost import XGBClassifier, XGBRegressor
 
     from kvbiii_ml.data_processing.preprocessing.outlier_handling.winsorizer_trimmer import (
         WinsorizerWithOriginal,
@@ -623,13 +556,13 @@ if __name__ == "__main__":
         """Generate classification dataset with numerical and categorical features."""
         rng = np.random.default_rng(RANDOM_STATE)
         x_num, y_arr = make_classification(
-            N_SAMPLES=N_SAMPLES,
-            N_FEATURES=N_FEATURES,
+            n_samples=N_SAMPLES,
+            n_features=N_FEATURES,
             n_informative=7,
             n_redundant=3,
             n_classes=n_classes,
             n_clusters_per_class=1,
-            RANDOM_STATE=RANDOM_STATE,
+            random_state=RANDOM_STATE,
         )
         df = pd.DataFrame(x_num, columns=NUM_FEATURES)
         df["cat_1"] = pd.Categorical(rng.choice(["A", "B", "C", "D"], size=N_SAMPLES))
@@ -640,10 +573,10 @@ if __name__ == "__main__":
         """Generate regression dataset with numerical and categorical features."""
         rng = np.random.default_rng(RANDOM_STATE)
         x_num, y_arr = make_regression(
-            N_SAMPLES=N_SAMPLES,
-            N_FEATURES=N_FEATURES,
+            n_samples=N_SAMPLES,
+            n_features=N_FEATURES,
             n_informative=7,
-            RANDOM_STATE=RANDOM_STATE,
+            random_state=RANDOM_STATE,
         )
         df = pd.DataFrame(x_num, columns=NUM_FEATURES)
         df["cat_1"] = pd.Categorical(rng.choice(["A", "B", "C", "D"], size=N_SAMPLES))
@@ -681,12 +614,16 @@ if __name__ == "__main__":
         pipeline: Pipeline | None,
         threshold: float = 0.0,
     ) -> None:
-        """Run ModelImportanceFiltering and validate the summary."""
+        """Run ModelImportanceFiltering and validate the summary.
+
+        Raises:
+            AssertionError: When the summary is inconsistent.
+        """
         cv_cls = StratifiedKFold if problem_type == "classification" else KFold
         trainer = CrossValidationTrainer(
             problem_type=problem_type,
             metric_name=metric_name,
-            cv=cv_cls(n_splits=N_FOLDS, shuffle=True, RANDOM_STATE=RANDOM_STATE),
+            cv=cv_cls(n_splits=N_FOLDS, shuffle=True, random_state=RANDOM_STATE),
             preprocessing_pipeline=pipeline,
             verbose=False,
         )
@@ -704,9 +641,7 @@ if __name__ == "__main__":
 
         history_features = set(summary["history"]["removed_feature_name"].dropna())
         non_protected_selected = [
-            f
-            for f in summary["selected_features"]
-            if f not in selector.protected_features
+            f for f in summary["selected_features"] if f not in selector.protected_features
         ]
         for feat in non_protected_selected:
             if feat not in history_features:
@@ -714,13 +649,14 @@ if __name__ == "__main__":
                     f"selected feature '{feat}' missing from history - never-removed append failed"
                 )
 
-        if pipeline is not None:
-            all_history_features = list(history_features)
-            if all_history_features:
-                if not any("_PREPROCESS_" in str(f) for f in all_history_features):
-                    raise AssertionError(
-                        "no derived features appear in removal history - pipeline did not expand"
-                    )
+        if (
+            pipeline is not None
+            and history_features
+            and not any("_PREPROCESS_" in str(f) for f in history_features)
+        ):
+            raise AssertionError(
+                "no derived features appear in removal history - pipeline did not expand"
+            )
 
         n_selected = len(summary["selected_features"])
         print(f"  {label:<60} selected={n_selected} features\n")
@@ -731,40 +667,40 @@ if __name__ == "__main__":
             n_estimators=200,
             early_stopping_rounds=ES,
             verbose=-1,
-            RANDOM_STATE=RANDOM_STATE,
+            random_state=RANDOM_STATE,
         )
         lgbm_reg = LGBMRegressor(
             n_estimators=200,
             early_stopping_rounds=ES,
             verbose=-1,
-            RANDOM_STATE=RANDOM_STATE,
+            random_state=RANDOM_STATE,
         )
         xgb_clf = XGBClassifier(
             n_estimators=200,
             early_stopping_rounds=ES,
             verbosity=0,
-            RANDOM_STATE=RANDOM_STATE,
+            random_state=RANDOM_STATE,
         )
         xgb_reg = XGBRegressor(
             n_estimators=200,
             early_stopping_rounds=ES,
             verbosity=0,
-            RANDOM_STATE=RANDOM_STATE,
+            random_state=RANDOM_STATE,
         )
         cat_clf = CatBoostClassifier(
             n_estimators=200,
             early_stopping_rounds=ES,
             verbose=0,
-            RANDOM_STATE=RANDOM_STATE,
-            CAT_FEATURES=CAT_FEATURES,
+            random_state=RANDOM_STATE,
+            cat_features=CAT_FEATURES,
             allow_writing_files=False,
         )
         cat_multi = CatBoostClassifier(
             n_estimators=200,
             early_stopping_rounds=ES,
             verbose=0,
-            RANDOM_STATE=RANDOM_STATE,
-            CAT_FEATURES=CAT_FEATURES,
+            random_state=RANDOM_STATE,
+            cat_features=CAT_FEATURES,
             loss_function="MultiClass",
             allow_writing_files=False,
         )
@@ -772,8 +708,8 @@ if __name__ == "__main__":
             n_estimators=200,
             early_stopping_rounds=ES,
             verbose=0,
-            RANDOM_STATE=RANDOM_STATE,
-            CAT_FEATURES=CAT_FEATURES,
+            random_state=RANDOM_STATE,
+            cat_features=CAT_FEATURES,
             allow_writing_files=False,
         )
 
@@ -782,9 +718,7 @@ if __name__ == "__main__":
         x_reg, y_reg = _make_reg_data()
 
         x_bin_cat = x_bin.assign(**{c: x_bin[c].astype(str) for c in CAT_FEATURES})
-        x_multi_cat = x_multi.assign(
-            **{c: x_multi[c].astype(str) for c in CAT_FEATURES}
-        )
+        x_multi_cat = x_multi.assign(**{c: x_multi[c].astype(str) for c in CAT_FEATURES})
         x_reg_cat = x_reg.assign(**{c: x_reg[c].astype(str) for c in CAT_FEATURES})
 
         clf_pipeline = _build_pipeline(CAT_FEATURES, NUM_FEATURES)
