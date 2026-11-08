@@ -34,7 +34,7 @@ class WoEEncoderWithOriginal(_WithOriginalBase):
             variables (list[str] | None): Categorical columns to encode. Defaults to auto-detect.
             ignore_format (bool, optional): If True, also encode numeric columns. Defaults to False.
             unseen (str): "ignore" or "raise" for unseen categories. Defaults to "ignore".
-            fill_value (int | float | None): Unseen value when unseen="ignore". Defaults to 0.0.
+            fill_value (int | float | None): Unseen value for unseen="ignore". None means 0.0.
         """
         self.variables = variables
         self.ignore_format = ignore_format
