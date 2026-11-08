@@ -36,7 +36,7 @@ class StatisticalAssociationImputer:
         Initialize the imputer.
 
         Args:
-            metrics (list[str] | None): Ranking metrics. Defaults to all three association metrics.
+            metrics (list[str] | None): "cramers_v", "mutual_info", "theils_u". Defaults to all.
             top_n (int): Number of top-ranked columns to use for grouping. Defaults to 2.
             verbose (bool): Whether to print progress information. Defaults to False.
         """
