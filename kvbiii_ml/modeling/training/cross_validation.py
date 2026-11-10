@@ -43,6 +43,34 @@ class _FoldResult:
     test_pred: np.ndarray | None
 
 
+@dataclass(frozen=True)
+class _FoldRows:
+    """Features, target, sample weights and offsets handed to ``fit_estimator``."""
+
+    X: pd.DataFrame
+    y: pd.Series
+    weight: np.ndarray | None
+    offset: np.ndarray | None
+
+    def split_tail(self, n_rows: int) -> tuple["_FoldRows", "_FoldRows"]:
+        """Split off the last ``n_rows`` rows (unweighted) from the rest."""
+        head, tail = slice(None, -n_rows), slice(-n_rows, None)
+        return (
+            _FoldRows(
+                self.X.iloc[head],
+                self.y.iloc[head],
+                None if self.weight is None else self.weight[head],
+                None if self.offset is None else self.offset[head],
+            ),
+            _FoldRows(
+                self.X.iloc[tail],
+                self.y.iloc[tail],
+                None,
+                None if self.offset is None else self.offset[tail],
+            ),
+        )
+
+
 class CrossValidationTrainer(BaseTrainer):
     """Cross-validation trainer with an optional per-fold preprocessing pipeline.
 
@@ -337,7 +365,13 @@ class CrossValidationTrainer(BaseTrainer):
 
         def run_split(train_idx: np.ndarray, valid_idx: np.ndarray) -> _FoldResult:
             """Train one fold and advance the progress bar."""
-            result = self._run_fold(active_pipeline, estimator, X, y, X_test, train_idx, valid_idx)
+            result = self._run_fold(
+                active_pipeline,
+                estimator,
+                (X.iloc[train_idx].copy(), y.iloc[train_idx]),
+                (X.iloc[valid_idx].copy(), y.iloc[valid_idx]),
+                X_test,
+            )
             if progress_bar is not None:
                 progress_bar.update(1)
             return result
@@ -386,32 +420,27 @@ class CrossValidationTrainer(BaseTrainer):
         )
         return self.train_scores_, self.valid_scores_, avg_test_pred
 
-    def _run_fold(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def _run_fold(
         self,
         pipeline: Pipeline | None,
         estimator: Estimator,
-        X: pd.DataFrame,
-        y: pd.Series,
+        train: tuple[pd.DataFrame, pd.Series],
+        valid: tuple[pd.DataFrame, pd.Series],
         X_test: pd.DataFrame | None,
-        train_idx: np.ndarray,
-        valid_idx: np.ndarray,
     ) -> "_FoldResult":
         """Preprocess, train and score a single fold without touching shared state.
 
         Args:
             pipeline (Pipeline | None): Unfitted pipeline template, or None.
             estimator (Estimator): Unfitted estimator, cloned for this fold.
-            X (pd.DataFrame): Full feature matrix.
-            y (pd.Series): Full target.
+            train (tuple[pd.DataFrame, pd.Series]): The fold's training rows and target.
+            valid (tuple[pd.DataFrame, pd.Series]): The fold's validation rows and target.
             X_test (pd.DataFrame | None): Optional test features.
-            train_idx (np.ndarray): Positional indices of the training rows.
-            valid_idx (np.ndarray): Positional indices of the validation rows.
 
         Returns:
             _FoldResult: Scores, fitted objects and test predictions of this fold.
         """
-        X_train, X_valid = X.iloc[train_idx].copy(), X.iloc[valid_idx].copy()
-        y_train, y_valid = y.iloc[train_idx], y.iloc[valid_idx]
+        (X_train, y_train), (X_valid, y_valid) = train, valid
         fold_weights = self._compute_fold_weights(X_train, y_train)
         X_train, off_train = split_offset(X_train, self.offset_column)
         X_valid, off_valid = split_offset(X_valid, self.offset_column)
@@ -427,35 +456,10 @@ class CrossValidationTrainer(BaseTrainer):
             y_train=y_train,
         )
 
-        x_fit, y_fit, w_fit, o_fit = x_train_proc, y_train, fold_weights, off_train
-        x_es, y_es, o_es = x_valid_proc, y_valid, off_valid
-        if self.early_stopping_holdout is not None:
-            n_holdout = max(1, round(len(x_train_proc) * self.early_stopping_holdout))
-            x_fit, x_es = x_train_proc.iloc[:-n_holdout], x_train_proc.iloc[-n_holdout:]
-            y_fit, y_es = y_train.iloc[:-n_holdout], y_train.iloc[-n_holdout:]
-            w_fit = None if fold_weights is None else fold_weights[:-n_holdout]
-            if off_train is not None:
-                o_fit, o_es = off_train[:-n_holdout], off_train[-n_holdout:]
-
-        fitted_estimator = self.fit_estimator(
-            self._clone_estimator(estimator),
-            x_fit,
-            y_fit,
-            x_es,
-            y_es,
-            sample_weight=w_fit,
-            verbose=self.verbose,
-            offset_train=o_fit,
-            offset_valid=o_es,
+        valid_rows = _FoldRows(cast("pd.DataFrame", x_valid_proc), y_valid, None, off_valid)
+        fitted_estimator = self._fit_fold_estimator(
+            estimator, _FoldRows(x_train_proc, y_train, fold_weights, off_train), valid_rows
         )
-        test_pred = None
-        if x_test_proc is not None:
-            test_pred = self._estimator_output(
-                fitted_estimator,
-                x_test_proc,
-                off_test,
-                proba=self.problem_type == "classification",
-            )
         return _FoldResult(
             train_score=self.metric_fn(
                 y_train,
@@ -463,13 +467,37 @@ class CrossValidationTrainer(BaseTrainer):
             ),
             valid_score=self.metric_fn(
                 y_valid,
-                self._metric_predictions(
-                    fitted_estimator, cast("pd.DataFrame", x_valid_proc), off_valid
-                ),
+                self._metric_predictions(fitted_estimator, valid_rows.X, off_valid),
             ),
             fitted_estimator=fitted_estimator,
             fitted_pipeline=fitted_pipeline,
-            test_pred=test_pred,
+            test_pred=None
+            if x_test_proc is None
+            else self._estimator_output(
+                fitted_estimator,
+                x_test_proc,
+                off_test,
+                proba=self.problem_type == "classification",
+            ),
+        )
+
+    def _fit_fold_estimator(
+        self, estimator: Estimator, train: _FoldRows, early_stopping: _FoldRows
+    ) -> Estimator:
+        """Fit a clone on the fold; with ``early_stopping_holdout`` its last rows early-stop it."""
+        if self.early_stopping_holdout is not None:
+            n_holdout = max(1, round(len(train.X) * self.early_stopping_holdout))
+            train, early_stopping = train.split_tail(n_holdout)
+        return self.fit_estimator(
+            self._clone_estimator(estimator),
+            train.X,
+            train.y,
+            early_stopping.X,
+            early_stopping.y,
+            sample_weight=train.weight,
+            verbose=self.verbose,
+            offset_train=train.offset,
+            offset_valid=early_stopping.offset,
         )
 
     def _metric_predictions(
