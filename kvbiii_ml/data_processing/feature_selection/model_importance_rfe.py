@@ -1,6 +1,6 @@
 import gc
 from copy import deepcopy
-from typing import cast
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -141,121 +141,32 @@ class ModelImportanceRecursiveFeatureElimination:
         """
         X = X.reset_index(drop=True)
         y = pd.Series(y).reset_index(drop=True)
-        all_raw_features: list[str] = sorted(X.columns.tolist())
+        dependency_graph, avg_base_metric = self._fit_baseline(X, y)
 
-        pipeline = self.cross_validator.preprocessing_pipeline
-        dependency_graph = PipelineDependencyGraph.build(pipeline, X[all_raw_features], y)
-
-        avg_base_metric, _ = self._cross_val_base_metric(X[all_raw_features], y, dependency_graph)
-
-        self.all_processed_features = list(dependency_graph.processed_columns)
-        all_processed_set = set(self.all_processed_features)
-        missing_protected = set(self.protected_features) - all_processed_set
+        missing_protected = set(self.protected_features) - set(self.all_processed_features)
         if missing_protected:
             raise ValueError(
                 f"Protected features not found in post-pipeline column set: {missing_protected}. "
-                f"Available processed columns: {sorted(all_processed_set)}"
+                f"Available processed columns: {sorted(self.all_processed_features)}"
             )
 
         current_features = list(self.all_processed_features)
-
         summary_df: RfeSummary = {
             "selected_features": [],
             "selected_features_names": [],
-            "history": pd.DataFrame(columns=self.history_schema.keys()).astype(self.history_schema),  # ty: ignore[invalid-argument-type]
+            "history": self._init_history(len(current_features), avg_base_metric),
         }
-
-        summary_df["history"] = pd.concat(
-            [
-                summary_df["history"],
-                pd.DataFrame(
-                    [
-                        {
-                            "step": 0,
-                            "n_features_removed": 0,
-                            "n_features_remaining": len(current_features),
-                            "removed_feature_name": None,
-                            "metric_value": avg_base_metric,
-                            "metric_change": 0.0,
-                            "importance_score": np.nan,
-                        }
-                    ]
-                ),
-            ],
-            ignore_index=True,
-        )
 
         removable_features = [f for f in current_features if f not in self.protected_features]
         removal_schedule = self.compute_removal_schedule(len(removable_features))
-        if self.verbose:
-            print(
-                f"🔍 Starting Model Importance RFE with {len(current_features)} "
-                f"features, target metric: {self.cross_validator.metric_name} "
-                f"({self.metric_direction}), steps: {self.steps}.\n"
-                f"📅 The number of features to remove every step: {removal_schedule}"
-            )
-            print(f"🛡️  Protected features: {self.protected_features}")
-            print(
-                f"📊 Initial {self.cross_validator.metric_name}: "
-                f"{avg_base_metric:.6f} | Features: {len(current_features)}"
-            )
+        self._print_start(len(current_features), avg_base_metric, removal_schedule)
 
         for step_idx, n_features_to_remove in enumerate(removal_schedule, start=1):
-            current_raw_features, restricted_pipeline = dependency_graph.restrict(current_features)
-            step_estimator = self._restrict_catboost_cat_features(
-                self.estimator,
-                set(current_features),
-                dependency_graph.processed_dtypes,
+            step_state = self._run_step(
+                X, y, dependency_graph, current_features, n_features_to_remove
             )
-
-            importance_scores, fold_base_metric, fold_base_metric_std = (
-                self._cross_val_model_importance(
-                    X[current_raw_features],
-                    y,
-                    current_features,
-                    step_estimator,
-                    restricted_pipeline,
-                )
-            )
-            if self.verbose:
-                print(
-                    f"\n🔁 Step {step_idx} | Number of features remaining: {len(current_features)}"
-                )
-                print(f"\n🔬 Features remaining: {current_features}\n")
-                print(
-                    f"📊 Average {self.cross_validator.metric_name}: "
-                    f"{fold_base_metric:.6f} ± {fold_base_metric_std:.6f}"
-                )
-
-            removable_scores = {
-                k: v for k, v in importance_scores.items() if k not in self.protected_features
-            }
-            importance_df = pd.DataFrame(
-                list(removable_scores.items()),
-                columns=["feature", "importance_score"],
-            )
-
-            importance_df = importance_df.sort_values(by="importance_score", ascending=True)
-
-            n_actually_removable = min(n_features_to_remove, len(importance_df))
-            features_to_remove = importance_df.head(n_actually_removable)["feature"].tolist()
-
-            if self.verbose:
-                print("Most important features:")
-                for feat in reversed(importance_df.tail(5)["feature"].tolist()):
-                    print(f"  • {feat}: {importance_scores[feat]:.6f}")
-                print("\nLeast important features (candidates for removal):")
-                for feat in features_to_remove[:5]:
-                    print(f"  • {feat}: {importance_scores[feat]:.6f}")
-
-            self._log_step(
-                summary_df,
-                step_idx,
-                current_features,
-                importance_scores,
-                fold_base_metric,
-                features_to_remove,
-            )
+            self._print_step(step_idx, current_features, step_state)
+            self._log_step(summary_df, step_idx, current_features, step_state)
 
             gc.collect()
 
@@ -268,23 +179,187 @@ class ModelImportanceRecursiveFeatureElimination:
             summary_df["history"], self.alpha
         )
         summary_df["selected_features_names"] = summary_df["selected_features"]
-
-        if self.verbose:
-            print(f"\n🎯 Selected features: {summary_df['selected_features']}")
-            base_val = summary_df["history"].iloc[0]["metric_value"]
-            diff_pct = 100 * (metric_selected - base_val) / base_val if base_val != 0 else np.nan
-            print(
-                f"📈 Final {self.cross_validator.metric_name} score (approximated): "
-                f"{metric_selected:.6f} | Base: {base_val:.6f} | "
-                f"Δ: {metric_selected - base_val:.6f} ({diff_pct:+.2f}%)"
-            )
-            n_features_initial = summary_df["history"].iloc[0]["n_features_remaining"]
-            n_features_selected = len(summary_df["selected_features"])
-            n_removed = n_features_initial - n_features_selected
-            pct_removed = 100 * n_removed / n_features_initial if n_features_initial else 0.0
-            print(f"🗑️ Features removed: {n_removed} of {n_features_initial} ({pct_removed:.2f}%)")
+        self._print_finish(summary_df, metric_selected)
         gc.collect()
         return summary_df
+
+    def _fit_baseline(self, X: pd.DataFrame, y: pd.Series) -> tuple[PipelineDependencyGraph, float]:
+        """
+        Build the dependency graph, run the baseline CV and record the processed features.
+
+        Args:
+            X (pd.DataFrame): Feature matrix (raw columns).
+            y (pd.Series): Target aligned with X.
+
+        Returns:
+            tuple[PipelineDependencyGraph, float]: Dependency graph and baseline mean metric.
+        """
+        all_raw_features: list[str] = sorted(X.columns.tolist())
+        dependency_graph = PipelineDependencyGraph.build(
+            self.cross_validator.preprocessing_pipeline, X[all_raw_features], y
+        )
+        avg_base_metric, _ = self._cross_val_base_metric(X[all_raw_features], y, dependency_graph)
+        self.all_processed_features = list(dependency_graph.processed_columns)
+        return dependency_graph, avg_base_metric
+
+    def _init_history(self, n_features: int, base_metric: float) -> pd.DataFrame:
+        """
+        Build the history DataFrame holding only the step-0 baseline row.
+
+        Args:
+            n_features (int): Number of processed features at baseline.
+            base_metric (float): Baseline CV metric value.
+
+        Returns:
+            pd.DataFrame: History with the step-0 row.
+        """
+        history = pd.DataFrame(columns=self.history_schema.keys()).astype(self.history_schema)  # ty: ignore[invalid-argument-type]
+        return pd.concat(
+            [
+                history,
+                pd.DataFrame(
+                    [
+                        {
+                            "step": 0,
+                            "n_features_removed": 0,
+                            "n_features_remaining": n_features,
+                            "removed_feature_name": None,
+                            "metric_value": base_metric,
+                            "metric_change": 0.0,
+                            "importance_score": np.nan,
+                        }
+                    ]
+                ),
+            ],
+            ignore_index=True,
+        )
+
+    def _run_step(
+        self,
+        X: pd.DataFrame,
+        y: pd.Series,
+        dependency_graph: PipelineDependencyGraph,
+        current_features: list[str],
+        n_features_to_remove: int,
+    ) -> dict[str, Any]:
+        """
+        Run CV on the restricted pipeline and pick the least important removable features.
+
+        Args:
+            X (pd.DataFrame): Feature matrix (raw columns).
+            y (pd.Series): Target aligned with X.
+            dependency_graph (PipelineDependencyGraph): Graph of the full pipeline.
+            current_features (list[str]): Active processed feature names.
+            n_features_to_remove (int): Number of features this step may remove.
+
+        Returns:
+            dict[str, Any]: Step data: scores, fold metric/std, removable features ranked
+                least important first, and the features to remove.
+        """
+        current_raw_features, restricted_pipeline = dependency_graph.restrict(current_features)
+        step_estimator = self._restrict_catboost_cat_features(
+            self.estimator,
+            set(current_features),
+            dependency_graph.processed_dtypes,
+        )
+        importance_scores, fold_metric, fold_std = self._cross_val_model_importance(
+            X[current_raw_features],
+            y,
+            current_features,
+            step_estimator,
+            restricted_pipeline,
+        )
+        removable_scores = {
+            k: v for k, v in importance_scores.items() if k not in self.protected_features
+        }
+        importance_df = pd.DataFrame(
+            list(removable_scores.items()),
+            columns=["feature", "importance_score"],
+        ).sort_values(by="importance_score", ascending=True)
+        ranked = importance_df["feature"].tolist()
+        return {
+            "importance_scores": importance_scores,
+            "fold_metric": fold_metric,
+            "fold_std": fold_std,
+            "ranked": ranked,
+            "features_to_remove": ranked[: min(n_features_to_remove, len(ranked))],
+        }
+
+    def _print_start(
+        self, n_features: int, avg_base_metric: float, removal_schedule: list[int]
+    ) -> None:
+        """
+        Print the initial run summary when verbose mode is enabled.
+
+        Args:
+            n_features (int): Number of processed features at baseline.
+            avg_base_metric (float): Mean baseline CV metric.
+            removal_schedule (list[int]): Features to remove at each step.
+        """
+        if not self.verbose:
+            return
+        print(
+            f"🔍 Starting Model Importance RFE with {n_features} "
+            f"features, target metric: {self.cross_validator.metric_name} "
+            f"({self.metric_direction}), steps: {self.steps}.\n"
+            f"📅 The number of features to remove every step: {removal_schedule}"
+        )
+        print(f"🛡️  Protected features: {self.protected_features}")
+        print(
+            f"📊 Initial {self.cross_validator.metric_name}: "
+            f"{avg_base_metric:.6f} | Features: {n_features}"
+        )
+
+    def _print_step(
+        self, step_idx: int, current_features: list[str], step_state: dict[str, Any]
+    ) -> None:
+        """
+        Print per-step details when verbose mode is enabled.
+
+        Args:
+            step_idx (int): Current step number.
+            current_features (list[str]): Active processed feature names.
+            step_state (dict[str, Any]): Step data from ``_run_step``.
+        """
+        if not self.verbose:
+            return
+        importance_scores = step_state["importance_scores"]
+        print(f"\n🔁 Step {step_idx} | Number of features remaining: {len(current_features)}")
+        print(f"\n🔬 Features remaining: {current_features}\n")
+        print(
+            f"📊 Average {self.cross_validator.metric_name}: "
+            f"{step_state['fold_metric']:.6f} ± {step_state['fold_std']:.6f}"
+        )
+        print("Most important features:")
+        for feat in reversed(step_state["ranked"][-5:]):
+            print(f"  • {feat}: {importance_scores[feat]:.6f}")
+        print("\nLeast important features (candidates for removal):")
+        for feat in step_state["features_to_remove"][:5]:
+            print(f"  • {feat}: {importance_scores[feat]:.6f}")
+
+    def _print_finish(self, summary_df: RfeSummary, metric_selected: float | None) -> None:
+        """
+        Print the final selection summary when verbose mode is enabled.
+
+        Args:
+            summary_df (RfeSummary): Completed summary with history and selected features.
+            metric_selected (float | None): Approximated metric of the selected set.
+        """
+        if not self.verbose:
+            return
+        print(f"\n🎯 Selected features: {summary_df['selected_features']}")
+        base_val = summary_df["history"].iloc[0]["metric_value"]
+        diff_pct = 100 * (metric_selected - base_val) / base_val if base_val != 0 else np.nan
+        print(
+            f"📈 Final {self.cross_validator.metric_name} score (approximated): "
+            f"{metric_selected:.6f} | Base: {base_val:.6f} | "
+            f"Δ: {metric_selected - base_val:.6f} ({diff_pct:+.2f}%)"
+        )
+        n_features_initial = summary_df["history"].iloc[0]["n_features_remaining"]
+        n_features_selected = len(summary_df["selected_features"])
+        n_removed = n_features_initial - n_features_selected
+        pct_removed = 100 * n_removed / n_features_initial if n_features_initial else 0.0
+        print(f"🗑️ Features removed: {n_removed} of {n_features_initial} ({pct_removed:.2f}%)")
 
     def _cross_val_base_metric(
         self,
@@ -396,9 +471,7 @@ class ModelImportanceRecursiveFeatureElimination:
         summary_df: RfeSummary,
         step_idx: int,
         current_features: list[str],
-        importance_scores: dict[str, float],
-        fold_base_metric: float,
-        features_to_remove: list[str],
+        step_state: dict[str, Any],
     ) -> None:
         """
         Log results for the current elimination step.
@@ -407,11 +480,9 @@ class ModelImportanceRecursiveFeatureElimination:
             summary_df (RfeSummary): Summary dict carrying history.
             step_idx (int): Current step number.
             current_features (list[str]): Remaining features; mutated in place as they are removed.
-            importance_scores (dict[str, float]): Importance score for each processed feature.
-            fold_base_metric (float): Base metric for the current set of features.
-            features_to_remove (list[str]): Processed features to remove this step.
+            step_state (dict[str, Any]): Step data from ``_run_step``.
         """
-        for feature in features_to_remove:
+        for feature in step_state["features_to_remove"]:
             if feature in self.protected_features:
                 continue
             summary_df["history"] = pd.concat(
@@ -426,9 +497,11 @@ class ModelImportanceRecursiveFeatureElimination:
                                 + 1,
                                 "n_features_remaining": len(current_features) - 1,
                                 "removed_feature_name": feature,
-                                "metric_value": fold_base_metric,
+                                "metric_value": step_state["fold_metric"],
                                 "metric_change": 0.0,
-                                "importance_score": importance_scores.get(feature, 0.0),
+                                "importance_score": step_state["importance_scores"].get(
+                                    feature, 0.0
+                                ),
                             }
                         ]
                     ),
