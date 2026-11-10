@@ -3,6 +3,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from copy import deepcopy
 from typing import cast
+from unittest.mock import patch
 
 import joblib.parallel
 import numpy as np
@@ -26,7 +27,7 @@ def _tqdm_joblib_callback(progress_bar: tqdm) -> Generator[tqdm, None, None]:
     exposes no progress callback of its own. Patching joblib's batch-completion
     callback is the only way to surface live per-feature progress without
     reimplementing permutation scoring by hand. The patch is process-global for
-    the duration of the ``with`` block and is always reverted in ``finally``, so
+    the duration of the ``with`` block and ``patch.object`` always reverts it, so
     it must not be nested with other joblib-progress hooks running concurrently
     in other threads. joblib's sequential backend (``n_jobs=1``) never invokes
     this callback, so the bar is topped up to completion on exit as a fallback.
@@ -37,18 +38,16 @@ def _tqdm_joblib_callback(progress_bar: tqdm) -> Generator[tqdm, None, None]:
     Yields:
         tqdm: The same progress bar, for convenience.
     """
-    original_callback = joblib.parallel.BatchCompletionCallBack
 
-    class _TqdmBatchCompletionCallback(original_callback):
+    class _TqdmBatchCompletionCallback(joblib.parallel.BatchCompletionCallBack):
         def __call__(self, *args: object, **kwargs: object) -> object:
             progress_bar.update(self.batch_size)
             return super().__call__(*args, **kwargs)
 
-    joblib.parallel.BatchCompletionCallBack = _TqdmBatchCompletionCallback  # ty: ignore[invalid-assignment]
     try:
-        yield progress_bar
+        with patch.object(joblib.parallel, "BatchCompletionCallBack", _TqdmBatchCompletionCallback):
+            yield progress_bar
     finally:
-        joblib.parallel.BatchCompletionCallBack = original_callback
         remaining = progress_bar.total - progress_bar.n  # ty: ignore[unsupported-operator]
         if remaining > 0:
             progress_bar.update(remaining)

@@ -130,36 +130,6 @@ class MutualInformationFiltering:
             random_state=self.mi_kwargs.get("random_state"),
         )
 
-    def _prepare_x_y_for_mi(
-        self, X: pd.DataFrame, y: pd.Series | np.ndarray
-    ) -> tuple[pd.DataFrame, pd.Series | np.ndarray]:
-        """Validate inputs and encode categorical features for MI computation.
-
-        Args:
-            X (pd.DataFrame): Input features.
-            y (pd.Series | np.ndarray): Target variable.
-
-        Returns:
-            tuple[pd.DataFrame, pd.Series | np.ndarray]: Tuple of (X, y) with
-            categorical columns encoded and MI kwargs adjusted when needed.
-
-        Raises:
-            ValueError: If y is not a pandas Series or numpy array.
-        """
-        if not isinstance(y, (pd.Series, np.ndarray)):
-            raise ValueError("y must be a pandas Series or numpy array.")
-
-        x_prepared, discrete_features_mask = DataAnalyzer._prepare_features_for_mutual_information(  # noqa: SLF001
-            X
-        )
-
-        if discrete_features_mask is None:
-            self.mi_kwargs.pop("discrete_features", None)
-        else:
-            self.mi_kwargs["discrete_features"] = discrete_features_mask  # ty: ignore[invalid-assignment]
-
-        return x_prepared, y
-
 
 if __name__ == "__main__":
 
