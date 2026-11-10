@@ -10,8 +10,10 @@ import pandas as pd
 import pytest
 from lightgbm import LGBMRegressor
 from sklearn.base import clone, is_classifier, is_regressor
+from sklearn.exceptions import NotFittedError
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.tree import DecisionTreeRegressor
+from sklearn.utils.validation import check_is_fitted
 from xgboost import XGBRegressor
 
 from kvbiii_ml.modeling.training.ensemble_model import EnsembleModel
@@ -530,3 +532,17 @@ def test_ensemblemodel_offset_column_matches_hand_rolled_lgb_train_with_init_sco
         raise AssertionError(np.abs(ensemble.predict(X) - expected).max())
     if "log_exposure" in ensemble.fitted_estimators_[0].feature_name_:  # ty: ignore[unresolved-attribute]
         raise AssertionError("offset used as a feature")
+
+
+def test_ensemblemodel_is_not_fitted_before_fit():
+    """Tests an unfitted ensemble reports itself unfitted to callers and to sklearn.
+
+    Asserts:
+        - predict raises NotFittedError before fit
+        - sklearn's check_is_fitted raises NotFittedError (no fitted attribute set in __init__)
+    """
+    ensemble = EnsembleModel([LogisticRegression()], problem_type="classification")
+    with pytest.raises(NotFittedError):
+        ensemble.predict(pd.DataFrame({"a": [0.0, 1.0]}))
+    with pytest.raises(NotFittedError):
+        check_is_fitted(ensemble)
