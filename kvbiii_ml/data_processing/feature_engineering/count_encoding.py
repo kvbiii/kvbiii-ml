@@ -4,9 +4,13 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+from kvbiii_ml._validation import check_fitted
+
 
 class CountEncodingFeatureGenerator:
     """Generate count encoded features."""
+
+    count_maps_: dict[str, dict]
 
     def __init__(
         self,
@@ -28,7 +32,6 @@ class CountEncodingFeatureGenerator:
         self.fill_value = fill_value
         self.batch_size = batch_size
         self.chunk_size = chunk_size
-        self.count_maps_: dict[str, dict] = {}
         self._validate_init_params()
 
     def _validate_init_params(self) -> None:
@@ -110,19 +113,15 @@ class CountEncodingFeatureGenerator:
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Transform the DataFrame with count encoding.
+        Add the count-encoded features, raising NotFittedError before fit.
 
         Args:
             df (pd.DataFrame): DataFrame to be transformed.
 
         Returns:
             pd.DataFrame: DataFrame with the count-encoded features added.
-
-        Raises:
-            ValueError: If the encoder has not been fitted yet.
         """
-        if not self.count_maps_:
-            raise ValueError("CountEncodingFeatureGenerator must be fitted before transform.")
+        check_fitted(self, "count_maps_")
 
         n_rows = len(df)
         n_chunks = (n_rows + self.chunk_size - 1) // self.chunk_size
@@ -199,11 +198,12 @@ class CountEncodingFeatureGenerator:
 
     def get_count_maps(self) -> dict[str, dict]:
         """
-        Get the count maps for each feature.
+        Get the count maps for each feature, raising NotFittedError before fit.
 
         Returns:
             dict[str, dict]: A dictionary of count maps for each feature.
         """
+        check_fitted(self, "count_maps_")
         return self.count_maps_.copy()
 
 

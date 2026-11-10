@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.utils.validation import check_is_fitted
 
 
 class CategoricalCleaner(BaseEstimator, TransformerMixin):
@@ -11,6 +12,8 @@ class CategoricalCleaner(BaseEstimator, TransformerMixin):
     are replaced with NaN and the column is converted to pandas 'category' dtype.
     """
 
+    input_features_: pd.Index
+
     def __init__(self, feature_groups: dict[str, list[str]]) -> None:
         """Initialize cleaner with placeholder mappings.
 
@@ -18,7 +21,6 @@ class CategoricalCleaner(BaseEstimator, TransformerMixin):
             feature_groups (dict[str, list[str]]): Placeholder value to columns where it is missing.
         """
         self.feature_groups = feature_groups
-        self.input_features_: pd.Index = pd.Index([])
 
     def fit(self, df: pd.DataFrame, _y: object | None = None) -> "CategoricalCleaner":
         """Store input feature names.
@@ -54,7 +56,7 @@ class CategoricalCleaner(BaseEstimator, TransformerMixin):
         return df
 
     def get_feature_names_out(self, _input_features: list[str] | None = None) -> pd.Index:
-        """Return feature names seen during fit.
+        """Return feature names seen during fit, raising NotFittedError before fit.
 
         Args:
             _input_features (list[str] | None, optional): Unused. For API consistency.
@@ -62,6 +64,7 @@ class CategoricalCleaner(BaseEstimator, TransformerMixin):
         Returns:
             pd.Index: Original feature names.
         """
+        check_is_fitted(self, "input_features_")
         return self.input_features_
 
 

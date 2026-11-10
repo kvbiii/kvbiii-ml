@@ -3,6 +3,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.exceptions import NotFittedError
 from sklearn.model_selection import KFold
 
 from kvbiii_ml.data_processing.feature_engineering.target_encoding import (
@@ -314,13 +315,12 @@ def test_targetencodingfeaturegenerator_transform_raises_error_when_not_fitted()
     """Tests transform method raises error when called before fitting.
 
     Asserts:
-        - RuntimeError or ValueError is raised when transform called on unfitted generator
-        - Error message provides clear guidance about required fitting
+        - NotFittedError is raised when transform called on unfitted generator
     """
     X = pd.DataFrame({"category": ["a", "b", "c"]})
     generator = TargetEncodingFeatureGenerator(features_names=["category"])
 
-    with pytest.raises((RuntimeError, ValueError, AttributeError)):
+    with pytest.raises(NotFittedError):
         generator.transform(X)
 
 
