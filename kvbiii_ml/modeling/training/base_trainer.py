@@ -586,7 +586,7 @@ class BaseTrainer:
             if X_valid is not None and offset_valid is not None:
                 X_valid = X_valid.assign(**{own_column: offset_valid})
             offset_train = offset_valid = None
-        if X_valid is None or y_valid is None:
+        if valid is None:
             estimator = BaseTrainer._disable_early_stopping(estimator)
         estimator = BaseTrainer._set_categorical_params(estimator, X_train)
 

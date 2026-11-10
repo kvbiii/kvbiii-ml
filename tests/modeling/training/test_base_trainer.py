@@ -604,3 +604,21 @@ def test_to_metric_proba_returns_positive_column_for_binary_and_matrix_for_multi
         raise AssertionError()
     if to_metric_proba(multi).shape != (1, 3):
         raise AssertionError()
+
+
+@pytest.mark.parametrize("missing", ["X", "y"])
+def test_fitrows_optional_returns_none_when_features_or_target_missing(missing):
+    """Tests FitRows.optional treats a split without features or target as no split."""
+    X, y = pd.DataFrame({"a": [1.0, 2.0]}), pd.Series([0, 1])
+    split = FitRows.optional(None if missing == "X" else X, None if missing == "y" else y)
+    if split is not None:
+        raise AssertionError()
+
+
+def test_fitrows_optional_keeps_rows_and_offset_without_weight():
+    """Tests FitRows.optional carries features, target and offset and leaves weight unset."""
+    X, y, offset = pd.DataFrame({"a": [1.0, 2.0]}), pd.Series([0, 1]), np.array([0.1, 0.2])
+    split = FitRows.optional(X, y, offset)
+    if split is None or split.X is not X or split.y is not y or split.weight is not None:
+        raise AssertionError()
+    np.testing.assert_array_equal(split.offset, offset)
