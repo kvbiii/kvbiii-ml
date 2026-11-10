@@ -573,11 +573,6 @@ class PermutationRecursiveFeatureElimination:
             metric (float): Metric value for the current feature set.
         """
         n_removed_base = len(self.all_processed_features) - len(current_processed)
-        removable = [
-            (feat, score)
-            for feat, score in removed_scores.items()
-            if feat not in self.protected_features
-        ]
         rows = [
             {
                 "step": step_idx,
@@ -588,7 +583,7 @@ class PermutationRecursiveFeatureElimination:
                 "metric_change": 0.0,
                 "importance_score": score,
             }
-            for i, (feat, score) in enumerate(removable)
+            for i, (feat, score) in enumerate(removed_scores.items())
         ]
         if rows:
             summary_df["history"] = pd.concat(
