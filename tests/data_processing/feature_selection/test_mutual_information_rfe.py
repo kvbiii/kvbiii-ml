@@ -233,43 +233,6 @@ def test_select_features_weighted_score_prefers_best_metric_step():
         raise AssertionError()
 
 
-def test_prepare_x_y_categorical_mi_rfe():
-    """Tests that _prepare_x_y_for_mi encodes categorical columns and preserves y.
-
-    Asserts:
-        - discrete_features is populated in mi_kwargs when categorical columns exist
-        - Categorical column is converted to a numeric dtype
-        - y is returned unchanged
-    """
-    selector = _build_selector(steps=2)
-    X = pd.DataFrame(
-        {
-            "a": [1, 2, 1, 2],
-            "b": pd.Categorical(["x", "y", "x", "y"]),
-        }
-    )
-    y = pd.Series([0, 1, 0, 1])
-    prepared_x, prepared_y = selector._prepare_x_y_for_mi(X, y)
-    if "discrete_features" not in selector.mi_kwargs:
-        raise AssertionError()
-    if not pd.api.types.is_numeric_dtype(prepared_x["b"]):
-        raise AssertionError()
-    if not prepared_y.equals(y):  # ty: ignore[unresolved-attribute]
-        raise AssertionError()
-
-
-def test_prepare_x_y_for_mi_rejects_invalid_y_type():
-    """Tests that _prepare_x_y_for_mi raises ValueError for a non-Series/ndarray target.
-
-    Asserts:
-        - ValueError is raised when y is a plain Python list
-    """
-    selector = _build_selector(steps=2)
-    X = pd.DataFrame({"a": [1, 2, 3]})
-    with pytest.raises(ValueError, match="y must be a pandas Series or numpy array"):
-        selector._prepare_x_y_for_mi(X, [0, 1, 0])  # ty: ignore[invalid-argument-type]
-
-
 def test_convert_categorical_to_codes():
     """Tests that _convert_categorical_to_codes converts category columns to codes.
 

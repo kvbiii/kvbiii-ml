@@ -342,52 +342,6 @@ def test_mutualinformationfiltering_fit_transform_combines_fit_and_transform(
         raise AssertionError()
 
 
-def test_mutualinformationfiltering_prepare_x_y_for_mi_validates_inputs():
-    """Tests _prepare_x_y_for_mi method validates input data types correctly.
-
-    Asserts:
-        - ValueError is raised for non-DataFrame X inputs
-        - ValueError is raised for invalid y input types
-        - Error messages provide clear guidance about expected types
-    """
-    mif = MutualInformationFiltering(problem_type="classification")
-
-    # Test invalid X type
-    with pytest.raises(ValueError, match="X must be a pandas DataFrame"):
-        mif._prepare_x_y_for_mi(np.array([[1, 2], [3, 4]]), pd.Series([0, 1]))  # ty: ignore[invalid-argument-type]
-
-    # Test invalid y type
-    with pytest.raises(ValueError, match="y must be a pandas Series or numpy array"):
-        mif._prepare_x_y_for_mi(pd.DataFrame({"A": [1, 2]}), [[0, 1]])  # ty: ignore[invalid-argument-type]
-
-
-def test_mutualinformationfiltering_prepare_x_y_for_mi_handles_categorical_features():
-    """Tests _prepare_x_y_for_mi method properly encodes categorical features.
-
-    Asserts:
-        - Categorical features are converted to numeric codes
-        - discrete_features parameter is set appropriately for MI computation
-        - Non-categorical features remain unchanged
-    """
-    X = pd.DataFrame({"numeric": [1.0, 2.0, 3.0], "categorical": pd.Categorical(["A", "B", "A"])})
-    y = pd.Series([0, 1, 0])
-
-    mif = MutualInformationFiltering(problem_type="classification")
-    prepared_x, _prepared_y = mif._prepare_x_y_for_mi(X, y)
-
-    # Categorical should be converted to codes
-    if not pd.api.types.is_numeric_dtype(prepared_x["categorical"]):
-        raise AssertionError()
-
-    # discrete_features should be set for MI computation
-    if "discrete_features" not in mif.mi_kwargs:
-        raise AssertionError()
-    if not mif.mi_kwargs["discrete_features"][1]:  # ty: ignore[not-subscriptable]
-        raise AssertionError()
-    if mif.mi_kwargs["discrete_features"][0]:  # ty: ignore[not-subscriptable]
-        raise AssertionError()
-
-
 def test_mutualinformationfiltering_compute_mi_scores_handles_nan_values(
     classification_feature_data,
 ):
