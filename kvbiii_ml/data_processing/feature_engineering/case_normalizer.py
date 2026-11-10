@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import ClassVar
 
 import pandas as pd
@@ -8,7 +9,13 @@ from sklearn.utils.validation import check_is_fitted
 class CaseNormalizer(BaseEstimator, TransformerMixin):
     """Normalize the case of object, string or category features."""
 
-    _NORMALIZATIONS: ClassVar[set[str]] = {"lower", "upper", "title", "capitalize", "casefold"}
+    _NORMALIZATIONS: ClassVar[dict[str, Callable[[str], str]]] = {
+        "lower": str.lower,
+        "upper": str.upper,
+        "title": str.title,
+        "capitalize": str.capitalize,
+        "casefold": str.casefold,
+    }
 
     def __init__(
         self,
@@ -178,19 +185,9 @@ class CaseNormalizer(BaseEstimator, TransformerMixin):
         Returns:
             object: Normalized value or original if not a string.
         """
-        if pd.isna(value):
-            return value
         if not isinstance(value, str):
             return value
-        if self.normalization == "lower":
-            return value.lower()
-        if self.normalization == "upper":
-            return value.upper()
-        if self.normalization == "title":
-            return value.title()
-        if self.normalization == "capitalize":
-            return value.capitalize()
-        return value.casefold()
+        return self._NORMALIZATIONS[self.normalization](value)
 
 
 if __name__ == "__main__":
