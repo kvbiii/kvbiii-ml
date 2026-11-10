@@ -192,5 +192,52 @@ def test_process_shap_skips_fold_when_vectorized_step_fails(method_name, shape):
         raise AssertionError()
 
 
+_SHAP_2D = np.array([[1.0, -1.0], [2.0, 0.0]])
+_REDUCED = np.array([[-1.0, 1.0], [0.0, 2.0]])
+_SIGMOID_REDUCED = 1 / (1 + np.exp(-_REDUCED))
+
+
+@pytest.mark.parametrize(
+    ("method_name", "vals", "problem_type", "metric_type", "expected"),
+    [
+        ("_final_pred_matrix_2d", _SHAP_2D, "classification", "preds", [[0, 1], [1, 1]]),
+        ("_final_pred_matrix_2d", _SHAP_2D, "classification", "probs", _SIGMOID_REDUCED),
+        ("_final_pred_matrix_2d", _SHAP_2D, "regression", "preds", _REDUCED),
+        ("_final_pred_matrix_3d", _SHAP_2D[:, :, None], "regression", "preds", _REDUCED),
+        (
+            "_final_pred_matrix_3d",
+            _SHAP_2D[:, :, None],
+            "classification",
+            "preds",
+            [[0, 1], [1, 1]],
+        ),
+    ],
+)
+def test_shap_final_pred_matrix_removes_each_feature_and_applies_the_metric_type(
+    method_name, vals, problem_type, metric_type, expected
+):
+    """Tests the per-feature predictions built from SHAP values (total minus the feature's share).
+
+    Asserts:
+        - Regression returns the reduced prediction matrix
+        - Classification with a probability metric returns its sigmoid
+        - Classification with a label metric thresholds the sigmoid at 0.5
+    """
+    selector = ShapRecursiveFeatureElimination(
+        estimator=LogisticRegression(max_iter=100, solver="liblinear"),
+        cross_validator=_build_cv(),
+        verbose=False,
+    )
+    selector.problem_type = problem_type
+    selector.metric_type = metric_type
+    args = (vals, 0.0, pd.Series([0, 1]))
+    if method_name == "_final_pred_matrix_2d":
+        args = (*args, 2)
+
+    result = getattr(selector, method_name)(*args)
+
+    np.testing.assert_allclose(result, expected)
+
+
 if __name__ == "__main__":
     print("Run this file with pytest to execute tests.")
