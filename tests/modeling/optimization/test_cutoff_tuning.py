@@ -5,6 +5,7 @@ import optuna
 import pandas as pd
 import pytest
 from sklearn.datasets import make_classification
+from sklearn.exceptions import NotFittedError
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
 
@@ -152,7 +153,7 @@ def test_cutofftunercv_tune_multiclass_produces_per_class_best_cutoffs(
         raise AssertionError()
 
 
-def test_cutofftunercv_predict_raises_runtimeerror_before_tune(
+def test_cutofftunercv_predict_raises_not_fitted_before_tune(
     logistic_regression_estimator, cutoff_cv_trainer
 ):
     """Tests predict() raises before tune() has been called.
@@ -162,13 +163,13 @@ def test_cutofftunercv_predict_raises_runtimeerror_before_tune(
         cutoff_cv_trainer (CrossValidationTrainer): Configured CV trainer.
 
     Asserts:
-        - RuntimeError is raised instructing the caller to tune first
+        - NotFittedError is raised instructing the caller to tune first
     """
     tuner = CutoffTunerCV(
         estimator=logistic_regression_estimator, cross_validator=cutoff_cv_trainer
     )
 
-    with pytest.raises(RuntimeError, match=r"Call tune\(\) before predict\(\)\."):
+    with pytest.raises(NotFittedError, match=r"Call tune\(\) first"):
         tuner.predict(pd.DataFrame({"feature_0": [0.1, 0.2]}))
 
 

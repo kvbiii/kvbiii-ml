@@ -46,6 +46,7 @@ class TestEnsembleWeightTunerCV:
             - Default parameters are set correctly
             - Estimators list is properly stored
             - Cross-validator is assigned
+            - No tuned attribute exists before tune
         """
         cross_validator = CrossValidationTrainer(
             metric_name="Roc AUC", problem_type="classification", cv=kfold_cv
@@ -65,11 +66,7 @@ class TestEnsembleWeightTunerCV:
             raise AssertionError()
         if tuner.allow_negative_weights:
             raise AssertionError()
-        if tuner.best_weights is not None:
-            raise AssertionError()
-        if tuner.best_score_ is not None:
-            raise AssertionError()
-        if tuner.selection_source_ is not None:
+        if any(hasattr(tuner, a) for a in ("best_weights", "best_score_", "selection_source_")):
             raise AssertionError()
 
     def test_ensembleweighttuner_init_custom_parameters(
