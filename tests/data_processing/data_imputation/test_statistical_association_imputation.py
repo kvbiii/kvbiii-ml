@@ -130,3 +130,43 @@ def test_transform_verbose_imputes_categorical_and_numeric_features():
 
 if __name__ == "__main__":
     print("Run this file with pytest to execute tests.")
+
+
+@pytest.mark.parametrize(
+    ("extra_columns", "expected"),
+    [
+        (
+            {},
+            {
+                "cramers_v": {"a": 0.097699, "b": 0.0},
+                "mutual_info": {"a": 0.051555, "b": 0.059442},
+                "theils_u": {"a": 0.047063, "b": 0.019065},
+                "cramers_v_rank": {"a": 1.0, "b": 2.0},
+                "mutual_info_rank": {"a": 2.0, "b": 1.0},
+                "theils_u_rank": {"a": 1.0, "b": 2.0},
+                "total_rank": {"a": 4.0, "b": 5.0},
+            },
+        ),
+        (
+            {"constant": 1},
+            {
+                "cramers_v": {"a": 0.097699, "b": 0.0},
+                "theils_u": {"a": 0.047063, "b": 0.019065},
+                "cramers_v_rank": {"a": 1.0, "b": 2.0},
+                "theils_u_rank": {"a": 1.0, "b": 2.0},
+                "total_rank": {"a": 2.0, "b": 4.0},
+            },
+        ),
+    ],
+)
+def test_rank_metrics_pins_scores_and_drops_metrics_without_scores(extra_columns, expected):
+    """All metrics are ranked; one with no scores (all rows NaN after binning) is left out."""
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame(
+        {"t": rng.integers(0, 3, 60), "a": rng.integers(0, 3, 60), "b": rng.choice(list("xyz"), 60)}
+    ).assign(**extra_columns)
+    df.loc[:5, "a"] = np.nan
+    imputer = StatisticalAssociationImputer()
+    imputer.categorical_columns = imputer._get_categorical_columns(df)
+    if imputer.rank_metrics(df, "t").round(6).to_dict() != expected:
+        raise AssertionError()

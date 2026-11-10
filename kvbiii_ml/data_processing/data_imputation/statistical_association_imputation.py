@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import defaultdict
+from collections.abc import Callable
 from math import log
 from typing import Any
 
@@ -169,33 +169,16 @@ class StatisticalAssociationImputer:
         Returns:
             pd.DataFrame: Rankings with metric scores and cumulative ranks.
         """
-        rankings = defaultdict(dict)
         df_bin = self.bin_dataframe(df, feature_name)
-
+        rankings: dict[str, dict[str, float]] = {}
         if "cramers_v" in self.metrics:
-            for col in df_bin.columns:
-                if col != feature_name and df_bin[col].nunique() > 1:  # noqa: PD101
-                    rankings["cramers_v"][col] = self.cramers_v(df_bin[col], df_bin[feature_name])
-
+            rankings["cramers_v"] = self._pairwise_scores(df_bin, feature_name, self.cramers_v)
         if "mutual_info" in self.metrics:
-            # Use the same row subset for all columns (as in original behavior), but
-            # compute mutual information for all features in one batch for efficiency.
-            temp = df_bin.dropna()
-            if len(temp) > 0:
-                temp_codes = temp.apply(lambda s: s.astype("category").cat.codes)
-                y = temp_codes[feature_name].to_numpy()
-                x_codes = temp_codes.drop(columns=[feature_name])
-                if x_codes.shape[1] > 0:
-                    mi = mutual_info_classif(x_codes.values, y, discrete_features=True)
-                    for i, col in enumerate(x_codes.columns):
-                        rankings["mutual_info"][col] = float(mi[i])
-
+            rankings["mutual_info"] = self._mutual_info_scores(df_bin, feature_name)
         if "theils_u" in self.metrics:
-            for col in df_bin.columns:
-                if col != feature_name and df_bin[col].nunique() > 1:  # noqa: PD101
-                    rankings["theils_u"][col] = self.theils_u(df_bin[col], df_bin[feature_name])
+            rankings["theils_u"] = self._pairwise_scores(df_bin, feature_name, self.theils_u)
 
-        df_ranks = pd.DataFrame(rankings)
+        df_ranks = pd.DataFrame({metric: scores for metric, scores in rankings.items() if scores})
         for metric in df_ranks.columns:
             df_ranks[f"{metric}_rank"] = df_ranks[metric].rank(ascending=False)
         df_ranks["total_rank"] = df_ranks[[c for c in df_ranks.columns if c.endswith("_rank")]].sum(
@@ -206,6 +189,32 @@ class StatisticalAssociationImputer:
             display(df_ranks)
         self.rankings = df_ranks
         return df_ranks
+
+    @staticmethod
+    def _mutual_info_scores(df_bin: pd.DataFrame, feature_name: str) -> dict[str, float]:
+        """Score every column against the target by mutual information on the complete rows."""
+        complete = df_bin.dropna()
+        if complete.empty:
+            return {}
+        codes = complete.apply(lambda s: s.astype("category").cat.codes)
+        x_codes = codes.drop(columns=[feature_name])
+        if x_codes.shape[1] == 0:
+            return {}
+        scores = mutual_info_classif(
+            x_codes.values, codes[feature_name].to_numpy(), discrete_features=True
+        )
+        return {col: float(score) for col, score in zip(x_codes.columns, scores, strict=True)}
+
+    @staticmethod
+    def _pairwise_scores(
+        df_bin: pd.DataFrame, feature_name: str, metric: Callable[[pd.Series, pd.Series], float]
+    ) -> dict[str, float]:
+        """Score every non-constant column against the target with an association metric."""
+        return {
+            col: metric(df_bin[col], df_bin[feature_name])
+            for col in df_bin.columns
+            if col != feature_name and df_bin[col].nunique() > 1  # noqa: PD101
+        }
 
     def bin_dataframe(
         self, df: pd.DataFrame, feature_name: str, fit_bins: bool = True
