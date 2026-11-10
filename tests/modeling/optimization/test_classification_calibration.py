@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 from pandas.io.formats.style import Styler
 from sklearn.datasets import make_classification
+from sklearn.exceptions import NotFittedError
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
 
@@ -207,7 +208,7 @@ def test_classificationcalibrator_fit_multiclass_produces_scores_and_best_method
         raise AssertionError()
 
 
-def test_classificationcalibrator_predict_proba_raises_runtimeerror_before_fit(
+def test_classificationcalibrator_predict_proba_raises_not_fitted_before_fit(
     logistic_regression_estimator, calibration_cv_trainer
 ):
     """Tests predict_proba raises before fit() has been called.
@@ -217,17 +218,17 @@ def test_classificationcalibrator_predict_proba_raises_runtimeerror_before_fit(
         calibration_cv_trainer (CrossValidationTrainer): Configured CV trainer.
 
     Asserts:
-        - RuntimeError is raised instructing the caller to fit first
+        - NotFittedError is raised instructing the caller to fit first
     """
     calibrator = ClassificationCalibrator(
         estimator=logistic_regression_estimator, cross_validator=calibration_cv_trainer
     )
 
-    with pytest.raises(RuntimeError, match=r"Call fit\(\) before predict_proba\(\)\."):
+    with pytest.raises(NotFittedError, match=r"Call fit\(\) first"):
         calibrator.predict_proba(pd.DataFrame({"feature_0": [0.1, 0.2]}))
 
 
-def test_classificationcalibrator_predict_raises_runtimeerror_before_fit(
+def test_classificationcalibrator_predict_raises_not_fitted_before_fit(
     logistic_regression_estimator, calibration_cv_trainer
 ):
     """Tests predict raises before fit() has been called.
@@ -237,17 +238,17 @@ def test_classificationcalibrator_predict_raises_runtimeerror_before_fit(
         calibration_cv_trainer (CrossValidationTrainer): Configured CV trainer.
 
     Asserts:
-        - RuntimeError is raised instructing the caller to fit first
+        - NotFittedError is raised instructing the caller to fit first
     """
     calibrator = ClassificationCalibrator(
         estimator=logistic_regression_estimator, cross_validator=calibration_cv_trainer
     )
 
-    with pytest.raises(RuntimeError, match=r"Call fit\(\) before predict_proba\(\)\."):
+    with pytest.raises(NotFittedError, match=r"Call fit\(\) first"):
         calibrator.predict(pd.DataFrame({"feature_0": [0.1, 0.2]}))
 
 
-def test_classificationcalibrator_plot_calibration_curves_raises_runtimeerror_before_fit(
+def test_classificationcalibrator_plot_calibration_curves_raises_not_fitted_before_fit(
     logistic_regression_estimator, calibration_cv_trainer
 ):
     """Tests plot_calibration_curves raises before fit() has been called.
@@ -257,13 +258,13 @@ def test_classificationcalibrator_plot_calibration_curves_raises_runtimeerror_be
         calibration_cv_trainer (CrossValidationTrainer): Configured CV trainer.
 
     Asserts:
-        - RuntimeError is raised instructing the caller to fit first
+        - NotFittedError is raised instructing the caller to fit first
     """
     calibrator = ClassificationCalibrator(
         estimator=logistic_regression_estimator, cross_validator=calibration_cv_trainer
     )
 
-    with pytest.raises(RuntimeError, match=r"Call fit\(\) before plot_calibration_curves\(\)\."):
+    with pytest.raises(NotFittedError, match=r"Call fit\(\) first"):
         calibrator.plot_calibration_curves()
 
 
@@ -420,7 +421,7 @@ def test_show_figure_displays_inline_image_inside_notebook():
     fig.savefig.assert_called_once()
 
 
-def test_classificationcalibrator_style_scores_raises_runtimeerror_before_fit(
+def test_classificationcalibrator_style_scores_raises_not_fitted_before_fit(
     logistic_regression_estimator, calibration_cv_trainer
 ):
     """Tests style_scores raises before fit() has been called.
@@ -430,13 +431,13 @@ def test_classificationcalibrator_style_scores_raises_runtimeerror_before_fit(
         calibration_cv_trainer (CrossValidationTrainer): Configured CV trainer.
 
     Asserts:
-        - RuntimeError is raised instructing the caller to fit first.
+        - NotFittedError is raised instructing the caller to fit first.
     """
     calibrator = ClassificationCalibrator(
         estimator=logistic_regression_estimator, cross_validator=calibration_cv_trainer
     )
 
-    with pytest.raises(RuntimeError, match=r"Call fit\(\) before style_scores\(\)\."):
+    with pytest.raises(NotFittedError, match=r"Call fit\(\) first"):
         calibrator.style_scores()
 
 

@@ -15,8 +15,10 @@ from sklearn.base import clone
 from sklearn.calibration import calibration_curve
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
 
 from kvbiii_ml._typing import Estimator
+from kvbiii_ml._validation import check_fitted
 from kvbiii_ml.evaluation.generate_reports import _apply_fancy_styling
 from kvbiii_ml.evaluation.metrics import (
     METRICS,
@@ -243,6 +245,19 @@ class ClassificationCalibrator:
     defined in the cross-validator.
     """
 
+    train_scores_: list[float]
+    valid_scores_: list[float]
+    calibrated_valid_scores_: list[float]
+    calibration_scores_df_: pd.DataFrame
+    best_method_: str
+    best_calibrator_: IsotonicRegression | LogisticRegression | list | None
+    best_estimator_: CalibratedModel | Estimator
+    _oof_probas_by_method: dict[str, np.ndarray]
+    _y_oof: np.ndarray
+    _classes: np.ndarray
+    _fitted_full_estimator: Estimator
+    _fitted_full_pipeline: Pipeline | None
+
     def __init__(  # noqa: PLR0913
         self,
         estimator: Estimator,
@@ -299,20 +314,6 @@ class ClassificationCalibrator:
         self.selection_metric_name = selection_metric_name
         self.calibration_holdout_size = calibration_holdout_size
 
-        self.train_scores_: list[float] = []
-        self.valid_scores_: list[float] = []
-        self.calibrated_valid_scores_: list[float] = []
-        self.calibration_scores_df_: pd.DataFrame = pd.DataFrame()
-        self.best_method_: str = ""
-        self.best_calibrator_: IsotonicRegression | LogisticRegression | list | None = None
-        self.best_estimator_: CalibratedModel | Estimator | None = None
-
-        self._oof_probas_by_method: dict[str, np.ndarray] = {}
-        self._y_oof: np.ndarray | None = None
-        self._classes: np.ndarray = None  # ty: ignore[invalid-assignment]
-        self._fitted_full_estimator: Estimator | None = None
-        self._fitted_full_pipeline = None
-
     def fit(
         self,
         X: pd.DataFrame,
@@ -355,7 +356,7 @@ class ClassificationCalibrator:
         return self
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
-        """Return calibrated class probabilities using the full-data-fitted estimator.
+        """Return calibrated probabilities of the full-data estimator; NotFittedError before fit.
 
         Args:
             X (pd.DataFrame): Features to predict (raw, unprocessed).
@@ -364,12 +365,8 @@ class ClassificationCalibrator:
             np.ndarray: Calibrated probabilities of shape (n_samples, n_classes). When
                 ``best_method_`` is "Uncalibrated", these are the base estimator's raw
                 probabilities, returned unmodified.
-
-        Raises:
-            RuntimeError: If called before fit().
         """
-        if self._fitted_full_estimator is None:
-            raise RuntimeError("Call fit() before predict_proba().")
+        check_fitted(self, "_fitted_full_estimator")
 
         x_proc = CrossValidationTrainer._transform_with_pipeline(self._fitted_full_pipeline, X)  # noqa: SLF001
         x_ord = CrossValidationTrainer._order_x_for_estimator(x_proc, self._fitted_full_estimator)  # noqa: SLF001
@@ -395,10 +392,11 @@ class ClassificationCalibrator:
         Returns:
             np.ndarray: Predicted class labels of shape (n_samples,).
         """
-        return self._classes[np.argmax(self.predict_proba(X), axis=1)]
+        probas = self.predict_proba(X)
+        return self._classes[np.argmax(probas, axis=1)]
 
     def plot_calibration_curves(self) -> None:
-        """Plot reliability diagrams for each calibration method.
+        """Plot reliability diagrams for each calibration method, raising NotFittedError before fit.
 
         Each panel shows the reliability curve against the diagonal of perfect
         calibration, with the gap between them shaded, a per-bin sample-count
@@ -408,12 +406,8 @@ class ClassificationCalibrator:
 
         Binary: one panel per method in a single row.
         Multiclass: grid of (methods x classes) panels.
-
-        Raises:
-            RuntimeError: If called before fit().
         """
-        if not self._oof_probas_by_method:
-            raise RuntimeError("Call fit() before plot_calibration_curves().")
+        check_fitted(self, "_oof_probas_by_method")
 
         y_true = self._y_oof
         method_names = list(self._oof_probas_by_method.keys())
@@ -495,7 +489,7 @@ class ClassificationCalibrator:
         _show_figure(fig)
 
     def style_scores(self) -> Styler:
-        """Return calibration_scores_df_ as a fancy-styled table for notebook display.
+        """Return calibration_scores_df_ as a styled table, raising NotFittedError before fit.
 
         Applies this package's standard report styling (see
         ``kvbiii_ml.evaluation.generate_reports``), with the row for
@@ -504,12 +498,8 @@ class ClassificationCalibrator:
         Returns:
             Styler: Styled table - display it directly as a notebook cell's
                 last expression, or via ``IPython.display.display(...)``.
-
-        Raises:
-            RuntimeError: If called before fit().
         """
-        if self.calibration_scores_df_.empty:
-            raise RuntimeError("Call fit() before style_scores().")
+        check_fitted(self, "calibration_scores_df_")
 
         styled = _apply_fancy_styling(
             cast("Styler", self.calibration_scores_df_.style.format("{:.4f}")),
@@ -702,7 +692,7 @@ class ClassificationCalibrator:
             }
 
         rows = [_score_row(_UNCALIBRATED, oof_probas)]
-        self._oof_probas_by_method[_UNCALIBRATED] = oof_probas
+        self._oof_probas_by_method = {_UNCALIBRATED: oof_probas}
 
         calibrators: dict[str, IsotonicRegression | LogisticRegression | list] = {}
         for method in self.methods:
