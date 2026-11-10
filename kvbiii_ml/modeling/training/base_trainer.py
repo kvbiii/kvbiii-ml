@@ -423,6 +423,61 @@ class BaseTrainer:
         return VERBOSE_LOG_PERIOD if verbose else False
 
     @staticmethod
+    def _eval_fit_params(
+        estimator: Estimator,
+        sig: Signature,
+        train: tuple[pd.DataFrame, pd.Series],
+        valid: tuple[pd.DataFrame | None, pd.Series | None],
+        eval_on_train: bool,
+    ) -> dict[str, object]:
+        """Build the eval_X/eval_y (LightGBM) or eval_set kwargs; no train set on CatBoost GPU."""
+        X_valid, y_valid = valid
+        if X_valid is None or y_valid is None:
+            return {}
+        X_train, y_train = train
+        name = estimator.__class__.__name__
+        if (
+            name.startswith(LGBM_PREFIX)
+            and "eval_X" in sig.parameters
+            and "eval_y" in sig.parameters
+        ):
+            return {
+                "eval_X": (X_train, X_valid) if eval_on_train else (X_valid,),
+                "eval_y": (y_train, y_valid) if eval_on_train else (y_valid,),
+            }
+        if "eval_set" not in sig.parameters:
+            return {}
+        eval_set = (
+            [(X_train, y_train), (X_valid, y_valid)] if eval_on_train else [(X_valid, y_valid)]
+        )
+        if (
+            name.startswith("CatBoost")
+            and str(estimator.get_params().get("task_type", "")).upper() == "GPU"
+        ):
+            eval_set = eval_set[1:]
+        return {"eval_set": eval_set}
+
+    @staticmethod
+    def _verbose_fit_params(
+        estimator: Estimator, sig: Signature, verbose: bool | int | None
+    ) -> tuple[Estimator, dict[str, object]]:
+        """Map ``verbose`` to fit kwargs, a LightGBM log callback or HistGB's constructor flag."""
+        fit_params: dict[str, object] = {}
+        if verbose is None:
+            return estimator, fit_params
+        log_period = BaseTrainer._resolve_verbose_period(verbose)
+        name = estimator.__class__.__name__
+        if "verbose" in sig.parameters:
+            fit_params["verbose"] = log_period
+        elif "verbosity" in sig.parameters:
+            fit_params["verbosity"] = verbose
+        if "callbacks" in sig.parameters and name.startswith(LGBM_PREFIX):
+            fit_params["callbacks"] = [log_evaluation(log_period)]
+        if name.startswith(HISTGB_PREFIX) and "verbose" in estimator.get_params():
+            estimator = estimator.set_params(verbose=1 if verbose else 0)
+        return estimator, fit_params
+
+    @staticmethod
     def fit_estimator(
         estimator: Estimator,
         X_train: pd.DataFrame,
@@ -500,46 +555,12 @@ class BaseTrainer:
         estimator = BaseTrainer._set_categorical_params(estimator, X_train)
 
         sig = signature(estimator.fit)
-        fit_params = {}
-
-        if verbose is not None:
-            log_period = BaseTrainer._resolve_verbose_period(verbose)
-            if "verbose" in sig.parameters:
-                fit_params["verbose"] = log_period
-            elif "verbosity" in sig.parameters:
-                fit_params["verbosity"] = verbose
-            if "callbacks" in sig.parameters and estimator.__class__.__name__.startswith(
-                LGBM_PREFIX
-            ):
-                fit_params["callbacks"] = [log_evaluation(log_period)]
-            if (
-                estimator.__class__.__name__.startswith(HISTGB_PREFIX)
-                and "verbose" in estimator.get_params()
-            ):
-                estimator = estimator.set_params(verbose=1 if verbose else 0)
-
-        is_lgbm = estimator.__class__.__name__.startswith(LGBM_PREFIX)
-        if (
-            is_lgbm
-            and "eval_X" in sig.parameters
-            and "eval_y" in sig.parameters
-            and X_valid is not None
-            and y_valid is not None
-        ):
-            fit_params["eval_X"] = (X_train, X_valid) if eval_on_train else (X_valid,)
-            fit_params["eval_y"] = (y_train, y_valid) if eval_on_train else (y_valid,)
-        elif "eval_set" in sig.parameters and X_valid is not None and y_valid is not None:
-            eval_set = (
-                [(X_train, y_train), (X_valid, y_valid)] if eval_on_train else [(X_valid, y_valid)]
+        estimator, fit_params = BaseTrainer._verbose_fit_params(estimator, sig, verbose)
+        fit_params.update(
+            BaseTrainer._eval_fit_params(
+                estimator, sig, (X_train, y_train), (X_valid, y_valid), eval_on_train
             )
-
-            if (
-                estimator.__class__.__name__.startswith("CatBoost")
-                and str(estimator.get_params().get("task_type", "")).upper() == "GPU"
-            ):
-                eval_set = eval_set[1:]
-
-            fit_params["eval_set"] = eval_set
+        )
 
         if (
             estimator.__class__.__name__.startswith(XGB_PREFIX)
