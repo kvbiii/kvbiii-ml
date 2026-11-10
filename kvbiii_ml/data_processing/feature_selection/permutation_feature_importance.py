@@ -146,19 +146,91 @@ class PermutationRecursiveFeatureElimination:
         Raises:
             ValueError: When protected features are not found in the post-pipeline column set.
         """
-        all_raw_features: list[str] = sorted(X.columns.tolist())
+        dependency_graph, current_valid_scores = self._fit_baseline(X, y)
+        baseline_metric = float(np.mean(current_valid_scores))
+        fold_data = self._fold_validation_data(X, y)
 
+        self.all_processed_features: list[str] = list(dependency_graph.processed_columns)
+        missing_protected = set(self.protected_features) - set(self.all_processed_features)
+        if missing_protected:
+            raise ValueError(
+                f"Protected features not found in post-pipeline column set: {missing_protected}. "
+                f"Available processed columns: {sorted(self.all_processed_features)}"
+            )
+
+        importance_scores = self._compute_fold_importances(fold_data)
+        current_processed_features: list[str] = list(self.all_processed_features)
         summary_df: RfeSummary = {
             "selected_features": [],
             "selected_features_names": [],
-            "history": pd.DataFrame(columns=self.history_schema.keys()).astype(self.history_schema),  # ty: ignore[invalid-argument-type]
+            "history": self._init_history(len(current_processed_features), baseline_metric),
         }
 
-        pipeline = self.cross_validator.preprocessing_pipeline
-        dependency_graph = PipelineDependencyGraph.build(
-            pipeline, X[all_raw_features], cast("pd.Series", y)
-        )
+        for step_idx, n_to_remove in enumerate(self._removal_schedule(), start=1):
+            if len(current_processed_features) <= len(self.protected_features):
+                if self.verbose:
+                    print("⏹️  Stopping early - only protected features remain.")
+                break
 
+            sorted_removable, features_to_remove = self._select_removals(
+                current_processed_features, importance_scores, n_to_remove
+            )
+            if not features_to_remove:
+                if self.verbose:
+                    print("⏹️  Stopping - minimum feature count reached.")
+                break
+
+            if self.verbose:
+                self._print_step(
+                    step_idx,
+                    current_processed_features,
+                    current_valid_scores,
+                    sorted_removable,
+                    importance_scores,
+                )
+
+            self._log_step(
+                summary_df,
+                step_idx,
+                current_processed_features,
+                features_to_remove,
+                float(np.mean(current_valid_scores)),
+            )
+
+            current_processed_features = [
+                f for f in current_processed_features if f not in features_to_remove
+            ]
+            current_valid_scores = self._cross_val_step(
+                X, y, dependency_graph, current_processed_features
+            )
+
+        summary_df["history"] = self._append_never_removed(
+            summary_df["history"],
+            current_processed_features,
+            importance_scores,
+            float(np.mean(current_valid_scores)),
+        )
+        self._select_features(summary_df, baseline_metric)
+        return summary_df
+
+    def _fit_baseline(
+        self, X: pd.DataFrame, y: pd.Series | np.ndarray
+    ) -> tuple[PipelineDependencyGraph, list[float]]:
+        """Build the dependency graph and fit the baseline CV once.
+
+        Args:
+            X (pd.DataFrame): Feature matrix (raw columns).
+            y (pd.Series | np.ndarray): Target aligned with X.
+
+        Returns:
+            tuple[PipelineDependencyGraph, list[float]]: Dependency graph and per-fold scores.
+        """
+        all_raw_features: list[str] = sorted(X.columns.tolist())
+        dependency_graph = PipelineDependencyGraph.build(
+            self.cross_validator.preprocessing_pipeline,
+            X[all_raw_features],
+            cast("pd.Series", y),
+        )
         baseline_estimator = self._restrict_catboost_cat_features(
             self.estimator,
             set(dependency_graph.processed_columns),
@@ -167,10 +239,23 @@ class PermutationRecursiveFeatureElimination:
         _, valid_scores, _ = self.cross_validator.fit(
             baseline_estimator, X[all_raw_features], cast("pd.Series", y)
         )
-        baseline_metric = float(np.mean(valid_scores))
+        return dependency_graph, valid_scores
 
+    def _fold_validation_data(
+        self, X: pd.DataFrame, y: pd.Series | np.ndarray
+    ) -> list[tuple[Estimator, pd.DataFrame, pd.Series]]:
+        """Collect (fitted estimator, processed validation X, validation y) for every fold.
+
+        Args:
+            X (pd.DataFrame): Feature matrix (raw columns).
+            y (pd.Series | np.ndarray): Target aligned with X.
+
+        Returns:
+            list[tuple[Estimator, pd.DataFrame, pd.Series]]: One entry per CV fold.
+        """
+        all_raw_features: list[str] = sorted(X.columns.tolist())
         fold_splits = list(self.cross_validator.cv.split(X[all_raw_features], y))
-        fold_data = [
+        return [
             (
                 est,
                 CrossValidationTrainer._transform_with_pipeline(  # noqa: SLF001
@@ -186,37 +271,28 @@ class PermutationRecursiveFeatureElimination:
             )
         ]
 
-        self.all_processed_features: list[str] = list(dependency_graph.processed_columns)
-        all_processed_set = set(self.all_processed_features)
+    def _init_history(self, n_features: int, base_metric: float) -> pd.DataFrame:
+        """Build the history DataFrame holding only the step-0 baseline row.
 
-        missing_protected = set(self.protected_features) - all_processed_set
-        if missing_protected:
-            raise ValueError(
-                f"Protected features not found in post-pipeline column set: {missing_protected}. "
-                f"Available processed columns: {sorted(all_processed_set)}"
-            )
+        Args:
+            n_features (int): Number of processed features at baseline.
+            base_metric (float): Baseline CV metric value.
 
-        importance_scores = self._compute_fold_importances(fold_data)
-
-        removable_processed = [
-            f for f in self.all_processed_features if f not in self.protected_features
-        ]
-        removal_schedule = self.compute_removal_schedule(len(removable_processed))
-
-        current_processed_features: list[str] = list(self.all_processed_features)
-        current_valid_scores = valid_scores
-
-        summary_df["history"] = pd.concat(
+        Returns:
+            pd.DataFrame: History with the step-0 row.
+        """
+        history = pd.DataFrame(columns=self.history_schema.keys()).astype(self.history_schema)  # ty: ignore[invalid-argument-type]
+        return pd.concat(
             [
-                summary_df["history"],
+                history,
                 pd.DataFrame(
                     [
                         {
                             "step": 0,
                             "n_features_removed": 0,
-                            "n_features_remaining": len(current_processed_features),
+                            "n_features_remaining": n_features,
                             "removed_feature_name": None,
-                            "metric_value": baseline_metric,
+                            "metric_value": base_metric,
                             "metric_change": 0.0,
                             "importance_score": np.nan,
                         }
@@ -226,104 +302,128 @@ class PermutationRecursiveFeatureElimination:
             ignore_index=True,
         )
 
-        minimize = self.metric_direction == "minimize"
+    def _removal_schedule(self) -> list[int]:
+        """Return the removal schedule for the non-protected processed features.
 
-        for step_idx, n_to_remove in enumerate(removal_schedule, start=1):
-            if len(current_processed_features) <= len(self.protected_features):
-                if self.verbose:
-                    print("⏹️  Stopping early - only protected features remain.")
-                break
+        Returns:
+            list[int]: Non-zero counts to remove at each step.
+        """
+        removable = [f for f in self.all_processed_features if f not in self.protected_features]
+        return self.compute_removal_schedule(len(removable))
 
-            current_set = set(current_processed_features)
-            sorted_removable = sorted(
-                (
-                    (k, v)
-                    for k, v in importance_scores.items()
-                    if k not in self.protected_features and k in current_set
-                ),
-                key=lambda x: x[1],
-                reverse=minimize,
-            )
+    def _select_removals(
+        self,
+        current_features: list[str],
+        importance_scores: dict[str, float],
+        n_to_remove: int,
+    ) -> tuple[list[tuple[str, float]], dict[str, float]]:
+        """Rank the removable features and pick the ones to remove this step.
 
-            min_keep = max(len(self.protected_features), 1)
-            n_actual = min(
-                n_to_remove,
-                len(sorted_removable),
-                len(current_processed_features) - min_keep,
-            )
-            if n_actual <= 0:
-                if self.verbose:
-                    print("⏹️  Stopping - minimum feature count reached.")
-                break
+        Args:
+            current_features (list[str]): Active processed feature names.
+            importance_scores (dict[str, float]): Importance score per processed feature.
+            n_to_remove (int): Number of features this step may remove.
 
-            features_to_remove = [f for f, _ in sorted_removable[:n_actual]]
+        Returns:
+            tuple[list[tuple[str, float]], dict[str, float]]: Removable (feature, score) pairs
+                least important first, and the chosen feature -> score map; empty when the
+                minimum feature count is reached.
+        """
+        current_set = set(current_features)
+        sorted_removable = sorted(
+            (
+                (k, v)
+                for k, v in importance_scores.items()
+                if k not in self.protected_features and k in current_set
+            ),
+            key=lambda x: x[1],
+            reverse=self.metric_direction == "minimize",
+        )
+        min_keep = max(len(self.protected_features), 1)
+        n_actual = min(n_to_remove, len(sorted_removable), len(current_features) - min_keep)
+        return sorted_removable, dict(sorted_removable[: max(n_actual, 0)])
 
-            if self.verbose:
-                self._print_step(
-                    step_idx,
-                    current_processed_features,
-                    current_valid_scores,
-                    sorted_removable,
-                    importance_scores,
-                )
+    def _cross_val_step(
+        self,
+        X: pd.DataFrame,
+        y: pd.Series | np.ndarray,
+        dependency_graph: PipelineDependencyGraph,
+        current_features: list[str],
+    ) -> list[float]:
+        """Re-run CV on the pipeline restricted to the current processed features.
 
-            self._log_step(
-                summary_df,
-                step_idx,
-                len(self.all_processed_features),
-                current_processed_features,
-                importance_scores,
-                float(np.mean(current_valid_scores)),
-                features_to_remove,
-            )
+        Args:
+            X (pd.DataFrame): Feature matrix (raw columns).
+            y (pd.Series | np.ndarray): Target aligned with X.
+            dependency_graph (PipelineDependencyGraph): Graph of the full pipeline.
+            current_features (list[str]): Active processed feature names.
 
-            current_processed_features = [
-                f for f in current_processed_features if f not in set(features_to_remove)
-            ]
-            current_raw_features, restricted_pipeline = dependency_graph.restrict(
-                current_processed_features
-            )
-            step_estimator = self._restrict_catboost_cat_features(
-                self.estimator,
-                set(current_processed_features),
-                dependency_graph.processed_dtypes,
-            )
+        Returns:
+            list[float]: Per-fold validation scores.
+        """
+        current_raw_features, restricted_pipeline = dependency_graph.restrict(current_features)
+        step_estimator = self._restrict_catboost_cat_features(
+            self.estimator,
+            set(current_features),
+            dependency_graph.processed_dtypes,
+        )
+        _, valid_scores, _ = self.cross_validator.fit(
+            step_estimator,
+            X[current_raw_features],
+            cast("pd.Series", y),
+            preprocessing_pipeline_override=restricted_pipeline,
+        )
+        return valid_scores
 
-            _, current_valid_scores, _ = self.cross_validator.fit(
-                step_estimator,
-                X[current_raw_features],
-                cast("pd.Series", y),
-                preprocessing_pipeline_override=restricted_pipeline,
-            )
+    def _append_never_removed(
+        self,
+        history: pd.DataFrame,
+        current_features: list[str],
+        importance_scores: dict[str, float],
+        final_metric: float,
+    ) -> pd.DataFrame:
+        """Append history rows for non-protected features that were never removed.
 
+        Args:
+            history (pd.DataFrame): Existing history DataFrame.
+            current_features (list[str]): Processed features left after the last step.
+            importance_scores (dict[str, float]): Importance score per processed feature.
+            final_metric (float): Metric of the final feature set.
+
+        Returns:
+            pd.DataFrame: History with one extra row per never-removed feature, if any.
+        """
         protected_set = set(self.protected_features)
-        logged_set = set(summary_df["history"]["removed_feature_name"].dropna())
+        logged_set = set(history["removed_feature_name"].dropna())
         never_removed = [
             f for f in self.all_processed_features if f not in protected_set and f not in logged_set
         ]
-        if never_removed:
-            last_step = int(summary_df["history"]["step"].max())
-            last_n_removed = int(summary_df["history"]["n_features_removed"].max())
-            final_metric = float(np.mean(current_valid_scores))
-            never_removed_sorted = sorted(
-                never_removed, key=lambda f: importance_scores.get(f, 0.0)
-            )
-            rows = [
-                {
-                    "step": last_step + 1,
-                    "n_features_removed": last_n_removed + i + 1,
-                    "n_features_remaining": len(current_processed_features) - i - 1,
-                    "removed_feature_name": feat,
-                    "metric_value": final_metric,
-                    "metric_change": 0.0,
-                    "importance_score": importance_scores.get(feat, 0.0),
-                }
-                for i, feat in enumerate(never_removed_sorted)
-            ]
-            summary_df["history"] = pd.concat(
-                [summary_df["history"], pd.DataFrame(rows)], ignore_index=True
-            )
+        if not never_removed:
+            return history
+        last_step = int(history["step"].max())
+        last_n_removed = int(history["n_features_removed"].max())
+        never_removed_sorted = sorted(never_removed, key=lambda f: importance_scores.get(f, 0.0))
+        rows = [
+            {
+                "step": last_step + 1,
+                "n_features_removed": last_n_removed + i + 1,
+                "n_features_remaining": len(current_features) - i - 1,
+                "removed_feature_name": feat,
+                "metric_value": final_metric,
+                "metric_change": 0.0,
+                "importance_score": importance_scores.get(feat, 0.0),
+            }
+            for i, feat in enumerate(never_removed_sorted)
+        ]
+        return pd.concat([history, pd.DataFrame(rows)], ignore_index=True)
 
+    def _select_features(self, summary_df: RfeSummary, baseline_metric: float) -> None:
+        """Fill the selected features in the summary and print the final summary.
+
+        Args:
+            summary_df (RfeSummary): Summary whose history is complete.
+            baseline_metric (float): Baseline CV metric value.
+        """
         summary_df["selected_features"], metric_selected = self.select_features_weighted_score(
             summary_df["history"], self.alpha
         )
@@ -336,8 +436,6 @@ class PermutationRecursiveFeatureElimination:
                 baseline_metric,
                 len(self.all_processed_features),
             )
-
-        return summary_df
 
     def _compute_fold_importances(self, fold_data: list[tuple]) -> dict[str, float]:
         """Compute mean permutation importance averaged across CV fold models.
@@ -461,25 +559,20 @@ class PermutationRecursiveFeatureElimination:
         self,
         summary_df: RfeSummary,
         step_idx: int,
-        total_processed: int,
         current_processed: list[str],
-        importance_scores: dict[str, float],
+        removed_scores: dict[str, float],
         metric: float,
-        features_to_remove: list[str],
     ) -> None:
         """Append one row per removed processed feature to history.
 
         Args:
             summary_df (dict): Summary dict carrying the history DataFrame.
             step_idx (int): Current step number.
-            total_processed (int): Total processed feature count at baseline.
             current_processed (list[str]): Processed features before this removal.
-            importance_scores (dict[str, float]): Importance score per processed feature.
+            removed_scores (dict[str, float]): Processed features removed this step -> importance.
             metric (float): Metric value for the current feature set.
-            features_to_remove (list[str]): Processed features being removed this step.
         """
-        n_removed_base = total_processed - len(current_processed)
-        protected_set = set(self.protected_features)
+        n_removed_base = len(self.all_processed_features) - len(current_processed)
         rows = [
             {
                 "step": step_idx,
@@ -488,9 +581,9 @@ class PermutationRecursiveFeatureElimination:
                 "removed_feature_name": feat,
                 "metric_value": metric,
                 "metric_change": 0.0,
-                "importance_score": importance_scores.get(feat, 0.0),
+                "importance_score": score,
             }
-            for i, feat in enumerate(f for f in features_to_remove if f not in protected_set)
+            for i, (feat, score) in enumerate(removed_scores.items())
         ]
         if rows:
             summary_df["history"] = pd.concat(
