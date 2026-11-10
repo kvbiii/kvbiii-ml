@@ -120,22 +120,18 @@ class TargetEncodingFeatureGenerator:
                 f"Unsupported aggregation method: {self.aggregation}. "
                 "Supported methods are 'mean', 'median', 'nunique'."
             )
-        if not isinstance(self.smooth, int) or self.smooth < 0:
+        if self.smooth < 0:
             raise ValueError("smooth must be a non-negative integer.")
         if self.cv is not None and not isinstance(self.cv, BaseCrossValidator):
             raise ValueError("cv must be None or an instance of BaseCrossValidator.")
-        if not isinstance(self.n_bins, int) or self.n_bins < MIN_BINS:
+        if self.n_bins < MIN_BINS:
             raise ValueError("n_bins must be an integer >= 2.")
-        if not isinstance(self.chunk_size, int) or self.chunk_size < 1:
+        if self.chunk_size < 1:
             raise ValueError("chunk_size must be a positive integer.")
-        if not isinstance(self.batch_size, int) or self.batch_size < 1:
+        if self.batch_size < 1:
             raise ValueError("batch_size must be a positive integer.")
-        if not isinstance(self.is_continuous_target, bool):
-            raise ValueError("is_continuous_target must be a boolean.")
-        if not isinstance(self.target_bins, int) or self.target_bins < MIN_BINS:
+        if self.target_bins < MIN_BINS:
             raise ValueError("target_bins must be an integer >= 2.")
-        if self.random_state is not None and not isinstance(self.random_state, int):
-            raise ValueError("random_state must be None or an integer.")
 
     def _bin_continuous_target(self, y: pd.Series) -> pd.Series:
         """
