@@ -113,3 +113,28 @@ def test_case_normalizer_normalizes_and_merges_categorical_categories() -> None:
         raise AssertionError(list(out["dupes"].cat.categories))
     if out["dupes"].tolist()[:3] != ["AB", "AB", "CD"] or not pd.isna(out["dupes"].iloc[3]):
         raise AssertionError(out["dupes"].tolist())
+
+
+@pytest.mark.parametrize(
+    ("normalization", "expected"),
+    [
+        ("lower", ["straße mix", "ǆ"]),
+        ("upper", ["STRASSE MIX", "Ǆ"]),
+        ("title", ["Straße Mix", "ǅ"]),
+        ("capitalize", ["Straße mix", "ǅ"]),
+        ("casefold", ["strasse mix", "ǆ"]),
+    ],
+)
+def test_case_normalizer_every_mode_keeps_missing_and_non_strings(normalization, expected) -> None:
+    """Each mode applies its str method; NA stays missing and non-strings are cast to str first."""
+    df = pd.DataFrame({"txt": ["StraßE mIX", "ǅ", None, 5]})
+    out = CaseNormalizer(features_names=["txt"], normalization=normalization).fit(df).transform(df)
+    if out["txt"].tolist()[:2] != expected or not pd.isna(out["txt"][2]) or out["txt"][3] != "5":
+        raise AssertionError(out["txt"].tolist())
+
+
+def test_case_normalizer_fit_rejects_invalid_normalization_from_set_params() -> None:
+    """set_params bypasses __init__ validation, so fit must reject an unsupported mode."""
+    normalizer = CaseNormalizer().set_params(normalization="invalid")
+    with pytest.raises(ValueError, match="normalization must be one of"):
+        normalizer.fit(pd.DataFrame({"txt": ["A"]}))
