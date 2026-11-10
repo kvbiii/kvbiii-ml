@@ -29,7 +29,7 @@ DEFAULT_STACKING_SEED = 17
 class EnsembleModel(BaseEstimator):
     """Ensemble model combining multiple base estimators."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         estimators: list,
         problem_type: str,

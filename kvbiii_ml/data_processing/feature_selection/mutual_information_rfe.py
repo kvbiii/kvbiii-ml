@@ -17,7 +17,7 @@ class MutualInformationRecursiveFeatureElimination:
     estimator is evaluated via cross-validation to track metric changes.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         estimator: Estimator,
         cross_validator: CrossValidationTrainer,

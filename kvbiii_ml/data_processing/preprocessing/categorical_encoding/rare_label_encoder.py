@@ -17,7 +17,7 @@ class RareLabelEncoderWithOriginal(_WithOriginalBase):
 
     _suffix = "PREPROCESS_RARE"
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         tol: float = 0.05,
         n_categories: int = 10,

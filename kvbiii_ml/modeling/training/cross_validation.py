@@ -51,7 +51,7 @@ class CrossValidationTrainer(BaseTrainer):
     cloned and re-fitted on each fold's training split independently.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         problem_type: str,
         metric_name: str | None = None,

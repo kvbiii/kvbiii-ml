@@ -263,7 +263,7 @@ class RandomSearchCV:
     EXPLORE_N_SPLITS: ClassVar[int] = 5
     CACHE_MEMORY_BUDGET_GB: ClassVar[float] = 8.0
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         cross_validator: CrossValidationTrainer,
         n_trials: int = 100,

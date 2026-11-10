@@ -50,7 +50,7 @@ class EnsembleWeightTunerCV:
     MIN_WEIGHT_MASS: ClassVar[float] = 1e-6
     FOLD_STD_PENALTY: ClassVar[float] = 0.5
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         estimators: Sequence[Estimator],
         cross_validator: CrossValidationTrainer,

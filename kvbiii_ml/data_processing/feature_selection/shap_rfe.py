@@ -23,7 +23,7 @@ class ShapRecursiveFeatureElimination:
     features according to a target metric until a stopping schedule is met.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         estimator: Estimator,
         cross_validator: CrossValidationTrainer,
