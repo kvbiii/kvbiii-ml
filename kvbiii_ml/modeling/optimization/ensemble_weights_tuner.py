@@ -50,6 +50,14 @@ class EnsembleWeightTunerCV:
     MIN_WEIGHT_MASS: ClassVar[float] = 1e-6
     FOLD_STD_PENALTY: ClassVar[float] = 0.5
 
+    best_weights: np.ndarray
+    best_score_: float
+    selection_source_: str
+    baseline_name_: str
+    baseline_score_: float
+    n_baselines_: int
+    optimized_score_: float | None
+
     def __init__(  # noqa: PLR0913
         self,
         estimators: Sequence[Estimator],
@@ -86,13 +94,6 @@ class EnsembleWeightTunerCV:
         self.metric_type = cross_validator.metric_type
         self.metric_direction = cross_validator.metric_direction
         self.metric_name = cross_validator.metric_name
-        self.best_weights: np.ndarray = None  # ty: ignore[invalid-assignment]
-        self.best_score_: float | None = None
-        self.selection_source_: str | None = None
-        self.baseline_name_: str | None = None
-        self.baseline_score_: float | None = None
-        self.n_baselines_: int | None = None
-        self.optimized_score_: float | None = None
 
     def tune(self, X: pd.DataFrame, y: pd.Series) -> optuna.study.Study:
         """Run Optuna to find blending weights that beat naive baselines.

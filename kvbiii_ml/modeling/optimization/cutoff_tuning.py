@@ -7,6 +7,7 @@ import optuna
 import pandas as pd
 
 from kvbiii_ml._typing import Direction, Estimator
+from kvbiii_ml._validation import check_fitted
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
 warnings.filterwarnings(
@@ -43,6 +44,14 @@ class CutoffTunerCV:
     BINARY_CUTOFF_BOUNDS: ClassVar[tuple[float, float]] = (0.01, 0.99)
     MULTICLASS_CUTOFF_BOUNDS: ClassVar[tuple[float, float]] = (0.01, 1.0)
 
+    fitted_estimators_: list[Estimator]
+    best_cutoffs: np.ndarray
+    best_score_: float
+    selection_source_: str
+    baseline_score_: float
+    optimized_score_: float | None
+    _is_binary: bool
+
     def __init__(
         self,
         estimator: Estimator,
@@ -74,13 +83,6 @@ class CutoffTunerCV:
         self.metric_fn = cross_validator.metric_fn
         self.metric_direction = cross_validator.metric_direction
         self.metric_name = cross_validator.metric_name
-        self.fitted_estimators_: list[Estimator] = []
-        self.best_cutoffs: np.ndarray = None  # ty: ignore[invalid-assignment]
-        self.best_score_: float | None = None
-        self.selection_source_: str | None = None
-        self.baseline_score_: float | None = None
-        self.optimized_score_: float | None = None
-        self._is_binary: bool = True
 
     def tune(self, X: pd.DataFrame, y: pd.Series) -> optuna.study.Study:
         """Fit CV, cache OOF probabilities, then optimise cutoffs that beat the default rule.
@@ -119,7 +121,7 @@ class CutoffTunerCV:
         return study
 
     def predict(self, X: pd.DataFrame, estimator: Estimator | None = None) -> np.ndarray:
-        """Apply tuned cutoffs to produce class predictions.
+        """Apply the tuned cutoffs to produce class predictions, raising NotFittedError before tune.
 
         When no estimator is provided, uses the first fold's fitted estimator with
         its corresponding fitted pipeline applied to X first. Pass an external
@@ -136,12 +138,8 @@ class CutoffTunerCV:
 
         Returns:
             np.ndarray: Predicted class labels.
-
-        Raises:
-            RuntimeError: If called before tune().
         """
-        if self.best_cutoffs is None:
-            raise RuntimeError("Call tune() before predict().")
+        check_fitted(self, "best_cutoffs", method="tune")
         if estimator is not None:
             y_proba = estimator.predict_proba(X)
         else:
