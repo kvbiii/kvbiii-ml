@@ -528,3 +528,18 @@ def test_targetencodingfeaturegenerator_handles_continuous_target_with_float_fea
 
 if __name__ == "__main__":
     print("Run this file with pytest to execute tests.")
+
+
+@pytest.mark.parametrize(
+    ("option", "value", "message"),
+    [
+        ("n_bins", 1, "n_bins must be an integer >= 2"),
+        ("chunk_size", 0, "chunk_size must be a positive integer"),
+        ("batch_size", 0, "batch_size must be a positive integer"),
+        ("target_bins", 1, "target_bins must be an integer >= 2"),
+    ],
+)
+def test_targetencodingfeaturegenerator_rejects_out_of_range_int_options(option, value, message):
+    """Each integer option below its minimum raises its own ValueError."""
+    with pytest.raises(ValueError, match=message):
+        TargetEncodingFeatureGenerator(features_names=["category"], **{option: value})
