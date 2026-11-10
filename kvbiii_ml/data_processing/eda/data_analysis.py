@@ -39,6 +39,56 @@ PSI_SLIGHT = 0.10
 SKEW_LOW = 0.5
 SKEW_EXTREME = 5.0
 
+_REPORT_TABLE_STYLES: "list[CSSDict]" = [
+    {
+        "selector": "caption",
+        "props": [
+            ("font-family", "Times New Roman"),
+            ("font-size", "1.7em"),
+            ("font-weight", "bold"),
+            ("color", "#1e3a5f"),
+            ("padding", "14px 0 10px 4px"),
+            ("text-align", "left"),
+            ("letter-spacing", "0.04em"),
+        ],
+    },
+    {
+        "selector": "thead th",
+        "props": [
+            ("background-color", "#1e3a5f"),
+            ("color", "white"),
+            ("font-family", "Times New Roman"),
+            ("font-size", "1.3em"),
+            ("font-weight", "bold"),
+            ("padding", "11px 16px"),
+            ("border", "none"),
+            ("text-align", "center"),
+            ("letter-spacing", "0.04em"),
+            ("white-space", "nowrap"),
+        ],
+    },
+    {
+        "selector": "tbody tr:nth-child(even)",
+        "props": [("background-color", "#eef3fb")],
+    },
+    {
+        "selector": "tbody tr:nth-child(odd)",
+        "props": [("background-color", "#ffffff")],
+    },
+    {
+        "selector": "tbody tr:hover",
+        "props": [("background-color", "#d0e4f7")],
+    },
+    {
+        "selector": "",
+        "props": [
+            ("border-collapse", "collapse"),
+            ("box-shadow", "0 4px 14px rgba(0,0,0,0.10)"),
+            ("width", "100%"),
+        ],
+    },
+]
+
 
 class DataAnalyzer:
     """A comprehensive data analysis class for exploratory data analysis (EDA).
@@ -494,56 +544,6 @@ class DataAnalyzer:
 
         df = pd.DataFrame(rows)
 
-        table_styles: list[CSSDict] = [
-            {
-                "selector": "caption",
-                "props": [
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.7em"),
-                    ("font-weight", "bold"),
-                    ("color", "#1e3a5f"),
-                    ("padding", "14px 0 10px 4px"),
-                    ("text-align", "left"),
-                    ("letter-spacing", "0.04em"),
-                ],
-            },
-            {
-                "selector": "thead th",
-                "props": [
-                    ("background-color", "#1e3a5f"),
-                    ("color", "white"),
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.3em"),
-                    ("font-weight", "bold"),
-                    ("padding", "11px 16px"),
-                    ("border", "none"),
-                    ("text-align", "center"),
-                    ("letter-spacing", "0.04em"),
-                    ("white-space", "nowrap"),
-                ],
-            },
-            {
-                "selector": "tbody tr:nth-child(even)",
-                "props": [("background-color", "#eef3fb")],
-            },
-            {
-                "selector": "tbody tr:nth-child(odd)",
-                "props": [("background-color", "#ffffff")],
-            },
-            {
-                "selector": "tbody tr:hover",
-                "props": [("background-color", "#d0e4f7")],
-            },
-            {
-                "selector": "",
-                "props": [
-                    ("border-collapse", "collapse"),
-                    ("box-shadow", "0 4px 14px rgba(0,0,0,0.10)"),
-                    ("width", "100%"),
-                ],
-            },
-        ]
-
         styled = (
             cast(
                 "Styler",
@@ -560,7 +560,7 @@ class DataAnalyzer:
                 ),
             )
             .map(DataAnalyzer._skewness_cell_color, subset=["Skewness"])
-            .set_table_styles(table_styles)
+            .set_table_styles(_REPORT_TABLE_STYLES)
             .set_properties(
                 **{
                     "font-family": "Times New Roman",
@@ -655,6 +655,88 @@ class DataAnalyzer:
             quantile_labels.append(f"Q{bin_idx + 1} [{vals.min():.3f}, {vals.max():.3f}]")
         data_copy["__target_bin__"] = data_copy["__bin_idx__"].map(dict(enumerate(quantile_labels)))
         return data_copy.drop(columns=["__bin_idx__"]), quantile_labels
+
+    @staticmethod
+    def _target_groups(
+        data: pd.DataFrame, target: str, problem_type: str, n_quantiles: int
+    ) -> tuple[pd.DataFrame, list, str]:
+        """Return the frame, ordered classes and grouping column; regression targets are binned."""
+        if problem_type == "regression":
+            data_work, classes = DataAnalyzer._bin_regression_target(data, target, n_quantiles)
+            return data_work, classes, "__target_bin__"
+        return data, sorted(data[target].dropna().unique()), target
+
+    @staticmethod
+    def _eta_squared(groups: list[np.ndarray], values: pd.Series) -> float:
+        """Return the share of the variance of ``values`` explained by the groups (η²)."""
+        grand_mean = float(values.mean())
+        ss_between = sum(len(grp) * (float(np.mean(grp)) - grand_mean) ** 2 for grp in groups)
+        ss_total = float(((values - grand_mean) ** 2).sum())
+        return ss_between / ss_total if ss_total > 0 else 0.0
+
+    @staticmethod
+    def _kruskal_epsilon(groups: list[np.ndarray], n_total: int) -> tuple[float, float]:
+        """Return the Kruskal-Wallis p-value and ε² effect size over the non-empty groups."""
+        valid_groups = [g for g in groups if len(g) >= 1]
+        k = len(valid_groups)
+        h_stat, p_val = kruskal(*valid_groups) if k >= MIN_ITEMS_TO_COMPARE else (np.nan, np.nan)
+        epsilon_sq = max((h_stat - k + 1) / (n_total - k), 0.0) if n_total > k else 0.0
+        return p_val, epsilon_sq
+
+    @staticmethod
+    def _numerical_association_row(
+        clean: pd.DataFrame, col: str, group_col: str, classes: list
+    ) -> dict:
+        """Return one feature's per-class median/IQR, η², ε², KW p-value and median spread."""
+        groups = [clean.loc[clean[group_col] == cls, col].to_numpy(dtype=float) for cls in classes]
+        row: dict = {"Feature": col}
+        for cls, grp in zip(classes, groups, strict=True):
+            row[f"{cls} Median"] = float(np.median(grp)) if len(grp) else np.nan
+            row[f"{cls} IQR"] = (
+                float(np.percentile(grp, 75) - np.percentile(grp, 25)) if len(grp) else np.nan
+            )
+        p_val, epsilon_sq = DataAnalyzer._kruskal_epsilon(groups, len(clean))
+        valid_medians = [row[f"{c} Median"] for c in classes if not np.isnan(row[f"{c} Median"])]
+        valid_iqrs = [row[f"{c} IQR"] for c in classes if not np.isnan(row[f"{c} IQR"])]
+        mean_iqr = float(np.mean(valid_iqrs)) if valid_iqrs else 1.0
+        row.update(
+            {
+                "η²": DataAnalyzer._eta_squared(groups, clean[col]),
+                "ε²": epsilon_sq,
+                "KW p-value": p_val,
+                "Median Range / IQR": (max(valid_medians) - min(valid_medians)) / mean_iqr
+                if mean_iqr > 0 and len(valid_medians) >= MIN_ITEMS_TO_COMPARE
+                else 0.0,
+            }
+        )
+        return row
+
+    @staticmethod
+    def _cross_distribution_frame(
+        contingency: pd.DataFrame, classes: list, n_total: int
+    ) -> pd.DataFrame:
+        """Return per-category counts and row shares per class, by count, with a Total row."""
+        rows = []
+        for cat in contingency.index:
+            total_count = int(contingency.loc[cat].sum())
+            row: dict = {
+                "Category": cat,
+                "Count": total_count,
+                "Count %": total_count / n_total * 100,
+            }
+            for cls in classes:
+                cls_count = int(contingency.loc[cat, cls]) if cls in contingency.columns else 0
+                row[f"{cls} Count"] = cls_count
+                row[f"{cls} Row %"] = cls_count / total_count * 100 if total_count > 0 else 0.0
+            rows.append(row)
+        df = pd.DataFrame(rows).sort_values("Count", ascending=False).reset_index(drop=True)
+
+        total_row: dict = {"Category": "Total", "Count": n_total, "Count %": 100.0}
+        for cls in classes:
+            cls_total = int(contingency[cls].sum()) if cls in contingency.columns else 0
+            total_row[f"{cls} Count"] = cls_total
+            total_row[f"{cls} Row %"] = cls_total / n_total * 100
+        return pd.concat([df, pd.DataFrame([total_row])], ignore_index=True)
 
     @staticmethod
     def describe_feature_by_target(
@@ -769,56 +851,6 @@ class DataAnalyzer:
                 "background-color: #d4e6f1; font-weight: bold; border-top: 2px solid #1e3a5f"
             ] * len(row)
 
-        table_styles: list[CSSDict] = [
-            {
-                "selector": "caption",
-                "props": [
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.7em"),
-                    ("font-weight", "bold"),
-                    ("color", "#1e3a5f"),
-                    ("padding", "14px 0 10px 4px"),
-                    ("text-align", "left"),
-                    ("letter-spacing", "0.04em"),
-                ],
-            },
-            {
-                "selector": "thead th",
-                "props": [
-                    ("background-color", "#1e3a5f"),
-                    ("color", "white"),
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.3em"),
-                    ("font-weight", "bold"),
-                    ("padding", "11px 16px"),
-                    ("border", "none"),
-                    ("text-align", "center"),
-                    ("letter-spacing", "0.04em"),
-                    ("white-space", "nowrap"),
-                ],
-            },
-            {
-                "selector": "tbody tr:nth-child(even)",
-                "props": [("background-color", "#eef3fb")],
-            },
-            {
-                "selector": "tbody tr:nth-child(odd)",
-                "props": [("background-color", "#ffffff")],
-            },
-            {
-                "selector": "tbody tr:hover",
-                "props": [("background-color", "#d0e4f7")],
-            },
-            {
-                "selector": "",
-                "props": [
-                    ("border-collapse", "collapse"),
-                    ("box-shadow", "0 4px 14px rgba(0,0,0,0.10)"),
-                    ("width", "100%"),
-                ],
-            },
-        ]
-
         styled = (
             cast(
                 "Styler",
@@ -839,7 +871,7 @@ class DataAnalyzer:
             )
             .map(DataAnalyzer._skewness_cell_color, subset=["Skewness"])
             .apply(_highlight_overall, axis=1)
-            .set_table_styles(table_styles)
+            .set_table_styles(_REPORT_TABLE_STYLES)
             .set_properties(
                 **{
                     "font-family": "Times New Roman",
@@ -903,64 +935,17 @@ class DataAnalyzer:
         if target not in data.columns:
             raise ValueError(f"Target column '{target}' not found in DataFrame.")
 
-        if problem_type == "regression":
-            data_work, classes = DataAnalyzer._bin_regression_target(data, target, n_quantiles)
-            group_col = "__target_bin__"
-            caption = f"🔗 Numerical Features — Association with {target} (Quantile Bins)"
-        else:
-            data_work = data
-            classes = sorted(data[target].dropna().unique())
-            group_col = target
-            caption = f"🔗 Numerical Features — Association with {target}"
-
-        rows = []
-        for col in numerical_features:
-            clean = data_work[[col, group_col]].dropna()
-            groups = [
-                clean.loc[clean[group_col] == cls, col].to_numpy(dtype=float) for cls in classes
-            ]
-
-            row: dict = {"Feature": col}
-            for cls, grp in zip(classes, groups, strict=True):
-                row[f"{cls} Median"] = float(np.median(grp)) if len(grp) else np.nan
-                row[f"{cls} IQR"] = (
-                    float(np.percentile(grp, 75) - np.percentile(grp, 25)) if len(grp) else np.nan
-                )
-
-            grand_mean = float(clean[col].mean())
-            ss_between = sum(len(grp) * (float(np.mean(grp)) - grand_mean) ** 2 for grp in groups)
-            ss_total = float(((clean[col] - grand_mean) ** 2).sum())
-            eta_sq = ss_between / ss_total if ss_total > 0 else 0.0
-
-            valid_groups = [g for g in groups if len(g) >= 1]
-            if len(valid_groups) >= MIN_ITEMS_TO_COMPARE:
-                h_stat, p_val = kruskal(*valid_groups)
-            else:
-                h_stat, p_val = np.nan, np.nan
-            n_total = len(clean)
-            k = len(valid_groups)
-            epsilon_sq = max((h_stat - k + 1) / (n_total - k), 0.0) if n_total > k else 0.0
-
-            cls_medians = [row[f"{cls} Median"] for cls in classes]
-            cls_iqrs = [row[f"{cls} IQR"] for cls in classes]
-            valid_medians = [m for m in cls_medians if not np.isnan(m)]
-            valid_iqrs = [q for q in cls_iqrs if not np.isnan(q)]
-            mean_iqr = float(np.mean(valid_iqrs)) if valid_iqrs else 1.0
-            median_range_iqr = (
-                (max(valid_medians) - min(valid_medians)) / mean_iqr
-                if mean_iqr > 0 and len(valid_medians) >= MIN_ITEMS_TO_COMPARE
-                else 0.0
+        data_work, classes, group_col = DataAnalyzer._target_groups(
+            data, target, problem_type, n_quantiles
+        )
+        suffix = " (Quantile Bins)" if problem_type == "regression" else ""
+        caption = f"🔗 Numerical Features — Association with {target}{suffix}"
+        rows = [
+            DataAnalyzer._numerical_association_row(
+                data_work[[col, group_col]].dropna(), col, group_col, classes
             )
-
-            row.update(
-                {
-                    "η²": eta_sq,
-                    "ε²": epsilon_sq,
-                    "KW p-value": p_val,
-                    "Median Range / IQR": median_range_iqr,
-                }
-            )
-            rows.append(row)
+            for col in numerical_features
+        ]
 
         df = pd.DataFrame(rows).sort_values("η²", ascending=False).reset_index(drop=True)
 
@@ -974,61 +959,11 @@ class DataAnalyzer:
             format_dict[f"{cls} Median"] = "{:.5f}"
             format_dict[f"{cls} IQR"] = "{:.5f}"
 
-        table_styles: list[CSSDict] = [
-            {
-                "selector": "caption",
-                "props": [
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.7em"),
-                    ("font-weight", "bold"),
-                    ("color", "#1e3a5f"),
-                    ("padding", "14px 0 10px 4px"),
-                    ("text-align", "left"),
-                    ("letter-spacing", "0.04em"),
-                ],
-            },
-            {
-                "selector": "thead th",
-                "props": [
-                    ("background-color", "#1e3a5f"),
-                    ("color", "white"),
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.3em"),
-                    ("font-weight", "bold"),
-                    ("padding", "11px 16px"),
-                    ("border", "none"),
-                    ("text-align", "center"),
-                    ("letter-spacing", "0.04em"),
-                    ("white-space", "nowrap"),
-                ],
-            },
-            {
-                "selector": "tbody tr:nth-child(even)",
-                "props": [("background-color", "#eef3fb")],
-            },
-            {
-                "selector": "tbody tr:nth-child(odd)",
-                "props": [("background-color", "#ffffff")],
-            },
-            {
-                "selector": "tbody tr:hover",
-                "props": [("background-color", "#d0e4f7")],
-            },
-            {
-                "selector": "",
-                "props": [
-                    ("border-collapse", "collapse"),
-                    ("box-shadow", "0 4px 14px rgba(0,0,0,0.10)"),
-                    ("width", "100%"),
-                ],
-            },
-        ]
-
         styled = (
             cast("Styler", df.style.set_caption(caption).format(format_dict))
             .map(DataAnalyzer._effect_size_cell_color, subset=["η²", "ε²"])
             .map(DataAnalyzer._pvalue_cell_color, subset=["KW p-value"])
-            .set_table_styles(table_styles)
+            .set_table_styles(_REPORT_TABLE_STYLES)
             .set_properties(
                 **{
                     "font-family": "Times New Roman",
@@ -1115,6 +1050,15 @@ class DataAnalyzer:
         return v, float(chi2), float(p_val)
 
     @staticmethod
+    def _normalized_entropy(value_counts: pd.Series) -> float:
+        """Return the Shannon entropy of the category shares divided by its maximum, log(n)."""
+        probs = value_counts.to_numpy() / value_counts.to_numpy().sum()
+        nonzero_probs = probs[probs > 0]
+        entropy = -float(np.sum(nonzero_probs * np.log(nonzero_probs)))
+        max_entropy = np.log(len(value_counts)) if len(value_counts) > 1 else 1.0
+        return entropy / max_entropy if max_entropy > 0 else 0.0
+
+    @staticmethod
     def categorical_feature_statistics(
         data: pd.DataFrame,
         categorical_features: list[str],
@@ -1151,11 +1095,7 @@ class DataAnalyzer:
             mode_pct = value_counts.iloc[0] / n_total * 100 if n_unique > 0 else 0.0
             top3_pct = value_counts.head(3).sum() / n_total * 100
 
-            probs = value_counts.to_numpy() / value_counts.to_numpy().sum()
-            nonzero_probs = probs[probs > 0]
-            h = -float(np.sum(nonzero_probs * np.log(nonzero_probs)))
-            h_max = np.log(n_unique) if n_unique > 1 else 1.0
-            entropy_norm = h / h_max if h_max > 0 else 0.0
+            entropy_norm = DataAnalyzer._normalized_entropy(value_counts)
 
             n_rare = int((value_counts / n_total * 100 < rare_threshold).sum())
             pct_missing = data[col].isna().mean() * 100
@@ -1175,56 +1115,6 @@ class DataAnalyzer:
 
         df = pd.DataFrame(rows).sort_values("N Unique").reset_index(drop=True)
 
-        table_styles: list[CSSDict] = [
-            {
-                "selector": "caption",
-                "props": [
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.7em"),
-                    ("font-weight", "bold"),
-                    ("color", "#1e3a5f"),
-                    ("padding", "14px 0 10px 4px"),
-                    ("text-align", "left"),
-                    ("letter-spacing", "0.04em"),
-                ],
-            },
-            {
-                "selector": "thead th",
-                "props": [
-                    ("background-color", "#1e3a5f"),
-                    ("color", "white"),
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.3em"),
-                    ("font-weight", "bold"),
-                    ("padding", "11px 16px"),
-                    ("border", "none"),
-                    ("text-align", "center"),
-                    ("letter-spacing", "0.04em"),
-                    ("white-space", "nowrap"),
-                ],
-            },
-            {
-                "selector": "tbody tr:nth-child(even)",
-                "props": [("background-color", "#eef3fb")],
-            },
-            {
-                "selector": "tbody tr:nth-child(odd)",
-                "props": [("background-color", "#ffffff")],
-            },
-            {
-                "selector": "tbody tr:hover",
-                "props": [("background-color", "#d0e4f7")],
-            },
-            {
-                "selector": "",
-                "props": [
-                    ("border-collapse", "collapse"),
-                    ("box-shadow", "0 4px 14px rgba(0,0,0,0.10)"),
-                    ("width", "100%"),
-                ],
-            },
-        ]
-
         styled = (
             cast(
                 "Styler",
@@ -1241,7 +1131,7 @@ class DataAnalyzer:
             )
             .map(DataAnalyzer._entropy_cell_color, subset=["Entropy (norm.)"])
             .bar(subset=["Missing %"], color="#4a90e2", vmin=0, vmax=100)
-            .set_table_styles(table_styles)
+            .set_table_styles(_REPORT_TABLE_STYLES)
             .set_properties(
                 **{
                     "font-family": "Times New Roman",
@@ -1300,15 +1190,11 @@ class DataAnalyzer:
         if problem_type not in {"classification", "regression"}:
             raise ValueError("problem_type must be either 'classification' or 'regression'.")
 
-        if problem_type == "regression":
-            data_work, classes = DataAnalyzer._bin_regression_target(data, target, n_quantiles)
-            group_col = "__target_bin__"
-            caption = f"🔀 {feature} × {target} — Quantile Cross-Distribution"
-        else:
-            data_work = data
-            classes = sorted(data[target].dropna().unique())
-            group_col = target
-            caption = f"🔀 {feature} × {target} — Cross-Distribution"
+        data_work, classes, group_col = DataAnalyzer._target_groups(
+            data, target, problem_type, n_quantiles
+        )
+        quantile = "Quantile " if problem_type == "regression" else ""
+        caption = f"🔀 {feature} × {target} — {quantile}Cross-Distribution"
 
         clean = data_work[[feature, group_col]].dropna().copy()
         n_total = len(clean)
@@ -1325,28 +1211,9 @@ class DataAnalyzer:
                 )
             )
 
-        contingency = pd.crosstab(clean[feature], clean[group_col])
-
-        rows = []
-        for cat in contingency.index:
-            row: dict = {"Category": cat}
-            total_count = int(contingency.loc[cat].sum())
-            row["Count"] = total_count
-            row["Count %"] = total_count / n_total * 100
-            for cls in classes:
-                cls_count = int(contingency.loc[cat, cls]) if cls in contingency.columns else 0
-                row[f"{cls} Count"] = cls_count
-                row[f"{cls} Row %"] = cls_count / total_count * 100 if total_count > 0 else 0.0
-            rows.append(row)
-
-        df = pd.DataFrame(rows).sort_values("Count", ascending=False).reset_index(drop=True)
-
-        total_row: dict = {"Category": "Total", "Count": n_total, "Count %": 100.0}
-        for cls in classes:
-            cls_total = int(contingency[cls].sum()) if cls in contingency.columns else 0
-            total_row[f"{cls} Count"] = cls_total
-            total_row[f"{cls} Row %"] = cls_total / n_total * 100
-        df = pd.concat([df, pd.DataFrame([total_row])], ignore_index=True)
+        df = DataAnalyzer._cross_distribution_frame(
+            pd.crosstab(clean[feature], clean[group_col]), classes, n_total
+        )
 
         format_dict: StylerFormat = {"Count": "{:,.0f}", "Count %": "{:.2f}%"}
         for cls in classes:
@@ -1363,61 +1230,11 @@ class DataAnalyzer:
 
         row_pct_cols = [f"{cls} Row %" for cls in classes]
 
-        table_styles: list[CSSDict] = [
-            {
-                "selector": "caption",
-                "props": [
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.7em"),
-                    ("font-weight", "bold"),
-                    ("color", "#1e3a5f"),
-                    ("padding", "14px 0 10px 4px"),
-                    ("text-align", "left"),
-                    ("letter-spacing", "0.04em"),
-                ],
-            },
-            {
-                "selector": "thead th",
-                "props": [
-                    ("background-color", "#1e3a5f"),
-                    ("color", "white"),
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.3em"),
-                    ("font-weight", "bold"),
-                    ("padding", "11px 16px"),
-                    ("border", "none"),
-                    ("text-align", "center"),
-                    ("letter-spacing", "0.04em"),
-                    ("white-space", "nowrap"),
-                ],
-            },
-            {
-                "selector": "tbody tr:nth-child(even)",
-                "props": [("background-color", "#eef3fb")],
-            },
-            {
-                "selector": "tbody tr:nth-child(odd)",
-                "props": [("background-color", "#ffffff")],
-            },
-            {
-                "selector": "tbody tr:hover",
-                "props": [("background-color", "#d0e4f7")],
-            },
-            {
-                "selector": "",
-                "props": [
-                    ("border-collapse", "collapse"),
-                    ("box-shadow", "0 4px 14px rgba(0,0,0,0.10)"),
-                    ("width", "100%"),
-                ],
-            },
-        ]
-
         styled = (
             cast("Styler", df.style.set_caption(caption).format(format_dict))
             .background_gradient(subset=row_pct_cols, cmap="Blues", axis=0, vmin=0, vmax=100)
             .apply(_highlight_total, axis=1)
-            .set_table_styles(table_styles)
+            .set_table_styles(_REPORT_TABLE_STYLES)
             .set_properties(
                 **{
                     "font-family": "Times New Roman",
@@ -1508,56 +1325,6 @@ class DataAnalyzer:
 
         df = pd.DataFrame(rows).sort_values("Cramér's V", ascending=False).reset_index(drop=True)
 
-        table_styles: list[CSSDict] = [
-            {
-                "selector": "caption",
-                "props": [
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.7em"),
-                    ("font-weight", "bold"),
-                    ("color", "#1e3a5f"),
-                    ("padding", "14px 0 10px 4px"),
-                    ("text-align", "left"),
-                    ("letter-spacing", "0.04em"),
-                ],
-            },
-            {
-                "selector": "thead th",
-                "props": [
-                    ("background-color", "#1e3a5f"),
-                    ("color", "white"),
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.3em"),
-                    ("font-weight", "bold"),
-                    ("padding", "11px 16px"),
-                    ("border", "none"),
-                    ("text-align", "center"),
-                    ("letter-spacing", "0.04em"),
-                    ("white-space", "nowrap"),
-                ],
-            },
-            {
-                "selector": "tbody tr:nth-child(even)",
-                "props": [("background-color", "#eef3fb")],
-            },
-            {
-                "selector": "tbody tr:nth-child(odd)",
-                "props": [("background-color", "#ffffff")],
-            },
-            {
-                "selector": "tbody tr:hover",
-                "props": [("background-color", "#d0e4f7")],
-            },
-            {
-                "selector": "",
-                "props": [
-                    ("border-collapse", "collapse"),
-                    ("box-shadow", "0 4px 14px rgba(0,0,0,0.10)"),
-                    ("width", "100%"),
-                ],
-            },
-        ]
-
         styled = (
             cast(
                 "Styler",
@@ -1573,7 +1340,7 @@ class DataAnalyzer:
             )
             .map(DataAnalyzer._association_cell_color, subset=["Cramér's V", "Theil's U"])
             .map(DataAnalyzer._pvalue_cell_color, subset=["p-value"])
-            .set_table_styles(table_styles)
+            .set_table_styles(_REPORT_TABLE_STYLES)
             .set_properties(
                 **{
                     "font-family": "Times New Roman",
@@ -1673,6 +1440,38 @@ class DataAnalyzer:
         return float(np.sqrt(max(0.5 * (kl_pm + kl_qm), 0.0)))
 
     @staticmethod
+    def _drift_flag(distance: float, psi: float) -> str:
+        """Derive the drift flag from a distance (KS statistic or JS distance) and PSI."""
+        eff_psi = psi if not np.isnan(psi) else 0.0
+        if distance >= DRIFT_DISTANCE_SIGNIFICANT or eff_psi >= PSI_SIGNIFICANT:
+            return "SIGNIFICANT DRIFT"
+        if distance >= DRIFT_DISTANCE_MODERATE or eff_psi >= PSI_MODERATE:
+            return "MODERATE DRIFT"
+        if distance >= DRIFT_DISTANCE_SLIGHT or eff_psi >= PSI_SLIGHT:
+            return "SLIGHT DRIFT"
+        return "STABLE"
+
+    @staticmethod
+    def _numerical_drift_row(col: str, tr: np.ndarray, te: np.ndarray, n_bins: int) -> dict:
+        """Return one feature's KS, Wasserstein, SMD, PSI, mean shift, std ratio and drift flag."""
+        ks_stat, ks_p = ks_2samp(tr, te)
+        tr_mean, te_mean = float(tr.mean()), float(te.mean())
+        tr_std, te_std = float(tr.std()), float(te.std())
+        pooled_std = float(np.sqrt((tr_std**2 + te_std**2) / 2))
+        psi = DataAnalyzer._compute_numerical_psi(tr, te, n_bins)
+        return {
+            "Feature": col,
+            "KS Stat": ks_stat,
+            "KS p-value": ks_p,
+            "Wasserstein": wasserstein_distance(tr, te),
+            "SMD": (te_mean - tr_mean) / pooled_std if pooled_std > 0 else 0.0,
+            "PSI": psi,
+            "Mean Δ%": (te_mean - tr_mean) / abs(tr_mean) * 100 if tr_mean != 0 else np.nan,
+            "Std Ratio": te_std / tr_std if tr_std > 0 else np.nan,
+            "Flag": DataAnalyzer._drift_flag(ks_stat, psi),
+        }
+
+    @staticmethod
     def numerical_drift_analysis(
         train_data: pd.DataFrame,
         test_data: pd.DataFrame,
@@ -1719,100 +1518,14 @@ class DataAnalyzer:
                 if c in test_data.columns
             ]
 
-        def _flag(ks_stat: float, psi: float) -> str:
-            """Derives drift flag from KS statistic and PSI."""
-            eff_psi = psi if not np.isnan(psi) else 0.0
-            if ks_stat >= DRIFT_DISTANCE_SIGNIFICANT or eff_psi >= PSI_SIGNIFICANT:
-                return "SIGNIFICANT DRIFT"
-            if ks_stat >= DRIFT_DISTANCE_MODERATE or eff_psi >= PSI_MODERATE:
-                return "MODERATE DRIFT"
-            if ks_stat >= DRIFT_DISTANCE_SLIGHT or eff_psi >= PSI_SLIGHT:
-                return "SLIGHT DRIFT"
-            return "STABLE"
-
         rows = []
         for col in numerical_features:
             tr = train_data[col].dropna().to_numpy(dtype=float)
             te = test_data[col].dropna().to_numpy(dtype=float)
-            if len(tr) < MIN_ITEMS_TO_COMPARE or len(te) < MIN_ITEMS_TO_COMPARE:
-                continue
-
-            ks_stat, ks_p = ks_2samp(tr, te)
-            w_dist = wasserstein_distance(tr, te)
-
-            tr_mean, te_mean = float(tr.mean()), float(te.mean())
-            tr_std, te_std = float(tr.std()), float(te.std())
-            pooled_std = float(np.sqrt((tr_std**2 + te_std**2) / 2))
-            smd = (te_mean - tr_mean) / pooled_std if pooled_std > 0 else 0.0
-            mean_delta_pct = (te_mean - tr_mean) / abs(tr_mean) * 100 if tr_mean != 0 else np.nan
-            std_ratio = te_std / tr_std if tr_std > 0 else np.nan
-            psi = DataAnalyzer._compute_numerical_psi(tr, te, n_bins)
-
-            rows.append(
-                {
-                    "Feature": col,
-                    "KS Stat": ks_stat,
-                    "KS p-value": ks_p,
-                    "Wasserstein": w_dist,
-                    "SMD": smd,
-                    "PSI": psi,
-                    "Mean Δ%": mean_delta_pct,
-                    "Std Ratio": std_ratio,
-                    "Flag": _flag(ks_stat, psi),
-                }
-            )
+            if len(tr) >= MIN_ITEMS_TO_COMPARE and len(te) >= MIN_ITEMS_TO_COMPARE:
+                rows.append(DataAnalyzer._numerical_drift_row(col, tr, te, n_bins))
 
         df = pd.DataFrame(rows).sort_values("KS Stat", ascending=False).reset_index(drop=True)
-
-        table_styles: list[CSSDict] = [
-            {
-                "selector": "caption",
-                "props": [
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.7em"),
-                    ("font-weight", "bold"),
-                    ("color", "#1e3a5f"),
-                    ("padding", "14px 0 10px 4px"),
-                    ("text-align", "left"),
-                    ("letter-spacing", "0.04em"),
-                ],
-            },
-            {
-                "selector": "thead th",
-                "props": [
-                    ("background-color", "#1e3a5f"),
-                    ("color", "white"),
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.3em"),
-                    ("font-weight", "bold"),
-                    ("padding", "11px 16px"),
-                    ("border", "none"),
-                    ("text-align", "center"),
-                    ("letter-spacing", "0.04em"),
-                    ("white-space", "nowrap"),
-                ],
-            },
-            {
-                "selector": "tbody tr:nth-child(even)",
-                "props": [("background-color", "#eef3fb")],
-            },
-            {
-                "selector": "tbody tr:nth-child(odd)",
-                "props": [("background-color", "#ffffff")],
-            },
-            {
-                "selector": "tbody tr:hover",
-                "props": [("background-color", "#d0e4f7")],
-            },
-            {
-                "selector": "",
-                "props": [
-                    ("border-collapse", "collapse"),
-                    ("box-shadow", "0 4px 14px rgba(0,0,0,0.10)"),
-                    ("width", "100%"),
-                ],
-            },
-        ]
 
         styled = (
             cast(
@@ -1833,7 +1546,7 @@ class DataAnalyzer:
             .map(DataAnalyzer._drift_score_cell_color, subset=["KS Stat", "PSI"])
             .map(DataAnalyzer._drift_pvalue_cell_color, subset=["KS p-value"])
             .map(DataAnalyzer._drift_flag_cell_color, subset=["Flag"])
-            .set_table_styles(table_styles)
+            .set_table_styles(_REPORT_TABLE_STYLES)
             .set_properties(
                 **{
                     "font-family": "Times New Roman",
@@ -1852,6 +1565,33 @@ class DataAnalyzer:
             )
         )
         return styled
+
+    @staticmethod
+    def _categorical_drift_row(col: str, tr: pd.Series, te: pd.Series) -> dict:
+        """Return one feature's JS distance, PSI, chi-squared p-value, category changes and flag."""
+        train_cats = set(tr.unique())
+        test_cats = set(te.unique())
+        all_cats = sorted(train_cats | test_cats)
+        p_train = np.array([(tr == c).sum() / len(tr) for c in all_cats], dtype=float)
+        p_test = np.array([(te == c).sum() / len(te) for c in all_cats], dtype=float)
+        js_dist = DataAnalyzer._compute_js_distance(p_train, p_test)
+        psi = DataAnalyzer._compute_categorical_psi(tr, te)
+
+        common_cats = sorted(train_cats & test_cats)
+        chi2_p = np.nan
+        if len(common_cats) >= MIN_ITEMS_TO_COMPARE:
+            counts_tr = np.array([(tr == c).sum() for c in common_cats])
+            counts_te = np.array([(te == c).sum() for c in common_cats])
+            _, chi2_p, _, _ = chi2_contingency(np.array([counts_tr, counts_te]))
+        return {
+            "Feature": col,
+            "JS Distance": js_dist,
+            "PSI": psi,
+            "χ² p-value": chi2_p,
+            "New Categories": len(test_cats - train_cats),
+            "Missing Categories": len(train_cats - test_cats),
+            "Flag": DataAnalyzer._drift_flag(js_dist, psi),
+        }
 
     @staticmethod
     def categorical_drift_analysis(
@@ -1899,105 +1639,14 @@ class DataAnalyzer:
                 if c in shared
             ]
 
-        def _flag(js_dist: float, psi: float) -> str:
-            """Derives drift flag from JS distance and PSI."""
-            eff_psi = psi if not np.isnan(psi) else 0.0
-            if js_dist >= DRIFT_DISTANCE_SIGNIFICANT or eff_psi >= PSI_SIGNIFICANT:
-                return "SIGNIFICANT DRIFT"
-            if js_dist >= DRIFT_DISTANCE_MODERATE or eff_psi >= PSI_MODERATE:
-                return "MODERATE DRIFT"
-            if js_dist >= DRIFT_DISTANCE_SLIGHT or eff_psi >= PSI_SLIGHT:
-                return "SLIGHT DRIFT"
-            return "STABLE"
-
         rows = []
         for col in categorical_features:
             tr = train_data[col].dropna()
             te = test_data[col].dropna()
-            if len(tr) == 0 or len(te) == 0:
-                continue
-
-            train_cats = set(tr.unique())
-            test_cats = set(te.unique())
-            all_cats = sorted(train_cats | test_cats)
-            n_tr, n_te = len(tr), len(te)
-
-            p_train = np.array([(tr == c).sum() / n_tr for c in all_cats], dtype=float)
-            p_test = np.array([(te == c).sum() / n_te for c in all_cats], dtype=float)
-            js_dist = DataAnalyzer._compute_js_distance(p_train, p_test)
-            psi = DataAnalyzer._compute_categorical_psi(tr, te)
-
-            common_cats = sorted(train_cats & test_cats)
-            if len(common_cats) >= MIN_ITEMS_TO_COMPARE:
-                counts_tr = np.array([(tr == c).sum() for c in common_cats])
-                counts_te = np.array([(te == c).sum() for c in common_cats])
-                _, chi2_p, _, _ = chi2_contingency(np.array([counts_tr, counts_te]))
-            else:
-                chi2_p = np.nan
-
-            rows.append(
-                {
-                    "Feature": col,
-                    "JS Distance": js_dist,
-                    "PSI": psi,
-                    "χ² p-value": chi2_p,
-                    "New Categories": len(test_cats - train_cats),
-                    "Missing Categories": len(train_cats - test_cats),
-                    "Flag": _flag(js_dist, psi),
-                }
-            )
+            if len(tr) > 0 and len(te) > 0:
+                rows.append(DataAnalyzer._categorical_drift_row(col, tr, te))
 
         df = pd.DataFrame(rows).sort_values("JS Distance", ascending=False).reset_index(drop=True)
-
-        table_styles: list[CSSDict] = [
-            {
-                "selector": "caption",
-                "props": [
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.7em"),
-                    ("font-weight", "bold"),
-                    ("color", "#1e3a5f"),
-                    ("padding", "14px 0 10px 4px"),
-                    ("text-align", "left"),
-                    ("letter-spacing", "0.04em"),
-                ],
-            },
-            {
-                "selector": "thead th",
-                "props": [
-                    ("background-color", "#1e3a5f"),
-                    ("color", "white"),
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.3em"),
-                    ("font-weight", "bold"),
-                    ("padding", "11px 16px"),
-                    ("border", "none"),
-                    ("text-align", "center"),
-                    ("letter-spacing", "0.04em"),
-                    ("white-space", "nowrap"),
-                ],
-            },
-            {
-                "selector": "tbody tr:nth-child(even)",
-                "props": [("background-color", "#eef3fb")],
-            },
-            {
-                "selector": "tbody tr:nth-child(odd)",
-                "props": [("background-color", "#ffffff")],
-            },
-            {
-                "selector": "tbody tr:hover",
-                "props": [("background-color", "#d0e4f7")],
-            },
-            {
-                "selector": "",
-                "props": [
-                    ("border-collapse", "collapse"),
-                    ("box-shadow", "0 4px 14px rgba(0,0,0,0.10)"),
-                    ("width", "100%"),
-                ],
-            },
-        ]
 
         styled = (
             cast(
@@ -2016,7 +1665,7 @@ class DataAnalyzer:
             .map(DataAnalyzer._drift_score_cell_color, subset=["JS Distance", "PSI"])
             .map(DataAnalyzer._drift_pvalue_cell_color, subset=["χ² p-value"])
             .map(DataAnalyzer._drift_flag_cell_color, subset=["Flag"])
-            .set_table_styles(table_styles)
+            .set_table_styles(_REPORT_TABLE_STYLES)
             .set_properties(
                 **{
                     "font-family": "Times New Roman",
