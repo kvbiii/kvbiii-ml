@@ -1050,6 +1050,15 @@ class DataAnalyzer:
         return v, float(chi2), float(p_val)
 
     @staticmethod
+    def _normalized_entropy(value_counts: pd.Series) -> float:
+        """Return the Shannon entropy of the category shares divided by its maximum, log(n)."""
+        probs = value_counts.to_numpy() / value_counts.to_numpy().sum()
+        nonzero_probs = probs[probs > 0]
+        entropy = -float(np.sum(nonzero_probs * np.log(nonzero_probs)))
+        max_entropy = np.log(len(value_counts)) if len(value_counts) > 1 else 1.0
+        return entropy / max_entropy if max_entropy > 0 else 0.0
+
+    @staticmethod
     def categorical_feature_statistics(
         data: pd.DataFrame,
         categorical_features: list[str],
@@ -1086,11 +1095,7 @@ class DataAnalyzer:
             mode_pct = value_counts.iloc[0] / n_total * 100 if n_unique > 0 else 0.0
             top3_pct = value_counts.head(3).sum() / n_total * 100
 
-            probs = value_counts.to_numpy() / value_counts.to_numpy().sum()
-            nonzero_probs = probs[probs > 0]
-            h = -float(np.sum(nonzero_probs * np.log(nonzero_probs)))
-            h_max = np.log(n_unique) if n_unique > 1 else 1.0
-            entropy_norm = h / h_max if h_max > 0 else 0.0
+            entropy_norm = DataAnalyzer._normalized_entropy(value_counts)
 
             n_rare = int((value_counts / n_total * 100 < rare_threshold).sum())
             pct_missing = data[col].isna().mean() * 100
@@ -1435,6 +1440,38 @@ class DataAnalyzer:
         return float(np.sqrt(max(0.5 * (kl_pm + kl_qm), 0.0)))
 
     @staticmethod
+    def _drift_flag(distance: float, psi: float) -> str:
+        """Derive the drift flag from a distance (KS statistic or JS distance) and PSI."""
+        eff_psi = psi if not np.isnan(psi) else 0.0
+        if distance >= DRIFT_DISTANCE_SIGNIFICANT or eff_psi >= PSI_SIGNIFICANT:
+            return "SIGNIFICANT DRIFT"
+        if distance >= DRIFT_DISTANCE_MODERATE or eff_psi >= PSI_MODERATE:
+            return "MODERATE DRIFT"
+        if distance >= DRIFT_DISTANCE_SLIGHT or eff_psi >= PSI_SLIGHT:
+            return "SLIGHT DRIFT"
+        return "STABLE"
+
+    @staticmethod
+    def _numerical_drift_row(col: str, tr: np.ndarray, te: np.ndarray, n_bins: int) -> dict:
+        """Return one feature's KS, Wasserstein, SMD, PSI, mean shift, std ratio and drift flag."""
+        ks_stat, ks_p = ks_2samp(tr, te)
+        tr_mean, te_mean = float(tr.mean()), float(te.mean())
+        tr_std, te_std = float(tr.std()), float(te.std())
+        pooled_std = float(np.sqrt((tr_std**2 + te_std**2) / 2))
+        psi = DataAnalyzer._compute_numerical_psi(tr, te, n_bins)
+        return {
+            "Feature": col,
+            "KS Stat": ks_stat,
+            "KS p-value": ks_p,
+            "Wasserstein": wasserstein_distance(tr, te),
+            "SMD": (te_mean - tr_mean) / pooled_std if pooled_std > 0 else 0.0,
+            "PSI": psi,
+            "Mean Δ%": (te_mean - tr_mean) / abs(tr_mean) * 100 if tr_mean != 0 else np.nan,
+            "Std Ratio": te_std / tr_std if tr_std > 0 else np.nan,
+            "Flag": DataAnalyzer._drift_flag(ks_stat, psi),
+        }
+
+    @staticmethod
     def numerical_drift_analysis(
         train_data: pd.DataFrame,
         test_data: pd.DataFrame,
@@ -1481,48 +1518,12 @@ class DataAnalyzer:
                 if c in test_data.columns
             ]
 
-        def _flag(ks_stat: float, psi: float) -> str:
-            """Derives drift flag from KS statistic and PSI."""
-            eff_psi = psi if not np.isnan(psi) else 0.0
-            if ks_stat >= DRIFT_DISTANCE_SIGNIFICANT or eff_psi >= PSI_SIGNIFICANT:
-                return "SIGNIFICANT DRIFT"
-            if ks_stat >= DRIFT_DISTANCE_MODERATE or eff_psi >= PSI_MODERATE:
-                return "MODERATE DRIFT"
-            if ks_stat >= DRIFT_DISTANCE_SLIGHT or eff_psi >= PSI_SLIGHT:
-                return "SLIGHT DRIFT"
-            return "STABLE"
-
         rows = []
         for col in numerical_features:
             tr = train_data[col].dropna().to_numpy(dtype=float)
             te = test_data[col].dropna().to_numpy(dtype=float)
-            if len(tr) < MIN_ITEMS_TO_COMPARE or len(te) < MIN_ITEMS_TO_COMPARE:
-                continue
-
-            ks_stat, ks_p = ks_2samp(tr, te)
-            w_dist = wasserstein_distance(tr, te)
-
-            tr_mean, te_mean = float(tr.mean()), float(te.mean())
-            tr_std, te_std = float(tr.std()), float(te.std())
-            pooled_std = float(np.sqrt((tr_std**2 + te_std**2) / 2))
-            smd = (te_mean - tr_mean) / pooled_std if pooled_std > 0 else 0.0
-            mean_delta_pct = (te_mean - tr_mean) / abs(tr_mean) * 100 if tr_mean != 0 else np.nan
-            std_ratio = te_std / tr_std if tr_std > 0 else np.nan
-            psi = DataAnalyzer._compute_numerical_psi(tr, te, n_bins)
-
-            rows.append(
-                {
-                    "Feature": col,
-                    "KS Stat": ks_stat,
-                    "KS p-value": ks_p,
-                    "Wasserstein": w_dist,
-                    "SMD": smd,
-                    "PSI": psi,
-                    "Mean Δ%": mean_delta_pct,
-                    "Std Ratio": std_ratio,
-                    "Flag": _flag(ks_stat, psi),
-                }
-            )
+            if len(tr) >= MIN_ITEMS_TO_COMPARE and len(te) >= MIN_ITEMS_TO_COMPARE:
+                rows.append(DataAnalyzer._numerical_drift_row(col, tr, te, n_bins))
 
         df = pd.DataFrame(rows).sort_values("KS Stat", ascending=False).reset_index(drop=True)
 
@@ -1564,6 +1565,33 @@ class DataAnalyzer:
             )
         )
         return styled
+
+    @staticmethod
+    def _categorical_drift_row(col: str, tr: pd.Series, te: pd.Series) -> dict:
+        """Return one feature's JS distance, PSI, chi-squared p-value, category changes and flag."""
+        train_cats = set(tr.unique())
+        test_cats = set(te.unique())
+        all_cats = sorted(train_cats | test_cats)
+        p_train = np.array([(tr == c).sum() / len(tr) for c in all_cats], dtype=float)
+        p_test = np.array([(te == c).sum() / len(te) for c in all_cats], dtype=float)
+        js_dist = DataAnalyzer._compute_js_distance(p_train, p_test)
+        psi = DataAnalyzer._compute_categorical_psi(tr, te)
+
+        common_cats = sorted(train_cats & test_cats)
+        chi2_p = np.nan
+        if len(common_cats) >= MIN_ITEMS_TO_COMPARE:
+            counts_tr = np.array([(tr == c).sum() for c in common_cats])
+            counts_te = np.array([(te == c).sum() for c in common_cats])
+            _, chi2_p, _, _ = chi2_contingency(np.array([counts_tr, counts_te]))
+        return {
+            "Feature": col,
+            "JS Distance": js_dist,
+            "PSI": psi,
+            "χ² p-value": chi2_p,
+            "New Categories": len(test_cats - train_cats),
+            "Missing Categories": len(train_cats - test_cats),
+            "Flag": DataAnalyzer._drift_flag(js_dist, psi),
+        }
 
     @staticmethod
     def categorical_drift_analysis(
@@ -1611,53 +1639,12 @@ class DataAnalyzer:
                 if c in shared
             ]
 
-        def _flag(js_dist: float, psi: float) -> str:
-            """Derives drift flag from JS distance and PSI."""
-            eff_psi = psi if not np.isnan(psi) else 0.0
-            if js_dist >= DRIFT_DISTANCE_SIGNIFICANT or eff_psi >= PSI_SIGNIFICANT:
-                return "SIGNIFICANT DRIFT"
-            if js_dist >= DRIFT_DISTANCE_MODERATE or eff_psi >= PSI_MODERATE:
-                return "MODERATE DRIFT"
-            if js_dist >= DRIFT_DISTANCE_SLIGHT or eff_psi >= PSI_SLIGHT:
-                return "SLIGHT DRIFT"
-            return "STABLE"
-
         rows = []
         for col in categorical_features:
             tr = train_data[col].dropna()
             te = test_data[col].dropna()
-            if len(tr) == 0 or len(te) == 0:
-                continue
-
-            train_cats = set(tr.unique())
-            test_cats = set(te.unique())
-            all_cats = sorted(train_cats | test_cats)
-            n_tr, n_te = len(tr), len(te)
-
-            p_train = np.array([(tr == c).sum() / n_tr for c in all_cats], dtype=float)
-            p_test = np.array([(te == c).sum() / n_te for c in all_cats], dtype=float)
-            js_dist = DataAnalyzer._compute_js_distance(p_train, p_test)
-            psi = DataAnalyzer._compute_categorical_psi(tr, te)
-
-            common_cats = sorted(train_cats & test_cats)
-            if len(common_cats) >= MIN_ITEMS_TO_COMPARE:
-                counts_tr = np.array([(tr == c).sum() for c in common_cats])
-                counts_te = np.array([(te == c).sum() for c in common_cats])
-                _, chi2_p, _, _ = chi2_contingency(np.array([counts_tr, counts_te]))
-            else:
-                chi2_p = np.nan
-
-            rows.append(
-                {
-                    "Feature": col,
-                    "JS Distance": js_dist,
-                    "PSI": psi,
-                    "χ² p-value": chi2_p,
-                    "New Categories": len(test_cats - train_cats),
-                    "Missing Categories": len(train_cats - test_cats),
-                    "Flag": _flag(js_dist, psi),
-                }
-            )
+            if len(tr) > 0 and len(te) > 0:
+                rows.append(DataAnalyzer._categorical_drift_row(col, tr, te))
 
         df = pd.DataFrame(rows).sort_values("JS Distance", ascending=False).reset_index(drop=True)
 
