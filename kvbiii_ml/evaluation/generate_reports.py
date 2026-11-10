@@ -1,3 +1,4 @@
+from dataclasses import dataclass, replace
 from typing import cast
 
 import numpy as np
@@ -24,6 +25,15 @@ from sklearn.metrics import (
 from kvbiii_ml._typing import StylerFormat
 
 BINARY_N_CLASSES = 2
+
+
+@dataclass(frozen=True)
+class _Split:
+    """True labels, predicted labels and optional probabilities of one data split."""
+
+    true: pd.Series | np.ndarray
+    pred: pd.Series | np.ndarray
+    proba: np.ndarray | None
 
 
 def _apply_fancy_styling(
@@ -269,26 +279,13 @@ def _apply_cutoff(
     return np.argmax(y_proba / cutoff_array, axis=1)
 
 
-def _build_overall_table(
-    y_train_true: pd.Series | np.ndarray,
-    y_train_pred: pd.Series | np.ndarray,
-    y_test_true: pd.Series | np.ndarray,
-    y_test_pred: pd.Series | np.ndarray,
-    y_train_proba: np.ndarray | None,
-    y_test_proba: np.ndarray | None,
-    average: str,
-    caption: str,
-) -> Styler:
+def _build_overall_table(train: _Split, test: _Split, average: str, caption: str) -> Styler:
     """
     Build and style the overall classification metrics table.
 
     Args:
-        y_train_true (pd.Series | np.ndarray): True training labels.
-        y_train_pred (pd.Series | np.ndarray): Predicted training labels.
-        y_test_true (pd.Series | np.ndarray): True test labels.
-        y_test_pred (pd.Series | np.ndarray): Predicted test labels.
-        y_train_proba (np.ndarray | None): Training probabilities for ROC-AUC/Log Loss.
-        y_test_proba (np.ndarray | None): Test probabilities for ROC-AUC/Log Loss.
+        train (_Split): Training labels, predictions and probabilities for ROC-AUC/Log Loss.
+        test (_Split): Test labels, predictions and probabilities for ROC-AUC/Log Loss.
         average (str): Averaging strategy for multi-class metrics.
         caption (str): Table caption.
 
@@ -304,22 +301,13 @@ def _build_overall_table(
         ("F1 (macro)", f1_score, {"average": "macro", "zero_division": 0}),
     ]
 
+    splits = (train, test)
     metrics = {
-        name: [
-            func(y_train_true, y_train_pred, **kwargs),
-            func(y_test_true, y_test_pred, **kwargs),
-        ]
+        name: [func(split.true, split.pred, **kwargs) for split in splits]
         for name, func, kwargs in metric_configs
     }
-
-    metrics["ROC-AUC"] = [
-        _safe_roc_auc(y_train_true, y_train_proba, average),
-        _safe_roc_auc(y_test_true, y_test_proba, average),
-    ]
-    metrics["Log Loss"] = [
-        _safe_log_loss(y_train_true, y_train_proba),
-        _safe_log_loss(y_test_true, y_test_proba),
-    ]
+    metrics["ROC-AUC"] = [_safe_roc_auc(split.true, split.proba, average) for split in splits]
+    metrics["Log Loss"] = [_safe_log_loss(split.true, split.proba) for split in splits]
 
     df = pd.DataFrame(metrics, index=["Train", "Test"])
     styled_df = cast("Styler", df.style.format(dict.fromkeys(df.columns, "{:.4f}")))
@@ -328,35 +316,22 @@ def _build_overall_table(
 
 
 def _build_per_class_table(
-    y_train_true: pd.Series | np.ndarray,
-    y_train_pred: pd.Series | np.ndarray,
-    y_test_true: pd.Series | np.ndarray,
-    y_test_pred: pd.Series | np.ndarray,
-    y_train_proba: np.ndarray | None,
-    y_test_proba: np.ndarray | None,
-    classes: np.ndarray,
-    caption: str,
+    train: _Split, test: _Split, classes: np.ndarray, caption: str
 ) -> Styler:
     """
     Build and style the per-class classification metrics table.
 
     Args:
-        y_train_true (pd.Series | np.ndarray): True training labels.
-        y_train_pred (pd.Series | np.ndarray): Predicted training labels.
-        y_test_true (pd.Series | np.ndarray): True test labels.
-        y_test_pred (pd.Series | np.ndarray): Predicted test labels.
-        y_train_proba (np.ndarray | None): Training probabilities for per-class ROC-AUC.
-        y_test_proba (np.ndarray | None): Test probabilities for per-class ROC-AUC.
+        train (_Split): Training labels, predictions and probabilities for per-class ROC-AUC.
+        test (_Split): Test labels, predictions and probabilities for per-class ROC-AUC.
         classes (np.ndarray): Unique class labels.
         caption (str): Table caption.
 
     Returns:
         Styler: Styled per-class metrics table.
     """
-    train_per_class = _build_per_class_split(
-        y_train_true, y_train_pred, y_train_proba, classes, "Train"
-    )
-    test_per_class = _build_per_class_split(y_test_true, y_test_pred, y_test_proba, classes, "Test")
+    train_per_class = _build_per_class_split(train.true, train.pred, train.proba, classes, "Train")
+    test_per_class = _build_per_class_split(test.true, test.pred, test.proba, classes, "Test")
 
     per_class_df = pd.concat([train_per_class, test_per_class], axis=1)
     per_class_df.index = [f"Class {c}" for c in classes]
@@ -411,56 +386,32 @@ def classification_results(
 
     classes = np.unique(np.concatenate([np.asarray(y_train_true), np.asarray(y_test_true)]))
 
+    train = _Split(y_train_true, y_train_pred, y_train_proba)
+    test = _Split(y_test_true, y_test_pred, y_test_proba)
     overall_default = _build_overall_table(
-        y_train_true,
-        y_train_pred,
-        y_test_true,
-        y_test_pred,
-        y_train_proba,
-        y_test_proba,
-        average,
-        "🎯 Classification Performance Metrics - Default Cutoff (0.5)",
+        train, test, average, "🎯 Classification Performance Metrics - Default Cutoff (0.5)"
     )
     per_class_default = _build_per_class_table(
-        y_train_true,
-        y_train_pred,
-        y_test_true,
-        y_test_pred,
-        y_train_proba,
-        y_test_proba,
-        classes,
-        "📋 Per-Class Performance Metrics - Default Cutoff (0.5)",
+        train, test, classes, "📋 Per-Class Performance Metrics - Default Cutoff (0.5)"
     )
 
     if cutoffs is None:
         return overall_default, per_class_default
 
-    y_train_pred_cutoff = pd.Series(_apply_cutoff(cast("np.ndarray", y_train_proba), cutoffs)).map(
-        id2label
+    train_cutoff = replace(
+        train,
+        pred=pd.Series(_apply_cutoff(cast("np.ndarray", y_train_proba), cutoffs)).map(id2label),
     )
-    y_test_pred_cutoff = pd.Series(_apply_cutoff(cast("np.ndarray", y_test_proba), cutoffs)).map(
-        id2label
+    test_cutoff = replace(
+        test, pred=pd.Series(_apply_cutoff(cast("np.ndarray", y_test_proba), cutoffs)).map(id2label)
     )
-    cutoff_label = str(cutoffs)
-
     overall_cutoff = _build_overall_table(
-        y_train_true,
-        y_train_pred_cutoff,
-        y_test_true,
-        y_test_pred_cutoff,
-        y_train_proba,
-        y_test_proba,
+        train_cutoff,
+        test_cutoff,
         average,
-        f"🎯 Classification Performance Metrics - Cutoff: {cutoff_label}",
+        f"🎯 Classification Performance Metrics - Cutoff: {cutoffs}",
     )
     per_class_cutoff = _build_per_class_table(
-        y_train_true,
-        y_train_pred_cutoff,
-        y_test_true,
-        y_test_pred_cutoff,
-        y_train_proba,
-        y_test_proba,
-        classes,
-        f"📋 Per-Class Performance Metrics - Cutoff: {cutoff_label}",
+        train_cutoff, test_cutoff, classes, f"📋 Per-Class Performance Metrics - Cutoff: {cutoffs}"
     )
     return overall_default, overall_cutoff, per_class_default, per_class_cutoff
