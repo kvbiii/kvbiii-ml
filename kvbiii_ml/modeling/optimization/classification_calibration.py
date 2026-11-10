@@ -965,18 +965,11 @@ if __name__ == "__main__":
             verbose=False,
         )
 
-    def _run_demo() -> None:
-        """Run the ClassificationCalibrator demo scenarios."""
+    def _scenario_1(x_bin: pd.DataFrame, y_bin: pd.Series, lgbm_bin: Estimator) -> None:
+        """Calibrate a LightGBM model behind a preprocessing pipeline."""
         print("=" * 75)
         print("Scenario 1: Binary + LightGBM + preprocessing pipeline")
         print("=" * 75)
-        x_bin, y_bin = _make_clf_data(n_classes=2)
-        lgbm_bin = LGBMClassifier(
-            n_estimators=200,
-            early_stopping_rounds=ES,
-            verbose=-1,
-            random_state=RANDOM_STATE,
-        )
         cv_1 = _build_cv("Log Loss", _build_pipeline())
         cal_1 = ClassificationCalibrator(estimator=lgbm_bin, cross_validator=cv_1)
         cal_1.fit(x_bin, y_bin)
@@ -987,6 +980,8 @@ if __name__ == "__main__":
         print(f"  Calibrated CV valid: {np.mean(valid_s):.4f} ± {np.std(valid_s):.4f}")
         cal_1.plot_calibration_curves()
 
+    def _scenario_2(x_bin: pd.DataFrame, y_bin: pd.Series, lgbm_bin: Estimator) -> None:
+        """Calibrate LightGBM and CatBoost (categorical dtype columns)."""
         print("\n" + "=" * 75)
         print("Scenario 2: Binary + CatBoost with categorical dtype columns")
         print("=" * 75)
@@ -1013,6 +1008,8 @@ if __name__ == "__main__":
         except ImportError:
             print("  CatBoost not installed; skipping CatBoost sub-scenario.")
 
+    def _scenario_3(x_bin: pd.DataFrame, y_bin: pd.Series) -> None:
+        """Calibrate an EnsembleModel as a black box."""
         print("\n" + "=" * 75)
         print("Scenario 3: EnsembleModel - black-box calibration")
         print("=" * 75)
@@ -1071,6 +1068,8 @@ if __name__ == "__main__":
         print(f"  Calibrated CV valid: {np.mean(valid_s_3):.4f} ± {np.std(valid_s_3):.4f}")
         cal_3.plot_calibration_curves()
 
+    def _scenario_4() -> None:
+        """Calibrate a multiclass LightGBM with an eval_set for the final refit."""
         print("\n" + "=" * 75)
         print("Scenario 4: Multiclass + LightGBM + eval_set for early stopping on final refit")
         print("=" * 75)
@@ -1094,5 +1093,19 @@ if __name__ == "__main__":
         _, valid_s_mc, _ = cv_4.fit(cast("Estimator", cal_4.best_estimator_), x_mc, y_mc)
         print(f"  Calibrated CV valid: {np.mean(valid_s_mc):.4f} ± {np.std(valid_s_mc):.4f}")
         cal_4.plot_calibration_curves()
+
+    def _run_demo() -> None:
+        """Run the ClassificationCalibrator demo scenarios."""
+        x_bin, y_bin = _make_clf_data(n_classes=2)
+        lgbm_bin = LGBMClassifier(
+            n_estimators=200,
+            early_stopping_rounds=ES,
+            verbose=-1,
+            random_state=RANDOM_STATE,
+        )
+        _scenario_1(x_bin, y_bin, lgbm_bin)
+        _scenario_2(x_bin, y_bin, lgbm_bin)
+        _scenario_3(x_bin, y_bin)
+        _scenario_4()
 
     _run_demo()

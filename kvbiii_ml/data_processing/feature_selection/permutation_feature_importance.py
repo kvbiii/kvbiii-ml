@@ -756,6 +756,8 @@ if __name__ == "__main__":
     CAT_FEATURES = ["cat_1", "cat_2"]
     NUM_FEATURES = [f"num_{i}" for i in range(N_FEATURES)]
     ES = 30
+    CLF_METRIC = ("Balanced Accuracy", "classification")
+    REG_METRIC = ("RMSE", "regression")
 
     def _make_clf_data(n_classes: int) -> tuple[pd.DataFrame, pd.Series]:
         """Generate classification dataset with numerical and categorical features."""
@@ -812,13 +814,16 @@ if __name__ == "__main__":
             ]
         )
 
+    def _stringify_cats(data: tuple[pd.DataFrame, pd.Series]) -> tuple[pd.DataFrame, pd.Series]:
+        """Cast the categorical columns of the features to plain strings."""
+        X, y = data
+        return X.assign(**{c: X[c].astype(str) for c in CAT_FEATURES}), y
+
     def _run_rfe(
         label: str,
         estimator: Estimator,
-        X: pd.DataFrame,
-        y: pd.Series,
-        metric_name: str,
-        problem_type: str,
+        data: tuple[pd.DataFrame, pd.Series],
+        metric: tuple[str, str],
         pipeline: Pipeline | None,
     ) -> None:
         """Run RFE with the given pipeline and print a summary line.
@@ -826,6 +831,8 @@ if __name__ == "__main__":
         Raises:
             AssertionError: If no features are selected or a pipeline adds no derived features.
         """
+        X, y = data
+        metric_name, problem_type = metric
         cv_cls = StratifiedKFold if problem_type == "classification" else KFold
         trainer = CrossValidationTrainer(
             problem_type=problem_type,
@@ -872,13 +879,9 @@ if __name__ == "__main__":
             random_state=RANDOM_STATE,
         )
 
-        x_bin, y_bin = _make_clf_data(n_classes=2)
-        x_multi, y_multi = _make_clf_data(n_classes=3)
-        x_reg, y_reg = _make_reg_data()
-
-        x_bin_cat = x_bin.assign(**{c: x_bin[c].astype(str) for c in CAT_FEATURES})
-        x_multi_cat = x_multi.assign(**{c: x_multi[c].astype(str) for c in CAT_FEATURES})
-        x_reg_cat = x_reg.assign(**{c: x_reg[c].astype(str) for c in CAT_FEATURES})
+        bin_data = _stringify_cats(_make_clf_data(n_classes=2))
+        multi_data = _stringify_cats(_make_clf_data(n_classes=3))
+        reg_data = _stringify_cats(_make_reg_data())
 
         clf_pipeline = _build_pipeline(CAT_FEATURES, NUM_FEATURES)
         reg_pipeline = _build_pipeline(CAT_FEATURES, NUM_FEATURES)
@@ -890,28 +893,22 @@ if __name__ == "__main__":
         _run_rfe(
             "LightGBM | binary classification",
             lgbm_clf,
-            x_bin_cat,
-            y_bin,
-            "Balanced Accuracy",
-            "classification",
+            bin_data,
+            CLF_METRIC,
             clf_pipeline,
         )
         _run_rfe(
             "LightGBM | regression",
             lgbm_reg,
-            x_reg_cat,
-            y_reg,
-            "RMSE",
-            "regression",
+            reg_data,
+            REG_METRIC,
             reg_pipeline,
         )
         _run_rfe(
             "LightGBM | regression (no pipeline)",
             lgbm_reg,
-            x_reg_cat[NUM_FEATURES],
-            y_reg,
-            "RMSE",
-            "regression",
+            (reg_data[0][NUM_FEATURES], reg_data[1]),
+            REG_METRIC,
             None,
         )
 
@@ -930,28 +927,22 @@ if __name__ == "__main__":
         _run_rfe(
             "XGBoost | binary classification",
             xgb_clf,
-            x_bin_cat,
-            y_bin,
-            "Balanced Accuracy",
-            "classification",
+            bin_data,
+            CLF_METRIC,
             clf_pipeline,
         )
         _run_rfe(
             "XGBoost | multiclass classification",
             xgb_clf,
-            x_multi_cat,
-            y_multi,
-            "Balanced Accuracy",
-            "classification",
+            multi_data,
+            CLF_METRIC,
             clf_pipeline,
         )
         _run_rfe(
             "XGBoost | regression",
             xgb_reg,
-            x_reg_cat,
-            y_reg,
-            "RMSE",
-            "regression",
+            reg_data,
+            REG_METRIC,
             reg_pipeline,
         )
 
@@ -983,28 +974,22 @@ if __name__ == "__main__":
         _run_rfe(
             "CatBoost | binary classification",
             cat_clf,
-            x_bin_cat,
-            y_bin,
-            "Balanced Accuracy",
-            "classification",
+            bin_data,
+            CLF_METRIC,
             clf_pipeline,
         )
         _run_rfe(
             "CatBoost | multiclass classification",
             cat_multi,
-            x_multi_cat,
-            y_multi,
-            "Balanced Accuracy",
-            "classification",
+            multi_data,
+            CLF_METRIC,
             clf_pipeline,
         )
         _run_rfe(
             "CatBoost | regression",
             cat_reg,  # ty: ignore[invalid-argument-type]
-            x_reg_cat,
-            y_reg,
-            "RMSE",
-            "regression",
+            reg_data,
+            REG_METRIC,
             reg_pipeline,
         )
 
@@ -1014,10 +999,8 @@ if __name__ == "__main__":
         _run_rfe(
             "Ensemble (LGBM + XGB + CatBoost) | binary classification",
             ensemble_clf,
-            x_bin_cat,
-            y_bin,
-            "Balanced Accuracy",
-            "classification",
+            bin_data,
+            CLF_METRIC,
             clf_pipeline,
         )
         ensemble_reg = EnsembleModel(
@@ -1026,10 +1009,8 @@ if __name__ == "__main__":
         _run_rfe(
             "Ensemble (LGBM + XGB + CatBoost) | regression",
             ensemble_reg,
-            x_reg_cat,
-            y_reg,
-            "RMSE",
-            "regression",
+            reg_data,
+            REG_METRIC,
             reg_pipeline,
         )
         ensemble_multi = EnsembleModel(
@@ -1038,10 +1019,8 @@ if __name__ == "__main__":
         _run_rfe(
             "Ensemble (LGBM + XGB + CatBoost MultiClass) | multiclass classification",
             ensemble_multi,
-            x_multi_cat,
-            y_multi,
-            "Balanced Accuracy",
-            "classification",
+            multi_data,
+            CLF_METRIC,
             clf_pipeline,
         )
 
