@@ -3,6 +3,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.exceptions import NotFittedError
 
 from kvbiii_ml.data_processing.feature_engineering.cross_encoding import (
     CrossFeatureGenerator,
@@ -33,7 +34,7 @@ def test_crossfeaturegenerator_init_default_parameters():
         - Empty features_names list is the default
         - Default degree is 2
         - Default separator is "_"
-        - feature_combinations_, encoding_maps_, and numerical_combos_ start empty
+        - feature_combinations_, encoding_maps_ and numerical_combos_ do not exist before fit
     """
     generator = CrossFeatureGenerator()
     if generator.features_names != []:
@@ -42,11 +43,8 @@ def test_crossfeaturegenerator_init_default_parameters():
         raise AssertionError()
     if generator.separator != "_":
         raise AssertionError()
-    if generator.feature_combinations_ != []:
-        raise AssertionError()
-    if generator.encoding_maps_ != {}:
-        raise AssertionError()
-    if generator.numerical_combos_ != set():
+    fitted = ("feature_combinations_", "encoding_maps_", "numerical_combos_")
+    if any(hasattr(generator, name) for name in fitted):
         raise AssertionError()
     if generator.batch_size != 10:
         raise AssertionError()
@@ -287,15 +285,15 @@ def test_crossfeaturegenerator_transform_unseen_categorical_combo_maps_to_negati
         raise AssertionError()
 
 
-def test_crossfeaturegenerator_transform_before_fit_raises_value_error():
-    """Tests transform raises ValueError when the generator has not been fitted.
+def test_crossfeaturegenerator_transform_before_fit_raises_not_fitted():
+    """Tests transform raises NotFittedError when the generator has not been fitted.
 
     Asserts:
-        - ValueError is raised mentioning that the generator must be fitted first
+        - NotFittedError is raised
     """
     df = pd.DataFrame({"A": ["a", "b"], "B": ["x", "y"]})
     generator = CrossFeatureGenerator()
-    with pytest.raises(ValueError, match="CrossFeatureGenerator must be fitted before transform"):
+    with pytest.raises(NotFittedError):
         generator.transform(df)
 
 
@@ -318,15 +316,15 @@ def test_crossfeaturegenerator_fit_transform_before_fit_not_needed(mixed_datafra
     pd.testing.assert_frame_equal(result_combined, result_separate)
 
 
-def test_crossfeaturegenerator_get_feature_names_empty_before_fit():
-    """Tests get_feature_names returns an empty list before fitting.
+def test_crossfeaturegenerator_get_feature_names_raises_before_fit():
+    """Tests get_feature_names raises NotFittedError before fitting.
 
     Asserts:
-        - Empty list is returned when no combinations have been generated
+        - NotFittedError is raised when no combinations have been generated
     """
     generator = CrossFeatureGenerator()
-    if generator.get_feature_names() != []:
-        raise AssertionError()
+    with pytest.raises(NotFittedError):
+        generator.get_feature_names()
 
 
 @pytest.mark.parametrize(

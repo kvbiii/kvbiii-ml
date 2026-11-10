@@ -6,11 +6,16 @@ import pandas as pd
 from sklearn.model_selection import BaseCrossValidator, KFold
 from tqdm import tqdm
 
+from kvbiii_ml._validation import check_fitted
+
 MIN_BINS = 2
 
 
 class TargetEncodingFeatureGenerator:
     """Generate target encoded features."""
+
+    bin_edges_: dict[str, np.ndarray]
+    group_stats_: dict[str, pd.Series]
 
     def __init__(
         self,
@@ -50,8 +55,6 @@ class TargetEncodingFeatureGenerator:
         self.features_names = features_names
         self.aggregation = aggregation
         self.config = merged_config
-        self.bin_edges_: dict[str, np.ndarray] = {}
-        self.group_stats_: dict[str, pd.Series] = {}
         self.global_stat: float = 0.0
         self._state: dict[str, Any] = {
             "target_bin_edges": None,
@@ -361,19 +364,15 @@ class TargetEncodingFeatureGenerator:
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Transform the data using learned target encodings.
+        Apply the learned target encodings, raising NotFittedError before fit.
 
         Args:
             df (pd.DataFrame): Feature DataFrame to transform.
 
         Returns:
             pd.DataFrame: DataFrame with target-encoded features.
-
-        Raises:
-            ValueError: If the encoder has not been fitted yet.
         """
-        if not self.group_stats_:
-            raise ValueError("TargetEncodingFeatureGenerator must be fitted before transform.")
+        check_fitted(self, "group_stats_")
 
         fitted_index = self._state["fitted_index"]
         fitted_te_df = self._state["fitted_te_df"]

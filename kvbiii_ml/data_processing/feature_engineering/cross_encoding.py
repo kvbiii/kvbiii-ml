@@ -5,12 +5,18 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+from kvbiii_ml._validation import check_fitted
+
 MIN_DEGREE = 2
 PAIR_SIZE = 2
 
 
 class CrossFeatureGenerator:
     """Generate cross-encoded features from feature combinations."""
+
+    feature_combinations_: list[tuple[str, ...]]
+    encoding_maps_: dict[str, dict]
+    numerical_combos_: set[str]
 
     def __init__(
         self,
@@ -49,9 +55,6 @@ class CrossFeatureGenerator:
             "batch_size": int(processing.get("batch_size", 10)),
             "chunk_size": int(processing.get("chunk_size", 50000)),
         }
-        self.feature_combinations_ = []
-        self.encoding_maps_ = {}
-        self.numerical_combos_ = set()
         self._validate_init_params()
 
     @property
@@ -199,23 +202,15 @@ class CrossFeatureGenerator:
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Transform the DataFrame by adding cross-encoded features.
+        Add the cross-encoded features, raising NotFittedError before fit.
 
         Args:
             df (pd.DataFrame): DataFrame to transform.
 
         Returns:
             pd.DataFrame: DataFrame with cross-encoded features added.
-
-        Raises:
-            ValueError: If the generator has not been fitted.
         """
-        if (
-            not hasattr(self, "numerical_combos_")
-            or (not self.encoding_maps_ and not self.numerical_combos_)
-            or not self.feature_combinations_
-        ):
-            raise ValueError("CrossFeatureGenerator must be fitted before transform.")
+        check_fitted(self, "feature_combinations_")
 
         n_rows = len(df)
         n_chunks = (n_rows + self.chunk_size - 1) // self.chunk_size
@@ -287,16 +282,13 @@ class CrossFeatureGenerator:
 
     def get_feature_names(self) -> list[str]:
         """
-        Get the names of the generated cross features.
+        Get the names of the generated cross features, raising NotFittedError before fit.
 
         Returns:
             list[str]: List of generated feature names.
         """
-        return (
-            [self.separator.join(combo) for combo in self.feature_combinations_]
-            if self.feature_combinations_
-            else []
-        )
+        check_fitted(self, "feature_combinations_")
+        return [self.separator.join(combo) for combo in self.feature_combinations_]
 
 
 if __name__ == "__main__":
