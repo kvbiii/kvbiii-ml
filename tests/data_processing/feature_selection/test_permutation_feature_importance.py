@@ -1,7 +1,9 @@
 """Tests for kvbiii_ml.data_processing.feature_selection.permutation_feature_importance module."""
 
+import io
 from unittest.mock import Mock
 
+import joblib.parallel
 import numpy as np
 import pandas as pd
 import pytest
@@ -9,6 +11,7 @@ from catboost import CatBoostClassifier
 from feature_engine.encoding import MeanEncoder
 from lightgbm import LGBMClassifier
 from sklearn.pipeline import Pipeline
+from tqdm import tqdm
 
 from kvbiii_ml.data_processing.feature_selection import (
     permutation_feature_importance as permutation_module,
@@ -453,6 +456,25 @@ def test_permutationrfe_run_bootstraps_catboost_cat_features_from_graph_dtypes()
     result = selector.run(X, y)
 
     if not len(result["selected_features"]) > 0:
+        raise AssertionError()
+
+
+def test_tqdm_joblib_callback_counts_batches_and_restores_joblib():
+    """Tests the joblib callback swap advances the bar and is undone on exit.
+
+    Asserts:
+        - The bar counts all 3 parallel tasks before the exit top-up runs
+        - joblib's BatchCompletionCallBack is the original class again afterwards
+    """
+    original = joblib.parallel.BatchCompletionCallBack
+    with (
+        tqdm(total=3, file=io.StringIO()) as bar,
+        permutation_module._tqdm_joblib_callback(bar),
+    ):
+        joblib.Parallel(n_jobs=2)(joblib.delayed(abs)(i) for i in range(3))
+        if bar.n != 3:
+            raise AssertionError()
+    if joblib.parallel.BatchCompletionCallBack is not original:
         raise AssertionError()
 
 
