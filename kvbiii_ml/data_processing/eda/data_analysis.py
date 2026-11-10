@@ -39,6 +39,56 @@ PSI_SLIGHT = 0.10
 SKEW_LOW = 0.5
 SKEW_EXTREME = 5.0
 
+_REPORT_TABLE_STYLES: "list[CSSDict]" = [
+    {
+        "selector": "caption",
+        "props": [
+            ("font-family", "Times New Roman"),
+            ("font-size", "1.7em"),
+            ("font-weight", "bold"),
+            ("color", "#1e3a5f"),
+            ("padding", "14px 0 10px 4px"),
+            ("text-align", "left"),
+            ("letter-spacing", "0.04em"),
+        ],
+    },
+    {
+        "selector": "thead th",
+        "props": [
+            ("background-color", "#1e3a5f"),
+            ("color", "white"),
+            ("font-family", "Times New Roman"),
+            ("font-size", "1.3em"),
+            ("font-weight", "bold"),
+            ("padding", "11px 16px"),
+            ("border", "none"),
+            ("text-align", "center"),
+            ("letter-spacing", "0.04em"),
+            ("white-space", "nowrap"),
+        ],
+    },
+    {
+        "selector": "tbody tr:nth-child(even)",
+        "props": [("background-color", "#eef3fb")],
+    },
+    {
+        "selector": "tbody tr:nth-child(odd)",
+        "props": [("background-color", "#ffffff")],
+    },
+    {
+        "selector": "tbody tr:hover",
+        "props": [("background-color", "#d0e4f7")],
+    },
+    {
+        "selector": "",
+        "props": [
+            ("border-collapse", "collapse"),
+            ("box-shadow", "0 4px 14px rgba(0,0,0,0.10)"),
+            ("width", "100%"),
+        ],
+    },
+]
+
 
 class DataAnalyzer:
     """A comprehensive data analysis class for exploratory data analysis (EDA).
@@ -494,56 +544,6 @@ class DataAnalyzer:
 
         df = pd.DataFrame(rows)
 
-        table_styles: list[CSSDict] = [
-            {
-                "selector": "caption",
-                "props": [
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.7em"),
-                    ("font-weight", "bold"),
-                    ("color", "#1e3a5f"),
-                    ("padding", "14px 0 10px 4px"),
-                    ("text-align", "left"),
-                    ("letter-spacing", "0.04em"),
-                ],
-            },
-            {
-                "selector": "thead th",
-                "props": [
-                    ("background-color", "#1e3a5f"),
-                    ("color", "white"),
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.3em"),
-                    ("font-weight", "bold"),
-                    ("padding", "11px 16px"),
-                    ("border", "none"),
-                    ("text-align", "center"),
-                    ("letter-spacing", "0.04em"),
-                    ("white-space", "nowrap"),
-                ],
-            },
-            {
-                "selector": "tbody tr:nth-child(even)",
-                "props": [("background-color", "#eef3fb")],
-            },
-            {
-                "selector": "tbody tr:nth-child(odd)",
-                "props": [("background-color", "#ffffff")],
-            },
-            {
-                "selector": "tbody tr:hover",
-                "props": [("background-color", "#d0e4f7")],
-            },
-            {
-                "selector": "",
-                "props": [
-                    ("border-collapse", "collapse"),
-                    ("box-shadow", "0 4px 14px rgba(0,0,0,0.10)"),
-                    ("width", "100%"),
-                ],
-            },
-        ]
-
         styled = (
             cast(
                 "Styler",
@@ -560,7 +560,7 @@ class DataAnalyzer:
                 ),
             )
             .map(DataAnalyzer._skewness_cell_color, subset=["Skewness"])
-            .set_table_styles(table_styles)
+            .set_table_styles(_REPORT_TABLE_STYLES)
             .set_properties(
                 **{
                     "font-family": "Times New Roman",
@@ -769,56 +769,6 @@ class DataAnalyzer:
                 "background-color: #d4e6f1; font-weight: bold; border-top: 2px solid #1e3a5f"
             ] * len(row)
 
-        table_styles: list[CSSDict] = [
-            {
-                "selector": "caption",
-                "props": [
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.7em"),
-                    ("font-weight", "bold"),
-                    ("color", "#1e3a5f"),
-                    ("padding", "14px 0 10px 4px"),
-                    ("text-align", "left"),
-                    ("letter-spacing", "0.04em"),
-                ],
-            },
-            {
-                "selector": "thead th",
-                "props": [
-                    ("background-color", "#1e3a5f"),
-                    ("color", "white"),
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.3em"),
-                    ("font-weight", "bold"),
-                    ("padding", "11px 16px"),
-                    ("border", "none"),
-                    ("text-align", "center"),
-                    ("letter-spacing", "0.04em"),
-                    ("white-space", "nowrap"),
-                ],
-            },
-            {
-                "selector": "tbody tr:nth-child(even)",
-                "props": [("background-color", "#eef3fb")],
-            },
-            {
-                "selector": "tbody tr:nth-child(odd)",
-                "props": [("background-color", "#ffffff")],
-            },
-            {
-                "selector": "tbody tr:hover",
-                "props": [("background-color", "#d0e4f7")],
-            },
-            {
-                "selector": "",
-                "props": [
-                    ("border-collapse", "collapse"),
-                    ("box-shadow", "0 4px 14px rgba(0,0,0,0.10)"),
-                    ("width", "100%"),
-                ],
-            },
-        ]
-
         styled = (
             cast(
                 "Styler",
@@ -839,7 +789,7 @@ class DataAnalyzer:
             )
             .map(DataAnalyzer._skewness_cell_color, subset=["Skewness"])
             .apply(_highlight_overall, axis=1)
-            .set_table_styles(table_styles)
+            .set_table_styles(_REPORT_TABLE_STYLES)
             .set_properties(
                 **{
                     "font-family": "Times New Roman",
@@ -974,61 +924,11 @@ class DataAnalyzer:
             format_dict[f"{cls} Median"] = "{:.5f}"
             format_dict[f"{cls} IQR"] = "{:.5f}"
 
-        table_styles: list[CSSDict] = [
-            {
-                "selector": "caption",
-                "props": [
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.7em"),
-                    ("font-weight", "bold"),
-                    ("color", "#1e3a5f"),
-                    ("padding", "14px 0 10px 4px"),
-                    ("text-align", "left"),
-                    ("letter-spacing", "0.04em"),
-                ],
-            },
-            {
-                "selector": "thead th",
-                "props": [
-                    ("background-color", "#1e3a5f"),
-                    ("color", "white"),
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.3em"),
-                    ("font-weight", "bold"),
-                    ("padding", "11px 16px"),
-                    ("border", "none"),
-                    ("text-align", "center"),
-                    ("letter-spacing", "0.04em"),
-                    ("white-space", "nowrap"),
-                ],
-            },
-            {
-                "selector": "tbody tr:nth-child(even)",
-                "props": [("background-color", "#eef3fb")],
-            },
-            {
-                "selector": "tbody tr:nth-child(odd)",
-                "props": [("background-color", "#ffffff")],
-            },
-            {
-                "selector": "tbody tr:hover",
-                "props": [("background-color", "#d0e4f7")],
-            },
-            {
-                "selector": "",
-                "props": [
-                    ("border-collapse", "collapse"),
-                    ("box-shadow", "0 4px 14px rgba(0,0,0,0.10)"),
-                    ("width", "100%"),
-                ],
-            },
-        ]
-
         styled = (
             cast("Styler", df.style.set_caption(caption).format(format_dict))
             .map(DataAnalyzer._effect_size_cell_color, subset=["η²", "ε²"])
             .map(DataAnalyzer._pvalue_cell_color, subset=["KW p-value"])
-            .set_table_styles(table_styles)
+            .set_table_styles(_REPORT_TABLE_STYLES)
             .set_properties(
                 **{
                     "font-family": "Times New Roman",
@@ -1175,56 +1075,6 @@ class DataAnalyzer:
 
         df = pd.DataFrame(rows).sort_values("N Unique").reset_index(drop=True)
 
-        table_styles: list[CSSDict] = [
-            {
-                "selector": "caption",
-                "props": [
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.7em"),
-                    ("font-weight", "bold"),
-                    ("color", "#1e3a5f"),
-                    ("padding", "14px 0 10px 4px"),
-                    ("text-align", "left"),
-                    ("letter-spacing", "0.04em"),
-                ],
-            },
-            {
-                "selector": "thead th",
-                "props": [
-                    ("background-color", "#1e3a5f"),
-                    ("color", "white"),
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.3em"),
-                    ("font-weight", "bold"),
-                    ("padding", "11px 16px"),
-                    ("border", "none"),
-                    ("text-align", "center"),
-                    ("letter-spacing", "0.04em"),
-                    ("white-space", "nowrap"),
-                ],
-            },
-            {
-                "selector": "tbody tr:nth-child(even)",
-                "props": [("background-color", "#eef3fb")],
-            },
-            {
-                "selector": "tbody tr:nth-child(odd)",
-                "props": [("background-color", "#ffffff")],
-            },
-            {
-                "selector": "tbody tr:hover",
-                "props": [("background-color", "#d0e4f7")],
-            },
-            {
-                "selector": "",
-                "props": [
-                    ("border-collapse", "collapse"),
-                    ("box-shadow", "0 4px 14px rgba(0,0,0,0.10)"),
-                    ("width", "100%"),
-                ],
-            },
-        ]
-
         styled = (
             cast(
                 "Styler",
@@ -1241,7 +1091,7 @@ class DataAnalyzer:
             )
             .map(DataAnalyzer._entropy_cell_color, subset=["Entropy (norm.)"])
             .bar(subset=["Missing %"], color="#4a90e2", vmin=0, vmax=100)
-            .set_table_styles(table_styles)
+            .set_table_styles(_REPORT_TABLE_STYLES)
             .set_properties(
                 **{
                     "font-family": "Times New Roman",
@@ -1363,61 +1213,11 @@ class DataAnalyzer:
 
         row_pct_cols = [f"{cls} Row %" for cls in classes]
 
-        table_styles: list[CSSDict] = [
-            {
-                "selector": "caption",
-                "props": [
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.7em"),
-                    ("font-weight", "bold"),
-                    ("color", "#1e3a5f"),
-                    ("padding", "14px 0 10px 4px"),
-                    ("text-align", "left"),
-                    ("letter-spacing", "0.04em"),
-                ],
-            },
-            {
-                "selector": "thead th",
-                "props": [
-                    ("background-color", "#1e3a5f"),
-                    ("color", "white"),
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.3em"),
-                    ("font-weight", "bold"),
-                    ("padding", "11px 16px"),
-                    ("border", "none"),
-                    ("text-align", "center"),
-                    ("letter-spacing", "0.04em"),
-                    ("white-space", "nowrap"),
-                ],
-            },
-            {
-                "selector": "tbody tr:nth-child(even)",
-                "props": [("background-color", "#eef3fb")],
-            },
-            {
-                "selector": "tbody tr:nth-child(odd)",
-                "props": [("background-color", "#ffffff")],
-            },
-            {
-                "selector": "tbody tr:hover",
-                "props": [("background-color", "#d0e4f7")],
-            },
-            {
-                "selector": "",
-                "props": [
-                    ("border-collapse", "collapse"),
-                    ("box-shadow", "0 4px 14px rgba(0,0,0,0.10)"),
-                    ("width", "100%"),
-                ],
-            },
-        ]
-
         styled = (
             cast("Styler", df.style.set_caption(caption).format(format_dict))
             .background_gradient(subset=row_pct_cols, cmap="Blues", axis=0, vmin=0, vmax=100)
             .apply(_highlight_total, axis=1)
-            .set_table_styles(table_styles)
+            .set_table_styles(_REPORT_TABLE_STYLES)
             .set_properties(
                 **{
                     "font-family": "Times New Roman",
@@ -1508,56 +1308,6 @@ class DataAnalyzer:
 
         df = pd.DataFrame(rows).sort_values("Cramér's V", ascending=False).reset_index(drop=True)
 
-        table_styles: list[CSSDict] = [
-            {
-                "selector": "caption",
-                "props": [
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.7em"),
-                    ("font-weight", "bold"),
-                    ("color", "#1e3a5f"),
-                    ("padding", "14px 0 10px 4px"),
-                    ("text-align", "left"),
-                    ("letter-spacing", "0.04em"),
-                ],
-            },
-            {
-                "selector": "thead th",
-                "props": [
-                    ("background-color", "#1e3a5f"),
-                    ("color", "white"),
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.3em"),
-                    ("font-weight", "bold"),
-                    ("padding", "11px 16px"),
-                    ("border", "none"),
-                    ("text-align", "center"),
-                    ("letter-spacing", "0.04em"),
-                    ("white-space", "nowrap"),
-                ],
-            },
-            {
-                "selector": "tbody tr:nth-child(even)",
-                "props": [("background-color", "#eef3fb")],
-            },
-            {
-                "selector": "tbody tr:nth-child(odd)",
-                "props": [("background-color", "#ffffff")],
-            },
-            {
-                "selector": "tbody tr:hover",
-                "props": [("background-color", "#d0e4f7")],
-            },
-            {
-                "selector": "",
-                "props": [
-                    ("border-collapse", "collapse"),
-                    ("box-shadow", "0 4px 14px rgba(0,0,0,0.10)"),
-                    ("width", "100%"),
-                ],
-            },
-        ]
-
         styled = (
             cast(
                 "Styler",
@@ -1573,7 +1323,7 @@ class DataAnalyzer:
             )
             .map(DataAnalyzer._association_cell_color, subset=["Cramér's V", "Theil's U"])
             .map(DataAnalyzer._pvalue_cell_color, subset=["p-value"])
-            .set_table_styles(table_styles)
+            .set_table_styles(_REPORT_TABLE_STYLES)
             .set_properties(
                 **{
                     "font-family": "Times New Roman",
@@ -1764,56 +1514,6 @@ class DataAnalyzer:
 
         df = pd.DataFrame(rows).sort_values("KS Stat", ascending=False).reset_index(drop=True)
 
-        table_styles: list[CSSDict] = [
-            {
-                "selector": "caption",
-                "props": [
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.7em"),
-                    ("font-weight", "bold"),
-                    ("color", "#1e3a5f"),
-                    ("padding", "14px 0 10px 4px"),
-                    ("text-align", "left"),
-                    ("letter-spacing", "0.04em"),
-                ],
-            },
-            {
-                "selector": "thead th",
-                "props": [
-                    ("background-color", "#1e3a5f"),
-                    ("color", "white"),
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.3em"),
-                    ("font-weight", "bold"),
-                    ("padding", "11px 16px"),
-                    ("border", "none"),
-                    ("text-align", "center"),
-                    ("letter-spacing", "0.04em"),
-                    ("white-space", "nowrap"),
-                ],
-            },
-            {
-                "selector": "tbody tr:nth-child(even)",
-                "props": [("background-color", "#eef3fb")],
-            },
-            {
-                "selector": "tbody tr:nth-child(odd)",
-                "props": [("background-color", "#ffffff")],
-            },
-            {
-                "selector": "tbody tr:hover",
-                "props": [("background-color", "#d0e4f7")],
-            },
-            {
-                "selector": "",
-                "props": [
-                    ("border-collapse", "collapse"),
-                    ("box-shadow", "0 4px 14px rgba(0,0,0,0.10)"),
-                    ("width", "100%"),
-                ],
-            },
-        ]
-
         styled = (
             cast(
                 "Styler",
@@ -1833,7 +1533,7 @@ class DataAnalyzer:
             .map(DataAnalyzer._drift_score_cell_color, subset=["KS Stat", "PSI"])
             .map(DataAnalyzer._drift_pvalue_cell_color, subset=["KS p-value"])
             .map(DataAnalyzer._drift_flag_cell_color, subset=["Flag"])
-            .set_table_styles(table_styles)
+            .set_table_styles(_REPORT_TABLE_STYLES)
             .set_properties(
                 **{
                     "font-family": "Times New Roman",
@@ -1949,56 +1649,6 @@ class DataAnalyzer:
 
         df = pd.DataFrame(rows).sort_values("JS Distance", ascending=False).reset_index(drop=True)
 
-        table_styles: list[CSSDict] = [
-            {
-                "selector": "caption",
-                "props": [
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.7em"),
-                    ("font-weight", "bold"),
-                    ("color", "#1e3a5f"),
-                    ("padding", "14px 0 10px 4px"),
-                    ("text-align", "left"),
-                    ("letter-spacing", "0.04em"),
-                ],
-            },
-            {
-                "selector": "thead th",
-                "props": [
-                    ("background-color", "#1e3a5f"),
-                    ("color", "white"),
-                    ("font-family", "Times New Roman"),
-                    ("font-size", "1.3em"),
-                    ("font-weight", "bold"),
-                    ("padding", "11px 16px"),
-                    ("border", "none"),
-                    ("text-align", "center"),
-                    ("letter-spacing", "0.04em"),
-                    ("white-space", "nowrap"),
-                ],
-            },
-            {
-                "selector": "tbody tr:nth-child(even)",
-                "props": [("background-color", "#eef3fb")],
-            },
-            {
-                "selector": "tbody tr:nth-child(odd)",
-                "props": [("background-color", "#ffffff")],
-            },
-            {
-                "selector": "tbody tr:hover",
-                "props": [("background-color", "#d0e4f7")],
-            },
-            {
-                "selector": "",
-                "props": [
-                    ("border-collapse", "collapse"),
-                    ("box-shadow", "0 4px 14px rgba(0,0,0,0.10)"),
-                    ("width", "100%"),
-                ],
-            },
-        ]
-
         styled = (
             cast(
                 "Styler",
@@ -2016,7 +1666,7 @@ class DataAnalyzer:
             .map(DataAnalyzer._drift_score_cell_color, subset=["JS Distance", "PSI"])
             .map(DataAnalyzer._drift_pvalue_cell_color, subset=["χ² p-value"])
             .map(DataAnalyzer._drift_flag_cell_color, subset=["Flag"])
-            .set_table_styles(table_styles)
+            .set_table_styles(_REPORT_TABLE_STYLES)
             .set_properties(
                 **{
                     "font-family": "Times New Roman",
