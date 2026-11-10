@@ -356,6 +356,120 @@ class ModelImportanceFiltering:
         gc.collect()
         return importance_map, float(np.mean(valid_scores)), float(np.std(valid_scores))
 
+    def _fit_baseline(
+        self, X: pd.DataFrame, y: pd.Series | np.ndarray
+    ) -> tuple[PipelineDependencyGraph, float, float]:
+        """Fit the baseline CV once and record the processed feature names.
+
+        Args:
+            X (pd.DataFrame): Feature matrix (raw columns).
+            y (pd.Series | np.ndarray): Target aligned with X.
+
+        Returns:
+            tuple[PipelineDependencyGraph, float, float]: Dependency graph, baseline mean and std.
+        """
+        all_raw_features: list[str] = sorted(X.columns.tolist())
+        dependency_graph = PipelineDependencyGraph.build(
+            self.cross_validator.preprocessing_pipeline,
+            X[all_raw_features],
+            cast("pd.Series", y),
+        )
+        baseline_estimator = self._restrict_catboost_cat_features(
+            self.estimator,
+            set(dependency_graph.processed_columns),
+            dependency_graph.processed_dtypes,
+        )
+        _, valid_scores, _ = self.cross_validator.fit(
+            baseline_estimator, X[all_raw_features], cast("pd.Series", y)
+        )
+        self.all_processed_features = list(dependency_graph.processed_columns)
+        return dependency_graph, float(np.mean(valid_scores)), float(np.std(valid_scores))
+
+    def _run_step(
+        self,
+        X: pd.DataFrame,
+        y: pd.Series | np.ndarray,
+        dependency_graph: PipelineDependencyGraph,
+        current_features: list[str],
+        prev_metric: float,
+    ) -> dict[str, Any]:
+        """Run CV on the restricted pipeline and pick the features to remove.
+
+        Args:
+            X (pd.DataFrame): Feature matrix (raw columns).
+            y (pd.Series | np.ndarray): Target aligned with X.
+            dependency_graph (PipelineDependencyGraph): Graph of the full pipeline.
+            current_features (list[str]): Active processed feature names.
+            prev_metric (float): Metric of the previous step, for ``metric_change``.
+
+        Returns:
+            dict[str, Any]: Step data: scores, fold metric/std, features to remove, metric change.
+        """
+        current_raw_features, restricted_pipeline = dependency_graph.restrict(current_features)
+        step_estimator = self._restrict_catboost_cat_features(
+            self.estimator,
+            set(current_features),
+            dependency_graph.processed_dtypes,
+        )
+        importance_scores, fold_metric, fold_std = self._cross_val_model_importance(
+            X[current_raw_features],
+            cast("pd.Series", y),
+            current_features,
+            step_estimator,
+            restricted_pipeline,
+        )
+        return {
+            "importance_scores": importance_scores,
+            "fold_metric": fold_metric,
+            "fold_std": fold_std,
+            "features_to_remove": self._select_features_to_remove(importance_scores),
+            "metric_change": fold_metric - prev_metric,
+        }
+
+    def _append_never_removed(
+        self,
+        history: pd.DataFrame,
+        current_features: list[str],
+        importance_scores: dict[str, float],
+        baseline_metric: float,
+    ) -> pd.DataFrame:
+        """Append history rows for non-protected features that were never removed.
+
+        Args:
+            history (pd.DataFrame): Existing history DataFrame.
+            current_features (list[str]): Processed features left after the last step.
+            importance_scores (dict[str, float]): Importances from the last step.
+            baseline_metric (float): Metric used when the history has no metric values.
+
+        Returns:
+            pd.DataFrame: History with one extra row per never-removed feature, if any.
+        """
+        protected_set = set(self.protected_features)
+        logged_set = set(history["removed_feature_name"].dropna())
+        never_removed = [
+            f for f in self.all_processed_features if f not in protected_set and f not in logged_set
+        ]
+        if not never_removed:
+            return history
+        last_step = int(history["step"].max())
+        last_n_removed = int(history["n_features_removed"].fillna(0).max())
+        metric_series = history["metric_value"].dropna()
+        final_metric = float(metric_series.iloc[-1]) if not metric_series.empty else baseline_metric
+        never_removed_sorted = sorted(never_removed, key=lambda f: importance_scores.get(f, 0.0))
+        rows = [
+            {
+                "step": last_step + 1,
+                "n_features_removed": last_n_removed + i + 1,
+                "n_features_remaining": len(current_features) - i - 1,
+                "removed_feature_name": feat,
+                "metric_value": final_metric,
+                "metric_change": 0.0,
+                "importance_score": importance_scores.get(feat, np.nan),
+            }
+            for i, feat in enumerate(never_removed_sorted)
+        ]
+        return pd.concat([history, pd.DataFrame(rows)], ignore_index=True)
+
     def run(
         self,
         X: pd.DataFrame,
@@ -383,34 +497,13 @@ class ModelImportanceFiltering:
         Raises:
             ValueError: When protected features are not in the post-pipeline column set.
         """
-        all_raw_features: list[str] = sorted(X.columns.tolist())
-
-        pipeline = self.cross_validator.preprocessing_pipeline
-        dependency_graph = PipelineDependencyGraph.build(
-            pipeline, X[all_raw_features], cast("pd.Series", y)
-        )
-
-        baseline_estimator = self._restrict_catboost_cat_features(
-            self.estimator,
-            set(dependency_graph.processed_columns),
-            dependency_graph.processed_dtypes,
-        )
-        _, valid_scores, _ = self.cross_validator.fit(
-            baseline_estimator, X[all_raw_features], cast("pd.Series", y)
-        )
-        baseline_metric = float(np.mean(valid_scores))
-        baseline_std = float(np.std(valid_scores))
-
-        self.all_processed_features = list(dependency_graph.processed_columns)
-        all_processed_set = set(self.all_processed_features)
-
-        missing_protected = set(self.protected_features) - all_processed_set
+        dependency_graph, baseline_metric, baseline_std = self._fit_baseline(X, y)
+        missing_protected = set(self.protected_features) - set(self.all_processed_features)
         if missing_protected:
             raise ValueError(
                 f"Protected features not found in post-pipeline column set: {missing_protected}. "
-                f"Available processed columns: {sorted(all_processed_set)}"
+                f"Available processed columns: {sorted(self.all_processed_features)}"
             )
-
         current_processed_features: list[str] = list(self.all_processed_features)
 
         summary = self._init_summary(current_processed_features, baseline_metric)
@@ -425,31 +518,11 @@ class ModelImportanceFiltering:
                     print("⏹️  Stopping - only protected features remain.")
                 break
 
-            current_raw_features, restricted_pipeline = dependency_graph.restrict(
-                current_processed_features
+            step_state = self._run_step(
+                X, y, dependency_graph, current_processed_features, prev_metric
             )
-            step_estimator = self._restrict_catboost_cat_features(
-                self.estimator,
-                set(current_processed_features),
-                dependency_graph.processed_dtypes,
-            )
-
-            importance_scores, fold_metric, fold_std = self._cross_val_model_importance(
-                X[current_raw_features],
-                cast("pd.Series", y),
-                current_processed_features,
-                step_estimator,
-                restricted_pipeline,
-            )
-
-            features_to_remove = self._select_features_to_remove(importance_scores)
-            step_state = {
-                "importance_scores": importance_scores,
-                "fold_metric": fold_metric,
-                "fold_std": fold_std,
-                "features_to_remove": features_to_remove,
-                "metric_change": fold_metric - prev_metric,
-            }
+            importance_scores = step_state["importance_scores"]
+            features_to_remove = step_state["features_to_remove"]
             self._log_step(step_idx, current_processed_features, step_state)
 
             if not features_to_remove:
@@ -459,7 +532,7 @@ class ModelImportanceFiltering:
                     )
                 break
 
-            prev_metric = fold_metric
+            prev_metric = step_state["fold_metric"]
             summary["history"] = self._append_removal_rows(
                 summary["history"],
                 step_idx,
@@ -473,37 +546,9 @@ class ModelImportanceFiltering:
 
             gc.collect()
 
-        protected_set = set(self.protected_features)
-        logged_set = set(summary["history"]["removed_feature_name"].dropna())
-        never_removed = [
-            f for f in self.all_processed_features if f not in protected_set and f not in logged_set
-        ]
-        if never_removed:
-            last_step = int(summary["history"]["step"].max())
-            last_n_removed = int(summary["history"]["n_features_removed"].fillna(0).max())
-            metric_series = summary["history"]["metric_value"].dropna()
-            final_metric = (
-                float(metric_series.iloc[-1]) if not metric_series.empty else baseline_metric
-            )
-            never_removed_sorted = sorted(
-                never_removed, key=lambda f: importance_scores.get(f, 0.0)
-            )
-            rows = [
-                {
-                    "step": last_step + 1,
-                    "n_features_removed": last_n_removed + i + 1,
-                    "n_features_remaining": len(current_processed_features) - i - 1,
-                    "removed_feature_name": feat,
-                    "metric_value": final_metric,
-                    "metric_change": 0.0,
-                    "importance_score": importance_scores.get(feat, np.nan),
-                }
-                for i, feat in enumerate(never_removed_sorted)
-            ]
-            summary["history"] = pd.concat(
-                [summary["history"], pd.DataFrame(rows)], ignore_index=True
-            )
-
+        summary["history"] = self._append_never_removed(
+            summary["history"], current_processed_features, importance_scores, baseline_metric
+        )
         summary["selected_features"] = sorted(current_processed_features)
         summary["selected_features_names"] = summary["selected_features"]
         self.selected_features_ = summary["selected_features"]
