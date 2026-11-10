@@ -209,30 +209,29 @@ class EnsembleModel(BaseEstimator):
         Returns:
             EnsembleModel: Fitted ensemble instance.
         """
-        X_valid, y_valid = None, None
+        eval_pair = None
         if isinstance(eval_set, list) and eval_set and isinstance(eval_set[0], tuple):
-            X_valid, y_valid = eval_set[1] if len(eval_set) == TRAIN_VALID_PAIR else eval_set[0]
+            eval_pair = eval_set[1] if len(eval_set) == TRAIN_VALID_PAIR else eval_set[0]
 
         self.fitted_estimators_ = self._fit_base_estimators(
-            X_train, y_train, X_valid, y_valid, sample_weight, verbose
+            X_train, y_train, eval_pair, sample_weight, verbose
         )
         if self.problem_type == "classification":
             self.classes_ = np.unique(y_train)
 
         if self.meta_learner is not None:
             meta_features = self._out_of_fold_meta_features(
-                X_train, y_train, X_valid, y_valid, sample_weight, verbose
+                X_train, y_train, eval_pair, sample_weight, verbose
             )
             self.fitted_meta_learner_ = self._safe_clone_estimator(self.meta_learner)
             self.fitted_meta_learner_.fit(meta_features, y_train, sample_weight=sample_weight)
         return self
 
-    def _fit_base_estimators(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def _fit_base_estimators(
         self,
         X_train: pd.DataFrame,
         y_train: pd.Series,
-        X_valid: pd.DataFrame | None,
-        y_valid: pd.Series | None,
+        eval_pair: tuple[pd.DataFrame, pd.Series] | None,
         sample_weight: pd.Series | np.ndarray | None,
         verbose: int | None,
     ) -> list[Estimator]:
@@ -240,6 +239,7 @@ class EnsembleModel(BaseEstimator):
 
         def fit_one(base_estimator: Estimator) -> Estimator:
             """Clone, configure and fit one base estimator."""
+            X_valid, y_valid = eval_pair or (None, None)
             x_fit, offset_fit = split_offset(X_train, self.offset_column)
             x_eval, offset_eval = (
                 split_offset(X_valid, self.offset_column) if X_valid is not None else (None, None)
@@ -265,12 +265,11 @@ class EnsembleModel(BaseEstimator):
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             return list(executor.map(fit_one, self._estimators_list))
 
-    def _out_of_fold_meta_features(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def _out_of_fold_meta_features(
         self,
         X_train: pd.DataFrame,
         y_train: pd.Series,
-        X_valid: pd.DataFrame | None,
-        y_valid: pd.Series | None,
+        eval_pair: tuple[pd.DataFrame, pd.Series] | None,
         sample_weight: pd.Series | np.ndarray | None,
         verbose: int | None,
     ) -> np.ndarray:
@@ -296,8 +295,7 @@ class EnsembleModel(BaseEstimator):
             fold_estimators = self._fit_base_estimators(
                 X_train.iloc[train_idx],
                 y_train.iloc[train_idx],
-                X_valid,
-                y_valid,
+                eval_pair,
                 None if weights is None else weights[train_idx],
                 verbose,
             )
