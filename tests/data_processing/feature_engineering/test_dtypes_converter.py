@@ -5,6 +5,7 @@ import warnings
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.exceptions import NotFittedError
 
 from kvbiii_ml.data_processing.feature_engineering.dtypes_converter import (
     DtypesConverter,
@@ -16,13 +17,13 @@ def test_dtypesconverter_init_defaults_dtype_map_to_none():
 
     Asserts:
         - dtype_map is None by default
-        - dtype_map_ starts unset as None
+        - dtype_map_ does not exist before fit
     """
     converter = DtypesConverter()
 
     if converter.dtype_map is not None:
         raise AssertionError()
-    if converter.dtype_map_ is not None:
+    if hasattr(converter, "dtype_map_"):
         raise AssertionError()
 
 
@@ -144,16 +145,16 @@ def test_dtypesconverter_transform_warns_instead_of_raising_on_incompatible_cast
         raise AssertionError()
 
 
-def test_dtypesconverter_transform_raises_attributeerror_before_fit():
-    """Tests transform raises AttributeError when called before fit.
+def test_dtypesconverter_transform_raises_not_fitted_before_fit():
+    """Tests transform raises NotFittedError when called before fit.
 
     Asserts:
-        - AttributeError is raised because dtype_map_ is still None
+        - NotFittedError is raised
     """
     df = pd.DataFrame({"a": [1, 2, 3]})
     converter = DtypesConverter()
 
-    with pytest.raises(AttributeError):
+    with pytest.raises(NotFittedError):
         converter.transform(df)
 
 
