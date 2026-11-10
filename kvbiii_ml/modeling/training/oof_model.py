@@ -18,6 +18,7 @@ from kvbiii_ml.modeling.training.base_trainer import (
     TRAIN_VALID_PAIR,
     XGB_PREFIX,
     BaseTrainer,
+    FitRows,
 )
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 
@@ -348,7 +349,9 @@ class OOFModel:
                 _set_n_iterations(final_est, int(np.mean(n_iter_list)))
             if X_valid is None:
                 _disable_early_stopping(final_est)
-            self.fitted_estimator_ = BaseTrainer.fit_estimator(final_est, X, y, X_valid, y_valid)
+            self.fitted_estimator_ = BaseTrainer.fit_estimator(
+                final_est, FitRows(X, y), FitRows.optional(X_valid, y_valid)
+            )
 
         return self
 

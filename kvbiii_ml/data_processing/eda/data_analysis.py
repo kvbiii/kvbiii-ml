@@ -1149,11 +1149,12 @@ class DataAnalyzer:
         return styled
 
     @staticmethod
-    def describe_categorical_by_target(
+    def describe_categorical_by_target(  # noqa: PLR0913
         data: pd.DataFrame,
         feature: str,
         target: str,
         problem_type: str,
+        *,
         n_quantiles: int = 4,
         top_n: int = 15,
     ) -> Styler:

@@ -15,6 +15,7 @@ from kvbiii_ml._typing import Estimator
 from kvbiii_ml.modeling.training.base_trainer import (
     TRAIN_VALID_PAIR,
     BaseTrainer,
+    FitRows,
     order_x_for_estimator,
     predict_with_offset,
     split_offset,
@@ -249,14 +250,9 @@ class EnsembleModel(BaseEstimator):
             )
             return BaseTrainer.fit_estimator(
                 estimator,
-                x_fit,
-                y_train,
-                x_eval,
-                y_valid,
-                sample_weight,
-                verbose,
-                offset_train=offset_fit,
-                offset_valid=offset_eval,
+                FitRows(x_fit, y_train, sample_weight, offset_fit),
+                FitRows.optional(x_eval, y_valid, offset_eval),
+                verbose=verbose,
             )
 
         if self.n_jobs == 1 or len(self._estimators_list) <= 1:

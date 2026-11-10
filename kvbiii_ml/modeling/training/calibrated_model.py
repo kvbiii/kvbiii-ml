@@ -9,7 +9,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 
 from kvbiii_ml._typing import Estimator
-from kvbiii_ml.modeling.training.base_trainer import BaseTrainer
+from kvbiii_ml.modeling.training.base_trainer import BaseTrainer, FitRows
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 from kvbiii_ml.modeling.training.oof_model import (
     OOFModel,
@@ -118,7 +118,7 @@ class CalibratedModel:
         )
 
         holdout_estimator = BaseTrainer.fit_estimator(
-            deepcopy(self.estimator), x_fit, y_fit, x_cal, y_cal
+            deepcopy(self.estimator), FitRows(x_fit, y_fit), FitRows(x_cal, y_cal)
         )
         cal_probas = self._ensure_proba_matrix(holdout_estimator.predict_proba(x_cal))
         self.calibrator_ = _fit_calibrator(
@@ -192,7 +192,9 @@ class CalibratedModel:
             _set_n_iterations(final_est, n_iter)
         if X_valid is None:
             _disable_early_stopping(final_est)
-        self.fitted_estimator_ = BaseTrainer.fit_estimator(final_est, X, y, X_valid, y_valid)
+        self.fitted_estimator_ = BaseTrainer.fit_estimator(
+            final_est, FitRows(X, y), FitRows.optional(X_valid, y_valid)
+        )
 
 
 if __name__ == "__main__":

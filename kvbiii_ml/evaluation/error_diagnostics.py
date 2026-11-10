@@ -155,11 +155,12 @@ def display_regression_under_over_errors(
     )
 
 
-def get_top_classification_errors(
+def get_top_classification_errors(  # noqa: PLR0913
     y_true: pd.Series,
     y_pred_proba: np.ndarray,
     class_id: int,
     id2label: dict[int, str],
+    *,
     top_n: int = 15,
     cutoff: float | list[float] | None = None,
 ) -> pd.DataFrame:

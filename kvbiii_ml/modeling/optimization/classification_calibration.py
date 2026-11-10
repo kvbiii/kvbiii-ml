@@ -24,7 +24,7 @@ from kvbiii_ml.evaluation.metrics import (
     get_metric_function,
     get_metric_type,
 )
-from kvbiii_ml.modeling.training.base_trainer import BaseTrainer
+from kvbiii_ml.modeling.training.base_trainer import BaseTrainer, FitRows
 from kvbiii_ml.modeling.training.calibrated_model import CalibratedModel
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 from kvbiii_ml.modeling.training.oof_model import (
@@ -848,7 +848,7 @@ class ClassificationCalibrator:
         if X_valid is None:
             _disable_early_stopping(final_est)
         self._fitted_full_estimator = BaseTrainer.fit_estimator(
-            final_est, x_proc, y, X_valid, y_valid
+            final_est, FitRows(x_proc, y), FitRows.optional(X_valid, y_valid)
         )
 
     def _highlight_best_row(self, row: pd.Series) -> list[str]:

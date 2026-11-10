@@ -28,12 +28,12 @@ BINARY_N_CLASSES = 2
 
 
 @dataclass(frozen=True)
-class _Split:
+class SplitResults:
     """True labels, predicted labels and optional probabilities of one data split."""
 
     true: pd.Series | np.ndarray
     pred: pd.Series | np.ndarray
-    proba: np.ndarray | None
+    proba: np.ndarray | None = None
 
 
 def _apply_fancy_styling(
@@ -279,13 +279,15 @@ def _apply_cutoff(
     return np.argmax(y_proba / cutoff_array, axis=1)
 
 
-def _build_overall_table(train: _Split, test: _Split, average: str, caption: str) -> Styler:
+def _build_overall_table(
+    train: SplitResults, test: SplitResults, average: str, caption: str
+) -> Styler:
     """
     Build and style the overall classification metrics table.
 
     Args:
-        train (_Split): Training labels, predictions and probabilities for ROC-AUC/Log Loss.
-        test (_Split): Test labels, predictions and probabilities for ROC-AUC/Log Loss.
+        train (SplitResults): Training labels, predictions and probabilities for ROC-AUC/Log Loss.
+        test (SplitResults): Test labels, predictions and probabilities for ROC-AUC/Log Loss.
         average (str): Averaging strategy for multi-class metrics.
         caption (str): Table caption.
 
@@ -316,14 +318,14 @@ def _build_overall_table(train: _Split, test: _Split, average: str, caption: str
 
 
 def _build_per_class_table(
-    train: _Split, test: _Split, classes: np.ndarray, caption: str
+    train: SplitResults, test: SplitResults, classes: np.ndarray, caption: str
 ) -> Styler:
     """
     Build and style the per-class classification metrics table.
 
     Args:
-        train (_Split): Training labels, predictions and probabilities for per-class ROC-AUC.
-        test (_Split): Test labels, predictions and probabilities for per-class ROC-AUC.
+        train (SplitResults): Training labels, predictions and probabilities for per-class ROC-AUC.
+        test (SplitResults): Test labels, predictions and probabilities for per-class ROC-AUC.
         classes (np.ndarray): Unique class labels.
         caption (str): Table caption.
 
@@ -347,12 +349,8 @@ def _build_per_class_table(
 
 
 def classification_results(
-    y_train_true: pd.Series | np.ndarray,
-    y_train_pred: np.ndarray,
-    y_test_true: pd.Series | np.ndarray,
-    y_test_pred: np.ndarray,
-    y_train_proba: np.ndarray | None = None,
-    y_test_proba: np.ndarray | None = None,
+    train: SplitResults,
+    test: SplitResults,
     id2label: dict[int, str] | None = None,
     cutoffs: float | list[float] | None = None,
     average: str = "weighted",
@@ -364,12 +362,8 @@ def classification_results(
     - With ``cutoffs``: returns (overall, overall at cutoff, per-class, per-class at cutoff).
 
     Args:
-        y_train_true (pd.Series | np.ndarray): True training target values.
-        y_train_pred (np.ndarray): Predicted training target values.
-        y_test_true (pd.Series | np.ndarray): True testing target values.
-        y_test_pred (np.ndarray): Predicted testing target values.
-        y_train_proba (np.ndarray | None): Predicted probabilities for train. Defaults to None.
-        y_test_proba (np.ndarray | None): Predicted probabilities for test. Defaults to None.
+        train (SplitResults): Labels, predictions and optional probabilities of the train split.
+        test (SplitResults): Labels, predictions and optional probabilities of the test split.
         id2label (dict[int, str] | None): Class index to label mapping. Defaults to None (indices).
         cutoffs (float | list[float] | None): Binary float or per-class list. Defaults to None.
         average (str): Averaging method for multi-class metrics. Defaults to "weighted".
@@ -381,13 +375,11 @@ def classification_results(
         ValueError: If ``cutoffs`` is provided but probabilities or ``id2label`` are missing.
         ValueError: If cutoff list length does not match number of classes.
     """
-    if cutoffs is not None and (y_train_proba is None or y_test_proba is None or id2label is None):
+    if cutoffs is not None and (train.proba is None or test.proba is None or id2label is None):
         raise ValueError("Probabilities and class labels are required for cutoff")
 
-    classes = np.unique(np.concatenate([np.asarray(y_train_true), np.asarray(y_test_true)]))
+    classes = np.unique(np.concatenate([np.asarray(train.true), np.asarray(test.true)]))
 
-    train = _Split(y_train_true, y_train_pred, y_train_proba)
-    test = _Split(y_test_true, y_test_pred, y_test_proba)
     overall_default = _build_overall_table(
         train, test, average, "🎯 Classification Performance Metrics - Default Cutoff (0.5)"
     )
@@ -400,10 +392,10 @@ def classification_results(
 
     train_cutoff = replace(
         train,
-        pred=pd.Series(_apply_cutoff(cast("np.ndarray", y_train_proba), cutoffs)).map(id2label),
+        pred=pd.Series(_apply_cutoff(cast("np.ndarray", train.proba), cutoffs)).map(id2label),
     )
     test_cutoff = replace(
-        test, pred=pd.Series(_apply_cutoff(cast("np.ndarray", y_test_proba), cutoffs)).map(id2label)
+        test, pred=pd.Series(_apply_cutoff(cast("np.ndarray", test.proba), cutoffs)).map(id2label)
     )
     overall_cutoff = _build_overall_table(
         train_cutoff,

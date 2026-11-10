@@ -13,6 +13,7 @@ from xgboost import XGBClassifier
 from kvbiii_ml.modeling.training.base_trainer import (
     VERBOSE_LOG_PERIOD,
     BaseTrainer,
+    FitRows,
     to_metric_proba,
 )
 
@@ -30,7 +31,7 @@ def test_basetrainer_fit_estimator_basic_fitting(sample_dataframe, sample_series
         - Method returns the fitted estimator instance
         - Basic parameters are passed correctly
     """
-    fitted = BaseTrainer.fit_estimator(mock_estimator, sample_dataframe, sample_series)
+    fitted = BaseTrainer.fit_estimator(mock_estimator, FitRows(sample_dataframe, sample_series))
 
     mock_estimator.fit.assert_called_once_with(sample_dataframe, sample_series)
     if fitted is not mock_estimator:
@@ -60,10 +61,8 @@ def test_basetrainer_fit_estimator_handles_eval_set_parameter(sample_dataframe, 
 
         BaseTrainer.fit_estimator(
             mock_estimator,
-            sample_dataframe,
-            sample_series,
-            X_valid=X_valid,
-            y_valid=y_valid,
+            FitRows(sample_dataframe, sample_series),
+            FitRows(X_valid, y_valid),
             verbose=False,
         )
 
@@ -102,10 +101,8 @@ def test_basetrainer_fit_estimator_handles_validation_parameters(sample_datafram
 
         BaseTrainer.fit_estimator(
             mock_estimator,
-            sample_dataframe,
-            sample_series,
-            X_valid=X_valid,
-            y_valid=y_valid,
+            FitRows(sample_dataframe, sample_series),
+            FitRows(X_valid, y_valid),
         )
 
         call_args = mock_estimator.fit.call_args
@@ -136,9 +133,7 @@ def test_basetrainer_fit_estimator_handles_sample_weight_parameter(sample_datafr
 
         BaseTrainer.fit_estimator(
             mock_estimator,
-            sample_dataframe,
-            sample_series,
-            sample_weight=sample_weights,
+            FitRows(sample_dataframe, sample_series, sample_weights),
         )
 
         call_args = mock_estimator.fit.call_args
@@ -167,12 +162,10 @@ def test_basetrainer_fit_and_predict_returns_predictions_for_preds_type(
 
     train_pred, valid_pred, test_pred, fitted_est = BaseTrainer.fit_and_predict(
         mock_estimator,
-        sample_dataframe,
-        sample_series,
-        X_valid,
-        y_valid,
+        FitRows(sample_dataframe, sample_series),
+        FitRows(X_valid, y_valid),
+        X_test,
         metric_type="preds",
-        X_test=X_test,
     )
 
     # Verify predict was called for all datasets
@@ -208,12 +201,9 @@ def test_basetrainer_fit_and_predict_returns_probabilities_for_probs_type(
 
     train_pred, valid_pred, test_pred, _fitted_est = BaseTrainer.fit_and_predict(
         mock_estimator,
-        sample_dataframe,
-        sample_series,
-        X_valid,
-        y_valid,
+        FitRows(sample_dataframe, sample_series),
+        FitRows(X_valid, y_valid),
         metric_type="probs",
-        X_test=None,
     )
 
     # Verify predict_proba was called
@@ -249,10 +239,8 @@ def test_basetrainer_fit_and_predict_raises_error_for_invalid_metric_type(
     ):
         BaseTrainer.fit_and_predict(
             mock_estimator,
-            sample_dataframe,
-            sample_series,
-            X_valid,
-            y_valid,
+            FitRows(sample_dataframe, sample_series),
+            FitRows(X_valid, y_valid),
             metric_type="invalid",
         )
 
@@ -393,7 +381,7 @@ def test_basetrainer_fit_estimator_lgbm_caps_verbose_to_log_period(
     estimator = lightgbm.LGBMClassifier(n_estimators=2, verbose=-1)
 
     with patch.object(type(estimator), "fit", autospec=True) as mock_fit:
-        BaseTrainer.fit_estimator(estimator, X, y, verbose=True)
+        BaseTrainer.fit_estimator(estimator, FitRows(X, y), verbose=True)
         callbacks = mock_fit.call_args.kwargs["callbacks"]
 
     periods = [cb.period for cb in callbacks if hasattr(cb, "period")]
@@ -419,7 +407,7 @@ def test_basetrainer_fit_estimator_xgb_caps_verbose_to_log_period(
     estimator = XGBClassifier(n_estimators=2)
 
     with patch.object(type(estimator), "fit", autospec=True) as mock_fit:
-        BaseTrainer.fit_estimator(estimator, X, y, verbose=True)
+        BaseTrainer.fit_estimator(estimator, FitRows(X, y), verbose=True)
         verbose_kwarg = mock_fit.call_args.kwargs["verbose"]
 
     if verbose_kwarg != VERBOSE_LOG_PERIOD:
@@ -441,7 +429,7 @@ def test_basetrainer_fit_estimator_catboost_caps_verbose_to_log_period(
     estimator = CatBoostClassifier(n_estimators=2, allow_writing_files=False)
 
     with patch.object(type(estimator), "fit", autospec=True) as mock_fit:
-        BaseTrainer.fit_estimator(estimator, X, y, verbose=True)
+        BaseTrainer.fit_estimator(estimator, FitRows(X, y), verbose=True)
         verbose_kwarg = mock_fit.call_args.kwargs["verbose"]
 
     if verbose_kwarg != VERBOSE_LOG_PERIOD:
@@ -468,7 +456,7 @@ def test_basetrainer_fit_estimator_histgb_enables_plain_verbose(
     estimator = HistGradientBoostingClassifier(max_iter=2)
 
     with patch.object(type(estimator), "fit", autospec=True) as mock_fit:
-        BaseTrainer.fit_estimator(estimator, X, y, verbose=True)
+        BaseTrainer.fit_estimator(estimator, FitRows(X, y), verbose=True)
         fitted_self = mock_fit.call_args.args[0]
 
     if fitted_self.get_params()["verbose"] != 1:
@@ -502,7 +490,7 @@ def test_basetrainer_fit_estimator_realigns_cuda_xgb_device_to_cpu(
         devices_at_fit_call.append(self.get_params()["device"])
 
     with patch.object(type(estimator), "fit", autospec=True, side_effect=_record_device_and_fit):
-        fitted = BaseTrainer.fit_estimator(estimator, X, y)
+        fitted = BaseTrainer.fit_estimator(estimator, FitRows(X, y))
     fit_time_device = devices_at_fit_call[0]
 
     if fit_time_device != "cuda":
@@ -528,7 +516,7 @@ def test_basetrainer_fit_estimator_leaves_cpu_xgb_device_untouched(
     estimator = XGBClassifier(n_estimators=2)
 
     with patch.object(type(estimator), "fit", autospec=True):
-        fitted = BaseTrainer.fit_estimator(estimator, X, y)
+        fitted = BaseTrainer.fit_estimator(estimator, FitRows(X, y))
 
     if fitted.get_params()["device"] is not None:
         raise AssertionError(f"Expected device=None, got {fitted.get_params()['device']!r}.")
@@ -566,7 +554,7 @@ def test_basetrainer_fit_estimator_disables_early_stopping_without_eval_set(
     params_before = estimator.get_params()
 
     with pytest.warns(UserWarning, match="early stopping") as record:
-        BaseTrainer.fit_estimator(estimator, X, y)
+        BaseTrainer.fit_estimator(estimator, FitRows(X, y))
 
     if sum("early stopping" in str(w.message) for w in record) != 1:
         raise AssertionError([str(w.message) for w in record])
@@ -594,7 +582,11 @@ def test_basetrainer_fit_estimator_does_not_pass_validation_set_as_x_test(
 
     X = sample_dataframe
     y = pd.Series(np.zeros(len(X)))
-    BaseTrainer.fit_estimator(_XTestEstimator(), X, y, X.iloc[:5], y.iloc[:5])  # ty: ignore[invalid-argument-type]
+    BaseTrainer.fit_estimator(
+        _XTestEstimator(),  # ty: ignore[invalid-argument-type]
+        FitRows(X, y),
+        FitRows(X.iloc[:5], y.iloc[:5]),
+    )
     if received["X_test"] is not None:
         raise AssertionError("validation set was passed as X_test")
 

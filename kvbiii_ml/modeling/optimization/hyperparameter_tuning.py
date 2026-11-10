@@ -13,7 +13,7 @@ from sklearn.model_selection import BaseCrossValidator, KFold, StratifiedKFold, 
 from sklearn.pipeline import Pipeline
 
 from kvbiii_ml._typing import Direction, Estimator
-from kvbiii_ml.modeling.training.base_trainer import BaseTrainer, to_metric_proba
+from kvbiii_ml.modeling.training.base_trainer import BaseTrainer, FitRows, to_metric_proba
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 from kvbiii_ml.modeling.training.oof_model import _get_n_iterations
 
@@ -474,22 +474,20 @@ class RandomSearchCV:
         X: pd.DataFrame,
         y: pd.Series,
         params_grid: ParamsGrid,
-        X_valid: pd.DataFrame | None = None,
-        y_valid: pd.Series | None = None,
+        valid: tuple[pd.DataFrame, pd.Series] | None = None,
     ) -> optuna.study.Study:
         """Run the search and select parameters that provably beat the estimator's own.
 
         Notes:
-        - X_valid: Optional validation features. Together with y_valid, a single hold-out split
-          replaces cross-validation and the search runs single-stage. Defaults to None.
+        - valid: Optional ``(X_valid, y_valid)`` hold-out split. It replaces cross-validation and
+          the search runs single-stage. Defaults to None.
 
         Args:
             estimator (Estimator): Estimator to tune.
             X (pd.DataFrame): Training features.
             y (pd.Series): Training target.
             params_grid (ParamsGrid): Parameter search space.
-            X_valid (pd.DataFrame | None): Hold-out features (with y_valid, replaces CV).
-            y_valid (pd.Series | None): Optional validation target. Defaults to None.
+            valid (tuple[pd.DataFrame, pd.Series] | None): Hold-out (X_valid, y_valid), replaces CV.
 
         Returns:
             optuna.study.Study: The final-stage study. ``self.best_params_`` holds the
@@ -498,12 +496,12 @@ class RandomSearchCV:
         self.params_grid = params_grid
         self._reset_results()
         X, y = self.check_x(X), self.check_y(y)
-        use_holdout = X_valid is not None and y_valid is not None
         previous_verbosity = optuna.logging.get_verbosity()
         optuna.logging.set_verbosity(optuna.logging.WARNING)
         try:
-            self._log_start(use_holdout)
-            if use_holdout:
+            self._log_start(valid is not None)
+            if valid is not None:
+                X_valid, y_valid = valid
                 plan = self._build_holdout_plan(X, y, self.check_x(X_valid), self.check_y(y_valid))
                 shortlist = []
             else:
@@ -804,10 +802,8 @@ class RandomSearchCV:
             fold_estimator.set_params(**fold_params)
             fitted = BaseTrainer.fit_estimator(
                 fold_estimator,
-                fold.x_fit,
-                fold.y_fit,
-                fold.x_es,
-                fold.y_es,
+                FitRows(fold.x_fit, fold.y_fit),
+                FitRows.optional(fold.x_es, fold.y_es),
                 verbose=False,
                 eval_on_train=False,
             )
