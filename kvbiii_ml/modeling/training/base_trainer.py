@@ -1,6 +1,7 @@
 import logging
 import warnings
 from copy import deepcopy
+from dataclasses import dataclass
 from inspect import Signature, signature
 from typing import overload
 
@@ -33,6 +34,45 @@ PROBA_MATRIX_NDIM = 2
 BINARY_N_CLASSES = 2
 TRAIN_VALID_PAIR = 2
 MAX_LISTED_MISSING = 10
+
+
+@dataclass(frozen=True)
+class FitRows:
+    """Features, target, sample weights and offsets of one split handed to ``fit_estimator``."""
+
+    X: pd.DataFrame
+    y: pd.Series
+    weight: pd.Series | np.ndarray | None = None
+    offset: np.ndarray | None = None
+
+    @staticmethod
+    def optional(
+        X: pd.DataFrame | None,
+        y: pd.Series | None,
+        offset: np.ndarray | None = None,
+    ) -> "FitRows | None":
+        """Return the split, or None when its features or target are missing."""
+        if X is None or y is None:
+            return None
+        return FitRows(X, y, offset=offset)
+
+    def split_tail(self, n_rows: int) -> tuple["FitRows", "FitRows"]:
+        """Split off the last ``n_rows`` rows (unweighted) from the rest."""
+        head, tail = slice(None, -n_rows), slice(-n_rows, None)
+        return (
+            FitRows(
+                self.X.iloc[head],
+                self.y.iloc[head],
+                None if self.weight is None else self.weight[head],
+                None if self.offset is None else self.offset[head],
+            ),
+            FitRows(
+                self.X.iloc[tail],
+                self.y.iloc[tail],
+                None,
+                None if self.offset is None else self.offset[tail],
+            ),
+        )
 
 
 def split_offset(
@@ -480,15 +520,11 @@ class BaseTrainer:
     @staticmethod
     def fit_estimator(
         estimator: Estimator,
-        X_train: pd.DataFrame,
-        y_train: pd.Series,
-        X_valid: pd.DataFrame | None = None,
-        y_valid: pd.Series | None = None,
-        sample_weight: pd.Series | np.ndarray | None = None,
+        train: FitRows,
+        valid: FitRows | None = None,
+        *,
         verbose: bool | int | None = None,
         eval_on_train: bool = True,
-        offset_train: np.ndarray | None = None,
-        offset_valid: np.ndarray | None = None,
     ) -> Estimator:
         """Fit the estimator, injecting eval_set and suppressing output for boosting families.
 
@@ -517,40 +553,40 @@ class BaseTrainer:
         the library raise.
 
         Notes:
+        - train.weight: Per-sample training weights, forwarded to estimators whose fit takes them.
         - eval_on_train: Whether the training split is included in eval_set alongside the validation
           split. Boosting libraries score every eval_set entry on every iteration, so including a
           large training split is pure overhead for callers that only early-stop and never read the
           training curve. Defaults to True, preserving the historical behaviour for every existing
           caller.
-        - offset_train: Link-scale offset per training row. Passed as LightGBM ``init_score``,
+        - train.offset: Link-scale offset per training row. Passed as LightGBM ``init_score``,
           XGBoost ``base_margin`` or CatBoost ``baseline``. Defaults to None.
-        - offset_valid: Offset per validation row, passed as ``eval_init_score`` /
+        - valid.offset: Offset per validation row, passed as ``eval_init_score`` /
           ``base_margin_eval_set`` / a CatBoost eval ``Pool`` baseline. Defaults to None. An
           estimator with its own ``offset_column`` (e.g. ``EnsembleModel``) receives both offsets as
           that column of X instead.
 
         Args:
             estimator (Estimator): Estimator to fit.
-            X_train (pd.DataFrame): Training features.
-            y_train (pd.Series): Training target.
-            X_valid (pd.DataFrame | None): Validation features for eval_set. Defaults to None.
-            y_valid (pd.Series | None): Validation target for eval_set. Defaults to None.
-            sample_weight (pd.Series | np.ndarray | None): Per-sample weights. Defaults to None.
+            train (FitRows): Training split.
+            valid (FitRows | None): Validation split for eval_set. Defaults to None.
             verbose (bool | int | None): Verbosity for non-boosting estimators. Defaults to None.
             eval_on_train (bool): Include the training split in eval_set. Defaults to True.
-            offset_train (np.ndarray | None): Link-scale offset per training row. Defaults to None.
-            offset_valid (np.ndarray | None): Offset per validation row. Defaults to None.
 
         Returns:
             Estimator: Fitted estimator instance.
         """
+        X_train, y_train = train.X, train.y
+        X_valid, y_valid = (valid.X, valid.y) if valid is not None else (None, None)
+        sample_weight, offset_train = train.weight, train.offset
+        offset_valid = valid.offset if valid is not None else None
         own_column = getattr(estimator, "offset_column", None)
         if offset_train is not None and own_column is not None:
             X_train = X_train.assign(**{own_column: offset_train})
             if X_valid is not None and offset_valid is not None:
                 X_valid = X_valid.assign(**{own_column: offset_valid})
             offset_train = offset_valid = None
-        if X_valid is None or y_valid is None:
+        if valid is None:
             estimator = BaseTrainer._disable_early_stopping(estimator)
         estimator = BaseTrainer._set_categorical_params(estimator, X_train)
 
@@ -589,33 +625,24 @@ class BaseTrainer:
     @staticmethod
     def fit_and_predict(
         estimator: Estimator,
-        X_train: pd.DataFrame,
-        y_train: pd.Series,
-        X_valid: pd.DataFrame,
-        y_valid: pd.Series,
-        metric_type: str = "preds",
+        train: FitRows,
+        valid: FitRows,
         X_test: pd.DataFrame | None = None,
-        verbose: bool | int | None = False,
-        sample_weight: pd.Series | np.ndarray | None = None,
+        *,
+        metric_type: str = "preds",
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, Estimator]:
         """Fit and produce predictions according to metric_type.
 
         Notes:
-        - sample_weight: Optional per-sample training weights, forwarded to ``fit_estimator`` and
-          from there to any estimator whose ``fit`` accepts ``sample_weight``. Must already be
-          restricted and aligned to ``X_train``; this method does no slicing of its own. Defaults to
-          None.
+        - train.weight: Optional per-sample training weights, forwarded to ``fit_estimator``. Must
+          already be aligned to ``train.X``; this method does no slicing of its own.
 
         Args:
             estimator (Estimator): Estimator to fit.
-            X_train (pd.DataFrame): Training features.
-            y_train (pd.Series): Training target.
-            X_valid (pd.DataFrame): Validation features.
-            y_valid (pd.Series): Validation target.
-            metric_type (str): Prediction mode, either "preds" or "probs". Defaults to "preds".
+            train (FitRows): Training split.
+            valid (FitRows): Validation split.
             X_test (pd.DataFrame | None): Optional test features to predict. Defaults to None.
-            verbose (bool | int | None): Optional verbosity for fitting. Defaults to False.
-            sample_weight (pd.Series | np.ndarray | None): Training weights aligned to X_train.
+            metric_type (str): Prediction mode, either "preds" or "probs". Defaults to "preds".
 
         Returns:
             tuple[np.ndarray, np.ndarray, np.ndarray | None, Estimator]:
@@ -625,23 +652,15 @@ class BaseTrainer:
         Raises:
             ValueError: If metric_type is not 'preds' or 'probs'.
         """
-        fitted_estimator = BaseTrainer.fit_estimator(
-            estimator,
-            X_train,
-            y_train,
-            X_valid,
-            y_valid,
-            sample_weight=sample_weight,
-            verbose=verbose,
-        )
+        fitted_estimator = BaseTrainer.fit_estimator(estimator, train, valid, verbose=False)
 
         if metric_type == "preds":
-            y_train_pred = BaseTrainer.predict(fitted_estimator, X_train)
-            y_valid_pred = BaseTrainer.predict(fitted_estimator, X_valid)
+            y_train_pred = BaseTrainer.predict(fitted_estimator, train.X)
+            y_valid_pred = BaseTrainer.predict(fitted_estimator, valid.X)
             y_test_pred = BaseTrainer.predict(fitted_estimator, X_test)
         elif metric_type == "probs":
-            y_train_pred = BaseTrainer.predict_proba(fitted_estimator, X_train)
-            y_valid_pred = BaseTrainer.predict_proba(fitted_estimator, X_valid)
+            y_train_pred = BaseTrainer.predict_proba(fitted_estimator, train.X)
+            y_valid_pred = BaseTrainer.predict_proba(fitted_estimator, valid.X)
             y_test_pred = BaseTrainer.predict_proba(fitted_estimator, X_test)
         else:
             raise ValueError(f"Unknown metric type '{metric_type}'. Must be 'preds' or 'probs'.")

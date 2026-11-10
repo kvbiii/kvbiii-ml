@@ -23,6 +23,7 @@ from kvbiii_ml.modeling.training.base_trainer import (
     PROBA_MATRIX_NDIM,
     PROBABILITY_THRESHOLD,
     BaseTrainer,
+    FitRows,
     order_x_for_estimator,
     predict_with_offset,
     split_offset,
@@ -41,34 +42,6 @@ class _FoldResult:
     fitted_estimator: Estimator
     fitted_pipeline: Pipeline | None
     test_pred: np.ndarray | None
-
-
-@dataclass(frozen=True)
-class _FoldRows:
-    """Features, target, sample weights and offsets handed to ``fit_estimator``."""
-
-    X: pd.DataFrame
-    y: pd.Series
-    weight: np.ndarray | None
-    offset: np.ndarray | None
-
-    def split_tail(self, n_rows: int) -> tuple["_FoldRows", "_FoldRows"]:
-        """Split off the last ``n_rows`` rows (unweighted) from the rest."""
-        head, tail = slice(None, -n_rows), slice(-n_rows, None)
-        return (
-            _FoldRows(
-                self.X.iloc[head],
-                self.y.iloc[head],
-                None if self.weight is None else self.weight[head],
-                None if self.offset is None else self.offset[head],
-            ),
-            _FoldRows(
-                self.X.iloc[tail],
-                self.y.iloc[tail],
-                None,
-                None if self.offset is None else self.offset[tail],
-            ),
-        )
 
 
 class CrossValidationTrainer(BaseTrainer):
@@ -456,9 +429,9 @@ class CrossValidationTrainer(BaseTrainer):
             y_train=y_train,
         )
 
-        valid_rows = _FoldRows(cast("pd.DataFrame", x_valid_proc), y_valid, None, off_valid)
+        valid_rows = FitRows(cast("pd.DataFrame", x_valid_proc), y_valid, None, off_valid)
         fitted_estimator = self._fit_fold_estimator(
-            estimator, _FoldRows(x_train_proc, y_train, fold_weights, off_train), valid_rows
+            estimator, FitRows(x_train_proc, y_train, fold_weights, off_train), valid_rows
         )
         return _FoldResult(
             train_score=self.metric_fn(
@@ -482,22 +455,14 @@ class CrossValidationTrainer(BaseTrainer):
         )
 
     def _fit_fold_estimator(
-        self, estimator: Estimator, train: _FoldRows, early_stopping: _FoldRows
+        self, estimator: Estimator, train: FitRows, early_stopping: FitRows
     ) -> Estimator:
         """Fit a clone on the fold; with ``early_stopping_holdout`` its last rows early-stop it."""
         if self.early_stopping_holdout is not None:
             n_holdout = max(1, round(len(train.X) * self.early_stopping_holdout))
             train, early_stopping = train.split_tail(n_holdout)
         return self.fit_estimator(
-            self._clone_estimator(estimator),
-            train.X,
-            train.y,
-            early_stopping.X,
-            early_stopping.y,
-            sample_weight=train.weight,
-            verbose=self.verbose,
-            offset_train=train.offset,
-            offset_valid=early_stopping.offset,
+            self._clone_estimator(estimator), train, early_stopping, verbose=self.verbose
         )
 
     def _metric_predictions(

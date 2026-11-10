@@ -140,8 +140,7 @@ def test_randomsearchcv_tune_uses_holdout_when_valid_data_provided(
         X_train,
         y_train,
         params_grid,
-        X_valid=X_valid,
-        y_valid=y_valid,
+        valid=(X_valid, y_valid),
     )
 
     if study.best_value is None:

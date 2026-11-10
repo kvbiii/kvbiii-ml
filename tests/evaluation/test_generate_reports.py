@@ -12,6 +12,7 @@ from sklearn.metrics import (
 )
 
 from kvbiii_ml.evaluation.generate_reports import (
+    SplitResults,
     classification_results,
     regression_results,
 )
@@ -102,10 +103,8 @@ def test_classification_results_returns_two_stylers_without_cutoffs(
     """
     data = binary_classification_report_data
     result = classification_results(
-        data["y_train_true"],
-        data["y_train_pred"],
-        data["y_test_true"],
-        data["y_test_pred"],
+        SplitResults(data["y_train_true"], data["y_train_pred"]),
+        SplitResults(data["y_test_true"], data["y_test_pred"]),
     )
 
     if len(result) != 2:
@@ -128,12 +127,8 @@ def test_classification_results_returns_four_stylers_with_cutoffs(
     """
     data = binary_classification_report_data
     result = classification_results(
-        data["y_train_true"],
-        data["y_train_pred"],
-        data["y_test_true"],
-        data["y_test_pred"],
-        y_train_proba=data["y_train_proba"],
-        y_test_proba=data["y_test_proba"],
+        SplitResults(data["y_train_true"], data["y_train_pred"], data["y_train_proba"]),
+        SplitResults(data["y_test_true"], data["y_test_pred"], data["y_test_proba"]),
         id2label=data["id2label"],
         cutoffs=0.6,
     )
@@ -157,10 +152,8 @@ def test_classification_results_raises_valueerror_when_cutoffs_missing_dependenc
 
     with pytest.raises(ValueError, match="Probabilities and class labels are required"):
         classification_results(
-            data["y_train_true"],
-            data["y_train_pred"],
-            data["y_test_true"],
-            data["y_test_pred"],
+            SplitResults(data["y_train_true"], data["y_train_pred"]),
+            SplitResults(data["y_test_true"], data["y_test_pred"]),
             cutoffs=0.5,
         )
 
@@ -178,10 +171,8 @@ def test_classification_results_overall_accuracy_matches_sklearn(
     """
     data = binary_classification_report_data
     overall_default, _per_class_default = classification_results(
-        data["y_train_true"],
-        data["y_train_pred"],
-        data["y_test_true"],
-        data["y_test_pred"],
+        SplitResults(data["y_train_true"], data["y_train_pred"]),
+        SplitResults(data["y_test_true"], data["y_test_pred"]),
     )
     df = overall_default.data
 
@@ -213,12 +204,8 @@ def test_classification_results_degrades_roc_auc_and_log_loss_to_nan_for_single_
     id2label = {0: "neg", 1: "pos"}
 
     overall_default, _per_class_default = classification_results(
-        y_train_true,
-        y_train_pred,
-        y_test_true,
-        y_test_pred,
-        y_train_proba=y_train_proba,
-        y_test_proba=y_test_proba,
+        SplitResults(y_train_true, y_train_pred, y_train_proba),
+        SplitResults(y_test_true, y_test_pred, y_test_proba),
         id2label=id2label,
     )
     df = overall_default.data
