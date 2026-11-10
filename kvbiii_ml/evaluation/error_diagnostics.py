@@ -198,27 +198,7 @@ def get_top_classification_errors(
         y_pred_proba = np.vstack([1 - y_pred_proba, y_pred_proba]).T
     if class_id < 0 or class_id >= y_pred_proba.shape[1]:
         raise ValueError(f"class_id {class_id} is out of bounds for predictions")
-    if cutoff is not None:
-        if isinstance(cutoff, (int, float)):
-            predicted_classes = (y_pred_proba[:, 1] >= cutoff).astype(int)
-            predicted_confidences = np.where(
-                predicted_classes == 1, y_pred_proba[:, 1], y_pred_proba[:, 0]
-            )
-        else:
-            cutoff_array = np.array(cutoff)
-            if y_pred_proba.shape[1] != len(cutoff_array):
-                raise ValueError(
-                    f"Number of cutoffs ({len(cutoff_array)}) must match "
-                    f"number of classes ({y_pred_proba.shape[1]})"
-                )
-            normalized = y_pred_proba / cutoff_array
-            predicted_classes = np.argmax(normalized, axis=1)
-            predicted_confidences = y_pred_proba[
-                np.arange(len(predicted_classes)), predicted_classes
-            ]
-    else:
-        predicted_classes = np.argmax(y_pred_proba, axis=1)
-        predicted_confidences = np.max(y_pred_proba, axis=1)
+    predicted_classes, predicted_confidences = _predict_with_cutoff(y_pred_proba, cutoff)
 
     true_class_probs = y_pred_proba[np.arange(len(y_true)), y_true_indices]
     is_true_class = y_true_indices == class_id
@@ -229,26 +209,50 @@ def get_top_classification_errors(
     error_indices = np.where(false_negatives)[0]
     error_magnitudes = predicted_confidences[error_indices] - true_class_probs[error_indices]
     top_error_pos = np.argsort(error_magnitudes)[::-1][:top_n]
-    selected_indices = error_indices[top_error_pos]
+    return pd.DataFrame(
+        [
+            pd.Series(
+                {
+                    "True Class": id2label.get(y_true_indices.iloc[idx], y_true_indices.iloc[idx]),
+                    "Predicted Class": id2label.get(predicted_classes[idx], predicted_classes[idx]),
+                    "Predicted Class Probability": predicted_confidences[idx],
+                    "True Class Probability": true_class_probs[idx],
+                    "Error": float(1 - true_class_probs[idx]),
+                },
+                name=y_true.index[idx],
+            )
+            for idx in error_indices[top_error_pos]
+        ]
+    )
 
-    df_data = []
-    for idx in selected_indices:
-        true_class_idx = y_true_indices.iloc[idx]
-        pred_class_idx = predicted_classes[idx]
-        row = pd.Series(
-            {
-                "True Class": id2label.get(true_class_idx, true_class_idx),
-                "Predicted Class": id2label.get(pred_class_idx, pred_class_idx),
-                "Predicted Class Probability": predicted_confidences[idx],
-                "True Class Probability": true_class_probs[idx],
-                "Error": float(1 - true_class_probs[idx]),
-            },
-            name=y_true.index[idx],
-        )
-        df_data.append(row)
 
-    df = pd.DataFrame(df_data)
-    return df
+def _predict_with_cutoff(
+    y_pred_proba: np.ndarray, cutoff: float | list[float] | None
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return the predicted class and its probability per row under the cutoff rule.
+
+    - None: argmax of the probabilities.
+    - A float (binary): class 1 when its probability reaches the cutoff.
+    - A list (one per class): argmax of the probabilities divided by the cutoffs.
+
+    Raises:
+        ValueError: If the number of cutoffs does not match the number of classes.
+    """
+    rows = np.arange(len(y_pred_proba))
+    if cutoff is None:
+        predicted_classes = np.argmax(y_pred_proba, axis=1)
+    elif isinstance(cutoff, (int, float)):
+        predicted_classes = (y_pred_proba[:, 1] >= cutoff).astype(int)
+    else:
+        cutoff_array = np.array(cutoff)
+        if y_pred_proba.shape[1] != len(cutoff_array):
+            raise ValueError(
+                f"Number of cutoffs ({len(cutoff_array)}) must match "
+                f"number of classes ({y_pred_proba.shape[1]})"
+            )
+        predicted_classes = np.argmax(y_pred_proba / cutoff_array, axis=1)
+    return predicted_classes, y_pred_proba[rows, predicted_classes]
 
 
 def display_classification_errors(errors_by_class: dict, id2label: dict[int, str]) -> None:
