@@ -65,6 +65,7 @@ class CaseNormalizer(BaseEstimator, TransformerMixin):
         Returns:
             CaseNormalizer: Fitted transformer.
         """
+        self._validate_init_params()
         self.input_features_ = df.columns
         if self.features_names is None:
             self.features_names_ = df.select_dtypes(

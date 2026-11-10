@@ -131,3 +131,10 @@ def test_case_normalizer_every_mode_keeps_missing_and_non_strings(normalization,
     out = CaseNormalizer(features_names=["txt"], normalization=normalization).fit(df).transform(df)
     if out["txt"].tolist()[:2] != expected or not pd.isna(out["txt"][2]) or out["txt"][3] != "5":
         raise AssertionError(out["txt"].tolist())
+
+
+def test_case_normalizer_fit_rejects_invalid_normalization_from_set_params() -> None:
+    """set_params bypasses __init__ validation, so fit must reject an unsupported mode."""
+    normalizer = CaseNormalizer().set_params(normalization="invalid")
+    with pytest.raises(ValueError, match="normalization must be one of"):
+        normalizer.fit(pd.DataFrame({"txt": ["A"]}))
