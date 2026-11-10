@@ -3,10 +3,13 @@ from typing import Any
 
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.utils.validation import check_is_fitted
 
 
 class DtypesConverter(BaseEstimator, TransformerMixin):
     """Convert DataFrame columns to specified dtypes."""
+
+    dtype_map_: dict[str, Any]
 
     def __init__(self, dtype_map: dict[str, Any] | None = None) -> None:
         """
@@ -16,7 +19,6 @@ class DtypesConverter(BaseEstimator, TransformerMixin):
             dtype_map (dict[str, Any] | None): Column to dtype mapping. None learns dtypes at fit.
         """
         self.dtype_map = dtype_map
-        self.dtype_map_: dict[str, Any] = None  # ty: ignore[invalid-assignment]
 
     def fit(self, df: pd.DataFrame, _y: pd.Series | None = None) -> "DtypesConverter":
         """
@@ -38,7 +40,7 @@ class DtypesConverter(BaseEstimator, TransformerMixin):
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Transform data by converting columns to specified dtypes.
+        Convert columns to the fitted dtypes, raising NotFittedError before fit.
 
         Args:
             df (pd.DataFrame): Data to transform.
@@ -46,6 +48,7 @@ class DtypesConverter(BaseEstimator, TransformerMixin):
         Returns:
             pd.DataFrame: Transformed data with converted dtypes.
         """
+        check_is_fitted(self, "dtype_map_")
         df = df.copy()
         for column, target_dtype in self.dtype_map_.items():
             if column not in df.columns:

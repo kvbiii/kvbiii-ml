@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from kvbiii_ml._validation import check_fitted
 from kvbiii_ml.data_processing.eda.data_analysis import DataAnalyzer
 
 
@@ -12,6 +13,9 @@ class MutualInformationFiltering:
     This filter computes Mutual Information (MI) between each feature and the
     target, and selects features whose MI is at least a given threshold.
     """
+
+    selected_features_: list[str]
+    threshold_border_: float | None
 
     def __init__(
         self,
@@ -41,8 +45,6 @@ class MutualInformationFiltering:
         self.threshold = threshold
         self.keep_top_k = keep_top_k
         self.verbose = verbose
-        self.selected_features_ = []
-        self.threshold_border_ = None
 
     def fit(self, X: pd.DataFrame, y: pd.Series | np.ndarray) -> MutualInformationFiltering:
         """Fit the filter by computing MI and selecting features.
@@ -84,19 +86,15 @@ class MutualInformationFiltering:
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        """Select features whose MI met the threshold during fit.
+        """Select the features kept during fit, raising NotFittedError before fit.
 
         Args:
             X (pd.DataFrame): Input features.
 
         Returns:
             pd.DataFrame: Filtered DataFrame containing only selected features.
-
-        Raises:
-            ValueError: If the filter has not been fitted.
         """
-        if not self.selected_features_:
-            raise ValueError("The filter has not been fitted yet. Call fit() first.")
+        check_fitted(self, "selected_features_")
         return X[self.selected_features_]
 
     def fit_transform(self, X: pd.DataFrame, y: pd.Series | np.ndarray) -> pd.DataFrame:

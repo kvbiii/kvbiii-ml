@@ -9,6 +9,8 @@ import pandas as pd
 from scipy.stats import chi2_contingency, ks_2samp
 from sklearn.feature_selection import mutual_info_classif
 
+from kvbiii_ml._validation import check_fitted
+
 try:  # optional interactive display
     from IPython.display import display
 except ImportError:  # pragma: no cover
@@ -27,6 +29,11 @@ KS_SIGNIFICANCE_LEVEL = 0.05
 class StatisticalAssociationImputer:
     """Impute missing values using association-ranked grouping statistics."""
 
+    rankings: pd.DataFrame
+    bin_edges: dict[str, np.ndarray]
+    categorical_columns: list[str]
+    impute_stats: dict[str, dict[str, Any]]
+
     def __init__(
         self,
         metrics: list[str] | None = None,
@@ -44,10 +51,6 @@ class StatisticalAssociationImputer:
         self.metrics = metrics or ["cramers_v", "mutual_info", "theils_u"]
         self.top_n = top_n
         self.verbose = verbose
-        self.rankings = None
-        self.bin_edges = {}
-        self.categorical_columns: list[str] = None  # ty: ignore[invalid-assignment]
-        self.impute_stats: dict[str, dict[str, Any]] | None = None
 
     def fit(self, df: pd.DataFrame) -> StatisticalAssociationImputer:
         """
@@ -101,19 +104,15 @@ class StatisticalAssociationImputer:
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Impute missing values in new data using learned statistics.
+        Impute missing values with the learned statistics, raising NotFittedError before fit.
 
         Args:
             df (pd.DataFrame): Data to impute.
 
         Returns:
             pd.DataFrame: Dataframe with missing values imputed.
-
-        Raises:
-            ValueError: If fit was not called before transform.
         """
-        if self.impute_stats is None:
-            raise ValueError("Must call fit() first to learn binning and grouping.")
+        check_fitted(self, "impute_stats")
 
         df = df.copy()
         columns_with_missing = df.columns[df.isna().any()].tolist()
@@ -338,7 +337,7 @@ class StatisticalAssociationImputer:
         Raises:
             ValueError: If rank_metrics was not called before selection.
         """
-        if self.rankings is None:
+        if not hasattr(self, "rankings"):
             raise ValueError("Run rank_metrics first.")
         selected_cols = self.rankings.head(self.top_n).index.tolist()
         if self.verbose:

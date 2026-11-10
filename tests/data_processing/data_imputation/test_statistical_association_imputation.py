@@ -47,6 +47,7 @@ def test_rank_metrics_identifies_top_related_features(dataset_with_missing):
     imputer = StatisticalAssociationImputer(metrics=["mutual_info", "cramers_v"], top_n=3)
     # rank_metrics expects categorical_columns to be identified (normally done in fit)
     imputer.categorical_columns = imputer._get_categorical_columns(dataset_with_missing)
+    imputer.bin_edges = {}
     rankings = imputer.rank_metrics(dataset_with_missing, "feature_with_missing")
     # Highly correlated feature should appear before independent feature
     ordered = rankings.index.tolist()
@@ -168,5 +169,6 @@ def test_rank_metrics_pins_scores_and_drops_metrics_without_scores(extra_columns
     df.loc[:5, "a"] = np.nan
     imputer = StatisticalAssociationImputer()
     imputer.categorical_columns = imputer._get_categorical_columns(df)
+    imputer.bin_edges = {}
     if imputer.rank_metrics(df, "t").round(6).to_dict() != expected:
         raise AssertionError()

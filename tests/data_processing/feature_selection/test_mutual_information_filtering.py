@@ -5,6 +5,7 @@ from unittest.mock import patch
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.exceptions import NotFittedError
 
 from kvbiii_ml.data_processing.feature_selection.mutual_information_filtering import (
     MutualInformationFiltering,
@@ -86,6 +87,7 @@ def test_mutualinformationfiltering_init_creates_classification_instance():
         - Instance is created with classification problem type
         - Default parameters are set correctly
         - MI computation parameters are configured appropriately
+        - No fitted attribute exists before fit
     """
     mif = MutualInformationFiltering(problem_type="classification")
 
@@ -97,9 +99,7 @@ def test_mutualinformationfiltering_init_creates_classification_instance():
         raise AssertionError()
     if mif.verbose is not False:
         raise AssertionError()
-    if mif.selected_features_ != []:
-        raise AssertionError()
-    if mif.threshold_border_ is not None:
+    if hasattr(mif, "selected_features_") or hasattr(mif, "threshold_border_"):
         raise AssertionError()
 
     # Check MI computation parameters
@@ -303,13 +303,12 @@ def test_mutualinformationfiltering_transform_raises_error_when_not_fitted():
     """Tests transform method raises error when called before fitting.
 
     Asserts:
-        - ValueError is raised when transform called on unfitted instance
-        - Error message provides clear guidance about required fitting
+        - NotFittedError is raised when transform called on unfitted instance
     """
     X = pd.DataFrame({"feature": [1, 2, 3]})
     mif = MutualInformationFiltering(problem_type="classification")
 
-    with pytest.raises(ValueError, match=r"The filter has not been fitted yet. Call fit\(\) first"):
+    with pytest.raises(NotFittedError):
         mif.transform(X)
 
 
@@ -418,9 +417,8 @@ def test_mutualinformationfiltering_handles_empty_feature_selection(
         classification_feature_data (tuple): Feature data and classification target
 
     Asserts:
-        - Empty feature selection results in error on transform
         - fit() completes without error even with empty selection
-        - Instance state remains consistent with empty selection
+        - transform returns a frame with no columns and every row
     """
     X, y = classification_feature_data
     mif = MutualInformationFiltering(
@@ -431,9 +429,9 @@ def test_mutualinformationfiltering_handles_empty_feature_selection(
     if len(mif.selected_features_) != 0:
         raise AssertionError()
 
-    # Transform should raise error since implementation treats empty selection as not fitted
-    with pytest.raises(ValueError, match="The filter has not been fitted yet"):
-        mif.transform(X)
+    transformed = mif.transform(X)
+    if transformed.shape != (len(X), 0):
+        raise AssertionError()
 
 
 if __name__ == "__main__":
