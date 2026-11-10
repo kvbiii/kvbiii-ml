@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from sklearn.base import BaseEstimator
+from sklearn.exceptions import NotFittedError
 from sklearn.linear_model import SGDClassifier
 from sklearn.model_selection import KFold
 from sklearn.pipeline import Pipeline
@@ -26,6 +27,7 @@ def test_oofmodel_init_creates_classification_instance(logistic_regression_estim
         - Instance is created with classification problem type
         - Cross-validator and estimator are stored correctly
         - Metric function and type are properly configured
+        - No fitted attribute exists before fit
     """
     cv_trainer = CrossValidationTrainer(
         metric_name="Accuracy", problem_type="classification", cv=kfold_cv
@@ -47,7 +49,7 @@ def test_oofmodel_init_creates_classification_instance(logistic_regression_estim
         raise AssertionError()
     if oof.metric_type not in ["preds", "probs"]:
         raise AssertionError()
-    if len(oof.fitted_estimators_) != 0:
+    if hasattr(oof, "fitted_estimators_"):
         raise AssertionError()
 
 
@@ -61,7 +63,7 @@ def test_oofmodel_init_creates_regression_instance(logistic_regression_estimator
     Asserts:
         - Instance is created with regression problem type
         - Regression metrics are properly configured
-        - Instance state is correctly initialized
+        - No fitted attribute exists before fit
     """
     cv_trainer = CrossValidationTrainer(metric_name="MAE", problem_type="regression", cv=kfold_cv)
 
@@ -75,7 +77,7 @@ def test_oofmodel_init_creates_regression_instance(logistic_regression_estimator
         raise AssertionError()
     if oof.cross_validator.metric_name != "MAE":
         raise AssertionError()
-    if len(oof.fitted_estimators_) != 0:
+    if hasattr(oof, "fitted_estimators_"):
         raise AssertionError()
 
 
@@ -303,8 +305,7 @@ def test_oofmodel_predict_raises_error_when_not_fitted(
         kfold_cv (KFold): Cross-validation splitter
 
     Asserts:
-        - RuntimeError is raised when predict called on unfitted model
-        - Error message provides clear guidance about required fitting
+        - NotFittedError is raised when predict called on unfitted model
     """
     X, _y = binary_classification_data
     cv_trainer = CrossValidationTrainer(
@@ -317,7 +318,7 @@ def test_oofmodel_predict_raises_error_when_not_fitted(
         problem_type="classification",
     )
 
-    with pytest.raises(RuntimeError, match="OOFModel must be fitted before calling predict"):
+    with pytest.raises(NotFittedError, match="OOFModel instance is not fitted yet"):
         oof.predict(X)
 
 

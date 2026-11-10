@@ -9,6 +9,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 
 from kvbiii_ml._typing import Estimator
+from kvbiii_ml._validation import check_fitted
 from kvbiii_ml.modeling.training.base_trainer import BaseTrainer, FitRows
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 from kvbiii_ml.modeling.training.oof_model import (
@@ -43,6 +44,10 @@ class CalibratedModel:
     supported identically.
     """
 
+    classes_: np.ndarray
+    calibrator_: IsotonicRegression | LogisticRegression | list
+    fitted_estimator_: Estimator
+
     def __init__(
         self,
         estimator: Estimator,
@@ -75,10 +80,6 @@ class CalibratedModel:
         self.calibration_method = calibration_method
         self.calibration_size = calibration_size
         self.seed = seed
-
-        self.classes_: np.ndarray = None  # ty: ignore[invalid-assignment]
-        self.calibrator_: IsotonicRegression | LogisticRegression | list = None  # ty: ignore[invalid-assignment]
-        self.fitted_estimator_: Estimator | None = None
 
     def fit(
         self,
@@ -137,22 +138,19 @@ class CalibratedModel:
         Returns:
             np.ndarray: Predicted class labels of shape (n_samples,).
         """
-        return self.classes_[np.argmax(self.predict_proba(X), axis=1)]
+        probas = self.predict_proba(X)
+        return self.classes_[np.argmax(probas, axis=1)]
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
-        """Return calibrated class probabilities from the full-data estimator.
+        """Return calibrated probabilities of the full-data estimator; NotFittedError before fit.
 
         Args:
             X (pd.DataFrame): Features to score.
 
         Returns:
             np.ndarray: Calibrated probabilities of shape (n_samples, n_classes).
-
-        Raises:
-            RuntimeError: If called before fit().
         """
-        if self.fitted_estimator_ is None:
-            raise RuntimeError("CalibratedModel must be fitted before calling predict_proba().")
+        check_fitted(self, "fitted_estimator_")
 
         x_ord = CrossValidationTrainer._order_x_for_estimator(X, self.fitted_estimator_)  # noqa: SLF001
         raw = self._ensure_proba_matrix(self.fitted_estimator_.predict_proba(x_ord))

@@ -10,8 +10,10 @@ import pandas as pd
 import pytest
 from lightgbm import LGBMRegressor
 from sklearn.base import clone, is_classifier, is_regressor
+from sklearn.exceptions import NotFittedError
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.tree import DecisionTreeRegressor
+from sklearn.utils.validation import check_is_fitted
 from xgboost import XGBRegressor
 
 from kvbiii_ml.modeling.training.ensemble_model import EnsembleModel
@@ -179,8 +181,9 @@ def test_ensemblemodel_predict_combines_estimator_predictions(mock_estimators):
         weights=[0.2, 0.5, 0.3],
         problem_type="classification",
     )
-    # Need to mark as fitted to bypass internal fit requirement
     ensemble.fitted_estimators_ = mock_estimators
+    ensemble.fitted_meta_learner_ = None
+    ensemble.classes_ = np.array([0, 1])
     preds = ensemble.predict(X)
     if preds.shape[0] != X.shape[0]:
         raise AssertionError()
@@ -210,6 +213,7 @@ def test_ensemblemodel_predict_proba_computes_weighted_probabilities(mock_estima
         m.feature_names_in_ = cols
         m.feature_names_ = cols
     ensemble.fitted_estimators_ = mock_estimators
+    ensemble.fitted_meta_learner_ = None
     probabilities = ensemble.predict_proba(X)
 
     # Check shape
@@ -254,6 +258,7 @@ def test_ensemblemodel_predict_for_regression_averages_predictions(mock_estimato
         m.feature_names_in_ = cols
         m.feature_names_ = cols
     ensemble.fitted_estimators_ = mock_estimators
+    ensemble.fitted_meta_learner_ = None
     predictions = ensemble.predict(X)
 
     if len(predictions) != len(X):
@@ -527,3 +532,17 @@ def test_ensemblemodel_offset_column_matches_hand_rolled_lgb_train_with_init_sco
         raise AssertionError(np.abs(ensemble.predict(X) - expected).max())
     if "log_exposure" in ensemble.fitted_estimators_[0].feature_name_:  # ty: ignore[unresolved-attribute]
         raise AssertionError("offset used as a feature")
+
+
+def test_ensemblemodel_is_not_fitted_before_fit():
+    """Tests an unfitted ensemble reports itself unfitted to callers and to sklearn.
+
+    Asserts:
+        - predict raises NotFittedError before fit
+        - sklearn's check_is_fitted raises NotFittedError (no fitted attribute set in __init__)
+    """
+    ensemble = EnsembleModel([LogisticRegression()], problem_type="classification")
+    with pytest.raises(NotFittedError):
+        ensemble.predict(pd.DataFrame({"a": [0.0, 1.0]}))
+    with pytest.raises(NotFittedError):
+        check_is_fitted(ensemble)

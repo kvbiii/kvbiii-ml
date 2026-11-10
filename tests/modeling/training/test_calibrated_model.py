@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.exceptions import NotFittedError
 from sklearn.linear_model import LogisticRegression
 
 from kvbiii_ml.modeling.training.calibrated_model import CalibratedModel
@@ -76,10 +77,10 @@ def test_calibratedmodel_predict_proba_raises_before_fit(logistic_regression_est
         logistic_regression_estimator (LogisticRegression): Estimator to wrap.
 
     Asserts:
-        - RuntimeError is raised when predict_proba is called on an unfitted instance.
+        - NotFittedError is raised when predict_proba is called on an unfitted instance.
     """
     model = CalibratedModel(estimator=logistic_regression_estimator)
-    with pytest.raises(RuntimeError, match="fitted"):
+    with pytest.raises(NotFittedError, match="not fitted yet"):
         model.predict_proba(pd.DataFrame({"feature_0": [0.1, 0.2]}))
 
 
@@ -90,11 +91,11 @@ def test_calibratedmodel_predict_raises_before_fit(logistic_regression_estimator
         logistic_regression_estimator (LogisticRegression): Estimator to wrap.
 
     Asserts:
-        - RuntimeError is raised when predict is called on an unfitted instance,
+        - NotFittedError is raised when predict is called on an unfitted instance,
           propagated from the underlying predict_proba() guard.
     """
     model = CalibratedModel(estimator=logistic_regression_estimator)
-    with pytest.raises(RuntimeError, match="fitted"):
+    with pytest.raises(NotFittedError, match="not fitted yet"):
         model.predict(pd.DataFrame({"feature_0": [0.1, 0.2]}))
 
 
