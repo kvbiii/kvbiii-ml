@@ -33,6 +33,10 @@ class ModelImportanceFiltering:
         "importance_score": float,
     }
 
+    selected_features_: list[str]
+    importance_scores_: dict[str, float]
+    all_processed_features: list[str]
+
     def __init__(  # noqa: PLR0913
         self,
         estimator: Estimator,
@@ -60,9 +64,6 @@ class ModelImportanceFiltering:
         self.verbose = verbose
 
         self.metric_direction = self.cross_validator.metric_direction
-        self.selected_features_: list[str] = []
-        self.importance_scores_: dict[str, float] = {}
-        self.all_processed_features: list[str] = []
         self._validate_options()
 
     def _validate_options(self) -> None:

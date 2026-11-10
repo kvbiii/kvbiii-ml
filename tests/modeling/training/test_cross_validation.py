@@ -11,6 +11,7 @@ from catboost import CatBoostRegressor
 from lightgbm import LGBMRegressor
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.dummy import DummyClassifier
+from sklearn.exceptions import NotFittedError
 from sklearn.linear_model import LogisticRegression, SGDClassifier
 from sklearn.model_selection import KFold
 from sklearn.pipeline import Pipeline
@@ -265,13 +266,40 @@ def test_crossvalidationtrainer_prediction_methods_raise_before_fit(method_name)
         method_name (str): Name of the prediction method under test.
 
     Asserts:
-        - RuntimeError is raised when the method is called before fit().
+        - NotFittedError is raised when the method is called before fit().
     """
     trainer = CrossValidationTrainer(problem_type="classification", metric_name="Accuracy")
     X = pd.DataFrame({"feature": [1, 2, 3]})
 
-    with pytest.raises(RuntimeError, match="must be fitted before calling"):
+    with pytest.raises(NotFittedError):
         getattr(trainer, method_name)(X)
+
+
+class _FailingClassifier(DummyClassifier):
+    """DummyClassifier whose fit always raises."""
+
+    def fit(self, *_args: object, **_kwargs: object) -> "_FailingClassifier":
+        """Raise to simulate a fold that cannot be trained."""
+        raise ValueError("cannot fit")
+
+
+def test_crossvalidationtrainer_failed_first_fit_leaves_trainer_unfitted():
+    """Tests a fit that fails in a fold stores no fold results.
+
+    Asserts:
+        - The fold error propagates from fit
+        - predict then raises NotFittedError instead of averaging zero folds
+    """
+    trainer = CrossValidationTrainer(
+        problem_type="classification", metric_name="Accuracy", cv=KFold(n_splits=2)
+    )
+    X = pd.DataFrame({"feature": [1.0, 2.0, 3.0, 4.0]})
+    y = pd.Series([0, 1, 0, 1])
+
+    with pytest.raises(ValueError, match="cannot fit"):
+        trainer.fit(_FailingClassifier(), X, y)
+    with pytest.raises(NotFittedError):
+        trainer.predict(X)
 
 
 def test_crossvalidationtrainer_predict_proba_raises_valueerror_for_regression():

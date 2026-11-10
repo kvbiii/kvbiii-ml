@@ -12,6 +12,7 @@ from sklearn.pipeline import Pipeline
 from tqdm import tqdm
 
 from kvbiii_ml._typing import Estimator
+from kvbiii_ml._validation import check_fitted
 from kvbiii_ml.evaluation.custom_metrics_handler import CustomMetricsHandler
 from kvbiii_ml.evaluation.metrics import (
     METRICS,
@@ -51,6 +52,11 @@ class CrossValidationTrainer(BaseTrainer):
     sklearn Pipeline inside each fold to avoid data leakage.  The pipeline is
     cloned and re-fitted on each fold's training split independently.
     """
+
+    train_scores_: list[float]
+    valid_scores_: list[float]
+    fitted_estimators_: list[Estimator]
+    fitted_pipelines_: list[Pipeline | None]
 
     def __init__(  # noqa: PLR0913
         self,
@@ -172,11 +178,6 @@ class CrossValidationTrainer(BaseTrainer):
         self.fit_verbose = self._resolve_fit_verbose(verbose)
 
         self.validate_pipeline()
-
-        self.train_scores_: list[float] = []
-        self.valid_scores_: list[float] = []
-        self.fitted_estimators_: list[Estimator] = []
-        self.fitted_pipelines_: list[Pipeline | None] = []
 
     @staticmethod
     def _resolve_fit_verbose(verbose: bool | int) -> bool | int | None:
@@ -319,11 +320,6 @@ class CrossValidationTrainer(BaseTrainer):
                 ``argmax`` (or threshold column 1) to get labels. For regression they
                 are the averaged ``predict`` values.
         """
-        self.train_scores_.clear()
-        self.valid_scores_.clear()
-        self.fitted_estimators_.clear()
-        self.fitted_pipelines_.clear()
-
         active_pipeline = (
             preprocessing_pipeline_override
             if preprocessing_pipeline_override is not None
@@ -366,14 +362,14 @@ class CrossValidationTrainer(BaseTrainer):
             if progress_bar is not None:
                 progress_bar.close()
 
+        self.train_scores_ = [result.train_score for result in fold_results]
+        self.valid_scores_ = [result.valid_score for result in fold_results]
+        self.fitted_estimators_ = [result.fitted_estimator for result in fold_results]
+        self.fitted_pipelines_ = [result.fitted_pipeline for result in fold_results]
+
         test_pred_sum: np.ndarray | None = None
         n_folds_for_test = 0
         for fold, result in enumerate(fold_results, start=1):
-            self.train_scores_.append(result.train_score)
-            self.valid_scores_.append(result.valid_score)
-            self.fitted_estimators_.append(result.fitted_estimator)
-            self.fitted_pipelines_.append(result.fitted_pipeline)
-
             if result.test_pred is not None:
                 fold_test_pred = np.asarray(result.test_pred, dtype=float)
                 if test_pred_sum is None:
@@ -516,7 +512,7 @@ class CrossValidationTrainer(BaseTrainer):
         return weights
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:  # ty: ignore[invalid-method-override]
-        """Predict using averaged outputs across fitted fold estimators.
+        """Predict with the averaged fold estimators, raising NotFittedError before fit.
 
         Applies each fold's fitted pipeline to X before calling the estimator,
         then averages predictions across folds.
@@ -526,12 +522,8 @@ class CrossValidationTrainer(BaseTrainer):
 
         Returns:
             np.ndarray: Predicted labels (classification) or values (regression).
-
-        Raises:
-            RuntimeError: If called before fitting.
         """
-        if not self.fitted_estimators_:
-            raise RuntimeError("CrossValidationTrainer must be fitted before calling predict().")
+        check_fitted(self, "fitted_estimators_")
 
         X, offset = split_offset(X, self.offset_column)
         preds = []
@@ -556,7 +548,7 @@ class CrossValidationTrainer(BaseTrainer):
         return avg
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:  # ty: ignore[invalid-method-override]
-        """Predict class probabilities by averaging fold estimator probabilities.
+        """Average the fold estimators' class probabilities; NotFittedError before fit.
 
         Applies each fold's fitted pipeline to X before calling the estimator.
 
@@ -568,15 +560,11 @@ class CrossValidationTrainer(BaseTrainer):
                 (n_samples,) for binary.
 
         Raises:
-            RuntimeError: If called before fitting.
             ValueError: If called for a regression problem.
         """
         if self.problem_type != "classification":
             raise ValueError("predict_proba is only available for classification problems.")
-        if not self.fitted_estimators_:
-            raise RuntimeError(
-                "CrossValidationTrainer must be fitted before calling predict_proba()."
-            )
+        check_fitted(self, "fitted_estimators_")
 
         X, offset = split_offset(X, self.offset_column)
         probs = []
@@ -590,7 +578,7 @@ class CrossValidationTrainer(BaseTrainer):
         return np.asarray(probs, dtype=float).mean(axis=0)
 
     def predict_with_confidence(self, X: pd.DataFrame) -> dict[str, np.ndarray]:
-        """Predict with uncertainty estimates aggregated across folds.
+        """Predict with uncertainty estimates across folds, raising NotFittedError before fit.
 
         Applies each fold's fitted pipeline before calling the estimator.
         For regression: returns mean prediction, std, and 95% confidence interval.
@@ -604,13 +592,9 @@ class CrossValidationTrainer(BaseTrainer):
             dict[str, np.ndarray]: Prediction outputs and uncertainty summaries.
 
         Raises:
-            RuntimeError: If called before fitting.
             ValueError: If classification estimators lack predict_proba.
         """
-        if not self.fitted_estimators_:
-            raise RuntimeError(
-                "CrossValidationTrainer must be fitted before calling predict_with_confidence()."
-            )
+        check_fitted(self, "fitted_estimators_")
 
         X, offset = split_offset(X, self.offset_column)
         if self.problem_type == "regression":
