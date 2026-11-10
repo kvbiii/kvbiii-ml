@@ -91,79 +91,21 @@ class ShapRecursiveFeatureElimination:
         if missing_protected:
             raise ValueError(f"Protected features not found in dataset: {missing_protected}")
 
+        avg_base_metric, _ = self._cross_val_base_metric(X, cast("pd.Series", y), current_features)
         summary_df: RfeSummary = {
             "selected_features": [],
             "selected_features_names": [],
-            "history": pd.DataFrame(columns=self.history_schema.keys()).astype(self.history_schema),  # ty: ignore[invalid-argument-type]
+            "history": self._init_history(len(current_features), avg_base_metric),
         }
-
-        avg_base_metric, _ = self._cross_val_base_metric(X, cast("pd.Series", y), current_features)
-        summary_df["history"] = pd.concat(
-            [
-                summary_df["history"],
-                pd.DataFrame(
-                    [
-                        {
-                            "step": 0,
-                            "n_features_removed": 0,
-                            "n_features_remaining": len(current_features),
-                            "removed_feature_name": None,
-                            "metric_value": avg_base_metric,
-                            "metric_change": 0.0,
-                        }
-                    ]
-                ),
-            ],
-            ignore_index=True,
-        )
 
         removable_features = [f for f in current_features if f not in self.protected_features]
         removal_schedule = self.compute_removal_schedule(len(removable_features))
-        if self.verbose:
-            print(
-                f"🔍 Starting SHAP-RFE with {len(current_features)} features, "
-                f"target metric: {self.cross_validator.metric_name} ({self.metric_direction}), "
-                f"steps: {self.steps}.\n"
-                f"📅 The number of features to remove every step: {removal_schedule}"
-            )
-            print(f"🛡️  Protected features: {self.protected_features}")
+        self._print_start(len(current_features), removal_schedule)
 
         for step_idx, n_features_to_remove in enumerate(removal_schedule, start=1):
-            avg_metric_feature, fold_base_metric, fold_base_metric_std = (
-                self._cross_val_feature_metrics(X, cast("pd.Series", y), current_features)
-            )
-            if self.verbose:
-                print(
-                    f"\n🔁 Step {step_idx} | Number of features remaining: {len(current_features)}"
-                )
-                print(f"\n🔬 Features remaining: {current_features}\n")
-                print(
-                    f"📊 Average {self.cross_validator.metric_name}: "
-                    f"{fold_base_metric:.6f} ± {fold_base_metric_std:.6f}"
-                )
-            removable_metrics = {
-                k: v for k, v in avg_metric_feature.items() if k not in self.protected_features
-            }
-            feature_metric_diffs_df = pd.DataFrame(
-                list(removable_metrics.items()), columns=["feature", "metric_change"]
-            )
-            ascending = self.metric_direction == "minimize"
-            feature_metric_diffs_df = feature_metric_diffs_df.sort_values(
-                by="metric_change", ascending=ascending
-            )
-            n_actually_removable = min(n_features_to_remove, len(feature_metric_diffs_df))
-            features_to_remove = feature_metric_diffs_df.head(n_actually_removable)[
-                "feature"
-            ].tolist()
-            self._log_step(
-                summary_df,
-                step_idx,
-                X,
-                current_features,
-                avg_metric_feature,
-                fold_base_metric,
-                features_to_remove,
-            )
+            step_state = self._run_step(X, y, current_features, n_features_to_remove)
+            self._print_step(step_idx, current_features, step_state)
+            self._log_step(summary_df, step_idx, X, current_features, step_state)
             gc.collect()
             if len(current_features) <= len(self.protected_features):
                 if self.verbose:
@@ -173,27 +115,140 @@ class ShapRecursiveFeatureElimination:
         summary_df["selected_features"], metric_selected = self.select_features_weighted_score(
             summary_df["history"], self.alpha
         )
-        if self.verbose:
-            print(f"\n🎯 Selected features: {summary_df['selected_features']}")
-            diff_pct = (
-                100
-                * (metric_selected - summary_df["history"].iloc[0]["metric_value"])
-                / summary_df["history"].iloc[0]["metric_value"]
-            )
-            print(
-                f"📈 Final {self.cross_validator.metric_name} score (approximated): "
-                f"{metric_selected:.6f} | "
-                f"Base: {summary_df['history'].iloc[0]['metric_value']:.6f} | "
-                f"Δ: {metric_selected - summary_df['history'].iloc[0]['metric_value']:.6f} "
-                f"({diff_pct:+.2f}%)"
-            )
-            n_features_initial = summary_df["history"].iloc[0]["n_features_remaining"]
-            n_features_selected = len(summary_df["selected_features"])
-            n_removed = n_features_initial - n_features_selected
-            pct_removed = 100 * n_removed / n_features_initial
-            print(f"🗑️ Features removed: {n_removed} of {n_features_initial} ({pct_removed:.2f}%)")
+        self._print_finish(summary_df, metric_selected)
         gc.collect()
         return summary_df
+
+    def _init_history(self, n_features: int, base_metric: float) -> pd.DataFrame:
+        """Build the history DataFrame holding only the step-0 baseline row.
+
+        Args:
+            n_features (int): Number of features at baseline.
+            base_metric (float): Baseline CV metric value.
+
+        Returns:
+            pd.DataFrame: History with the step-0 row.
+        """
+        history = pd.DataFrame(columns=self.history_schema.keys()).astype(self.history_schema)  # ty: ignore[invalid-argument-type]
+        return pd.concat(
+            [
+                history,
+                pd.DataFrame(
+                    [
+                        {
+                            "step": 0,
+                            "n_features_removed": 0,
+                            "n_features_remaining": n_features,
+                            "removed_feature_name": None,
+                            "metric_value": base_metric,
+                            "metric_change": 0.0,
+                        }
+                    ]
+                ),
+            ],
+            ignore_index=True,
+        )
+
+    def _run_step(
+        self,
+        X: pd.DataFrame,
+        y: pd.Series | np.ndarray,
+        current_features: list[str],
+        n_features_to_remove: int,
+    ) -> dict[str, Any]:
+        """Run the SHAP-based CV for one step and pick the features to remove.
+
+        Args:
+            X (pd.DataFrame): Feature matrix.
+            y (pd.Series | np.ndarray): Target aligned with X.
+            current_features (list[str]): Active feature names.
+            n_features_to_remove (int): Number of features this step may remove.
+
+        Returns:
+            dict[str, Any]: Step data: per-feature metrics, fold metric/std, features to remove.
+        """
+        avg_metric_feature, fold_base_metric, fold_base_metric_std = (
+            self._cross_val_feature_metrics(X, cast("pd.Series", y), current_features)
+        )
+        removable_metrics = {
+            k: v for k, v in avg_metric_feature.items() if k not in self.protected_features
+        }
+        feature_metric_diffs_df = pd.DataFrame(
+            list(removable_metrics.items()), columns=["feature", "metric_change"]
+        ).sort_values(by="metric_change", ascending=self.metric_direction == "minimize")
+        n_actually_removable = min(n_features_to_remove, len(feature_metric_diffs_df))
+        return {
+            "avg_metric_feature": avg_metric_feature,
+            "fold_metric": fold_base_metric,
+            "fold_std": fold_base_metric_std,
+            "features_to_remove": feature_metric_diffs_df.head(n_actually_removable)[
+                "feature"
+            ].tolist(),
+        }
+
+    def _print_start(self, n_features: int, removal_schedule: list[int]) -> None:
+        """Print the initial run summary when verbose mode is enabled.
+
+        Args:
+            n_features (int): Number of features at baseline.
+            removal_schedule (list[int]): Features to remove at each step.
+        """
+        if not self.verbose:
+            return
+        print(
+            f"🔍 Starting SHAP-RFE with {n_features} features, "
+            f"target metric: {self.cross_validator.metric_name} ({self.metric_direction}), "
+            f"steps: {self.steps}.\n"
+            f"📅 The number of features to remove every step: {removal_schedule}"
+        )
+        print(f"🛡️  Protected features: {self.protected_features}")
+
+    def _print_step(
+        self, step_idx: int, current_features: list[str], step_state: dict[str, Any]
+    ) -> None:
+        """Print per-step details when verbose mode is enabled.
+
+        Args:
+            step_idx (int): Current step number.
+            current_features (list[str]): Active feature names.
+            step_state (dict[str, Any]): Step data from ``_run_step``.
+        """
+        if not self.verbose:
+            return
+        print(f"\n🔁 Step {step_idx} | Number of features remaining: {len(current_features)}")
+        print(f"\n🔬 Features remaining: {current_features}\n")
+        print(
+            f"📊 Average {self.cross_validator.metric_name}: "
+            f"{step_state['fold_metric']:.6f} ± {step_state['fold_std']:.6f}"
+        )
+
+    def _print_finish(self, summary_df: RfeSummary, metric_selected: float | None) -> None:
+        """Print the final selection summary when verbose mode is enabled.
+
+        Args:
+            summary_df (RfeSummary): Completed summary with history and selected features.
+            metric_selected (float | None): Approximated metric of the selected set.
+        """
+        if not self.verbose:
+            return
+        print(f"\n🎯 Selected features: {summary_df['selected_features']}")
+        diff_pct = (
+            100
+            * (metric_selected - summary_df["history"].iloc[0]["metric_value"])
+            / summary_df["history"].iloc[0]["metric_value"]
+        )
+        print(
+            f"📈 Final {self.cross_validator.metric_name} score (approximated): "
+            f"{metric_selected:.6f} | "
+            f"Base: {summary_df['history'].iloc[0]['metric_value']:.6f} | "
+            f"Δ: {metric_selected - summary_df['history'].iloc[0]['metric_value']:.6f} "
+            f"({diff_pct:+.2f}%)"
+        )
+        n_features_initial = summary_df["history"].iloc[0]["n_features_remaining"]
+        n_features_selected = len(summary_df["selected_features"])
+        n_removed = n_features_initial - n_features_selected
+        pct_removed = 100 * n_removed / n_features_initial
+        print(f"🗑️ Features removed: {n_removed} of {n_features_initial} ({pct_removed:.2f}%)")
 
     def _convert_categorical_to_codes(self, X: pd.DataFrame) -> pd.DataFrame:
         """Convert categorical/object columns in X to integer codes.
@@ -426,68 +481,71 @@ class ShapRecursiveFeatureElimination:
     ) -> None:
         """Process 2D SHAP values with vectorized operations for efficiency."""
         try:
-            total = vals.sum(axis=1, keepdims=True)
-            reduced_vals_matrix = total - vals
-            if np.asarray(base).ndim == 0:
-                base_val = float(base)
-                pred_matrix = base_val + reduced_vals_matrix
-            else:
-                base_arr = np.asarray(base)
-                pred_matrix = base_arr[:, np.newaxis] + reduced_vals_matrix
-
-            if self.problem_type == "classification":
-                pred_prob_matrix = 1 / (1 + np.exp(-np.clip(pred_matrix, -500, 500)))
-                if pred_prob_matrix.ndim == NDIM_3D and y_valid.ndim == 1:
-                    pred_prob_matrix = pred_prob_matrix[:, :, 1]
-                elif pred_prob_matrix.ndim == NDIM_2D and pred_prob_matrix.shape[1] != len(
-                    current_features
-                ):
-                    pred_prob_matrix = (
-                        pred_prob_matrix[:, 1::2]
-                        if pred_prob_matrix.shape[1] % 2 == 0
-                        else pred_prob_matrix
-                    )
-                if self.metric_type == "probs":
-                    final_pred_matrix = pred_prob_matrix
-                elif pred_prob_matrix.ndim == NDIM_2D and pred_prob_matrix.shape[1] == len(
-                    current_features
-                ):
-                    final_pred_matrix = (pred_prob_matrix >= PROBABILITY_THRESHOLD).astype(int)
-                else:
-                    final_pred_matrix = np.argmax(pred_prob_matrix, axis=-1).astype(int)
-            else:
-                final_pred_matrix = pred_matrix
-            for feat_idx, feature in enumerate(current_features):
-                try:
-                    if final_pred_matrix.ndim == NDIM_2D:
-                        final_pred = final_pred_matrix[:, feat_idx]
-                    else:
-                        final_pred = final_pred_matrix[feat_idx]
-
-                    metric_without_feature = self.metric_fn(y_valid, final_pred)
-                    fold_features_metric_monitor[feature].append(metric_without_feature)
-
-                except (TypeError, ValueError) as exc:
-                    if self.verbose:
-                        print(f"⚠️ Error processing feature {feature}: {exc}")
-                    continue
-
+            self._record_feature_metrics_2d(
+                self._final_pred_matrix_2d(vals, base, y_valid, len(current_features)),
+                y_valid,
+                current_features,
+                fold_features_metric_monitor,
+            )
         except (FloatingPointError, OverflowError, TypeError, ValueError) as exc:
             if self.verbose:
                 print(f"⚠️ Vectorized processing failed, skipping fold: {exc}")
-
         finally:
-            if "total" in locals():
-                del total  # ty: ignore[possibly-unresolved-reference]
-            if "reduced_vals_matrix" in locals():
-                del reduced_vals_matrix  # ty: ignore[possibly-unresolved-reference]
-            if "pred_matrix" in locals():
-                del pred_matrix  # ty: ignore[possibly-unresolved-reference]
-            if "pred_prob_matrix" in locals():
-                del pred_prob_matrix  # ty: ignore[possibly-unresolved-reference]
-            if "final_pred_matrix" in locals():
-                del final_pred_matrix  # ty: ignore[possibly-unresolved-reference]
             gc.collect()
+
+    @staticmethod
+    def _reduced_pred_matrix_2d(vals: np.ndarray, base: np.ndarray | float) -> np.ndarray:
+        """Return the 2D predictions with one feature's SHAP contribution removed per column."""
+        reduced_vals_matrix = vals.sum(axis=1, keepdims=True) - vals
+        if np.asarray(base).ndim == 0:
+            return float(base) + reduced_vals_matrix
+        return np.asarray(base)[:, np.newaxis] + reduced_vals_matrix
+
+    def _final_pred_matrix_2d(
+        self,
+        vals: np.ndarray,
+        base: np.ndarray | float,
+        y_valid: pd.Series,
+        n_features: int,
+    ) -> np.ndarray:
+        """Turn 2D SHAP values into the per-feature predictions the metric expects."""
+        pred_matrix = self._reduced_pred_matrix_2d(vals, base)
+        if self.problem_type != "classification":
+            return pred_matrix
+        pred_prob_matrix = 1 / (1 + np.exp(-np.clip(pred_matrix, -500, 500)))
+        if pred_prob_matrix.ndim == NDIM_3D and y_valid.ndim == 1:
+            pred_prob_matrix = pred_prob_matrix[:, :, 1]
+        elif pred_prob_matrix.ndim == NDIM_2D and pred_prob_matrix.shape[1] != n_features:
+            pred_prob_matrix = (
+                pred_prob_matrix[:, 1::2]
+                if pred_prob_matrix.shape[1] % 2 == 0
+                else pred_prob_matrix
+            )
+        if self.metric_type == "probs":
+            return pred_prob_matrix
+        if pred_prob_matrix.ndim == NDIM_2D and pred_prob_matrix.shape[1] == n_features:
+            return (pred_prob_matrix >= PROBABILITY_THRESHOLD).astype(int)
+        return np.argmax(pred_prob_matrix, axis=-1).astype(int)
+
+    def _record_feature_metrics_2d(
+        self,
+        final_pred_matrix: np.ndarray,
+        y_valid: pd.Series,
+        current_features: list[str],
+        fold_features_metric_monitor: dict,
+    ) -> None:
+        """Append the metric without each feature to the monitor, skipping features that fail."""
+        for feat_idx, feature in enumerate(current_features):
+            try:
+                if final_pred_matrix.ndim == NDIM_2D:
+                    final_pred = final_pred_matrix[:, feat_idx]
+                else:
+                    final_pred = final_pred_matrix[feat_idx]
+                metric_without_feature = self.metric_fn(y_valid, final_pred)
+                fold_features_metric_monitor[feature].append(metric_without_feature)
+            except (TypeError, ValueError) as exc:
+                if self.verbose:
+                    print(f"⚠️ Error processing feature {feature}: {exc}")
 
     def _process_3d_shap(
         self,
@@ -499,71 +557,78 @@ class ShapRecursiveFeatureElimination:
     ) -> None:
         """Process 3D SHAP values with vectorized operations for efficiency."""
         try:
-            total = vals.sum(axis=1)
-            reduced_vals_matrix = total[:, np.newaxis, :] - vals
-            base_arr = np.asarray(base, dtype=float)
-            scalar_base = base_arr.ndim == 0
-
-            if scalar_base:
-                pred_matrix = base_arr.item() + reduced_vals_matrix
-            elif base_arr.ndim == 1 and reduced_vals_matrix.ndim == NDIM_3D:
-                pred_matrix = base_arr[:, np.newaxis, np.newaxis] + reduced_vals_matrix
-            else:
-                pred_matrix = base_arr[:, np.newaxis, :] + reduced_vals_matrix
-            if self.problem_type == "classification":
-                pred_prob_matrix = 1 / (1 + np.exp(-np.clip(pred_matrix, -500, 500)))
-                if pred_prob_matrix.ndim == NDIM_3D and y_valid.ndim == 1:
-                    if pred_prob_matrix.shape[2] == BINARY_N_CLASSES:
-                        pred_prob_matrix = pred_prob_matrix[:, :, 1]
-                    elif pred_prob_matrix.shape[2] == 1:
-                        pred_prob_matrix = pred_prob_matrix[:, :, 0]
-                if self.metric_type == "probs":
-                    final_pred_matrix = pred_prob_matrix
-                elif pred_prob_matrix.ndim == NDIM_3D:
-                    final_pred_matrix = np.argmax(pred_prob_matrix, axis=-1).astype(int)
-                else:
-                    final_pred_matrix = (pred_prob_matrix >= PROBABILITY_THRESHOLD).astype(int)
-            elif pred_matrix.ndim == NDIM_3D:
-                final_pred_matrix = pred_matrix[:, :, 0]
-            else:
-                final_pred_matrix = pred_matrix
-            n = len(y_valid)
-            for feat_idx, feature in enumerate(current_features):
-                try:
-                    if final_pred_matrix.ndim == NDIM_2D:
-                        final_pred = final_pred_matrix[:, feat_idx]
-                    else:
-                        final_pred = final_pred_matrix[feat_idx]
-                    final_pred = np.asarray(final_pred)
-                    if final_pred.ndim == 0:
-                        final_pred = np.full(n, final_pred.item())
-                    elif final_pred.shape[0] != n:
-                        if final_pred.size == n:
-                            final_pred = final_pred.reshape(n, -1).ravel()
-                        else:
-                            final_pred = np.full(n, final_pred.ravel()[0])
-                    metric_without_feature = self.metric_fn(y_valid, final_pred)
-                    fold_features_metric_monitor[feature].append(metric_without_feature)
-                except (TypeError, ValueError) as exc:
-                    if self.verbose:
-                        print(f"⚠️ Error processing feature {feature}: {exc}")
-                    continue
+            self._record_feature_metrics_3d(
+                self._final_pred_matrix_3d(vals, base, y_valid),
+                y_valid,
+                current_features,
+                fold_features_metric_monitor,
+            )
         except (FloatingPointError, OverflowError, TypeError, ValueError) as exc:
             if self.verbose:
                 print(f"⚠️ Vectorized 3D processing failed, skipping fold: {exc}")
-
         finally:
-            if "total" in locals():
-                del total  # ty: ignore[possibly-unresolved-reference]
-            if "reduced_vals_matrix" in locals():
-                del reduced_vals_matrix  # ty: ignore[possibly-unresolved-reference]
-            if "pred_matrix" in locals():
-                del pred_matrix  # ty: ignore[possibly-unresolved-reference]
-            if "pred_prob_matrix" in locals():
-                del pred_prob_matrix  # ty: ignore[possibly-unresolved-reference]
-            if "final_pred_matrix" in locals():
-                del final_pred_matrix  # ty: ignore[possibly-unresolved-reference]
             gc.collect()
+
+    @staticmethod
+    def _reduced_pred_matrix_3d(vals: np.ndarray, base: np.ndarray | float) -> np.ndarray:
+        """Return the 3D predictions with one feature's SHAP contribution removed per column."""
+        reduced_vals_matrix = vals.sum(axis=1)[:, np.newaxis, :] - vals
+        base_arr = np.asarray(base, dtype=float)
+        if base_arr.ndim == 0:
+            return base_arr.item() + reduced_vals_matrix
+        if base_arr.ndim == 1 and reduced_vals_matrix.ndim == NDIM_3D:
+            return base_arr[:, np.newaxis, np.newaxis] + reduced_vals_matrix
+        return base_arr[:, np.newaxis, :] + reduced_vals_matrix
+
+    def _final_pred_matrix_3d(
+        self, vals: np.ndarray, base: np.ndarray | float, y_valid: pd.Series
+    ) -> np.ndarray:
+        """Turn 3D SHAP values into the per-feature predictions the metric expects."""
+        pred_matrix = self._reduced_pred_matrix_3d(vals, base)
+        if self.problem_type == "classification":
+            pred_prob_matrix = 1 / (1 + np.exp(-np.clip(pred_matrix, -500, 500)))
+            if pred_prob_matrix.ndim == NDIM_3D and y_valid.ndim == 1:
+                if pred_prob_matrix.shape[2] == BINARY_N_CLASSES:
+                    pred_prob_matrix = pred_prob_matrix[:, :, 1]
+                elif pred_prob_matrix.shape[2] == 1:
+                    pred_prob_matrix = pred_prob_matrix[:, :, 0]
+            if self.metric_type == "probs":
+                return pred_prob_matrix
+            if pred_prob_matrix.ndim == NDIM_3D:
+                return np.argmax(pred_prob_matrix, axis=-1).astype(int)
+            return (pred_prob_matrix >= PROBABILITY_THRESHOLD).astype(int)
+        if pred_matrix.ndim == NDIM_3D:
+            return pred_matrix[:, :, 0]
+        return pred_matrix
+
+    def _record_feature_metrics_3d(
+        self,
+        final_pred_matrix: np.ndarray,
+        y_valid: pd.Series,
+        current_features: list[str],
+        fold_features_metric_monitor: dict,
+    ) -> None:
+        """Append the metric without each feature to the monitor, aligning predictions to y."""
+        n = len(y_valid)
+        for feat_idx, feature in enumerate(current_features):
+            try:
+                if final_pred_matrix.ndim == NDIM_2D:
+                    final_pred = final_pred_matrix[:, feat_idx]
+                else:
+                    final_pred = final_pred_matrix[feat_idx]
+                final_pred = np.asarray(final_pred)
+                if final_pred.ndim == 0:
+                    final_pred = np.full(n, final_pred.item())
+                elif final_pred.shape[0] != n:
+                    if final_pred.size == n:
+                        final_pred = final_pred.reshape(n, -1).ravel()
+                    else:
+                        final_pred = np.full(n, final_pred.ravel()[0])
+                metric_without_feature = self.metric_fn(y_valid, final_pred)
+                fold_features_metric_monitor[feature].append(metric_without_feature)
+            except (TypeError, ValueError) as exc:
+                if self.verbose:
+                    print(f"⚠️ Error processing feature {feature}: {exc}")
 
     def _log_step(
         self,
@@ -571,9 +636,7 @@ class ShapRecursiveFeatureElimination:
         step_idx: int,
         X: pd.DataFrame,
         current_features: list[str],
-        avg_metric_feature: dict[str, float],
-        fold_base_metric: float,
-        features_to_remove: list[str],
+        step_state: dict[str, Any],
     ) -> None:
         """Log results for the current elimination step.
 
@@ -582,11 +645,10 @@ class ShapRecursiveFeatureElimination:
             step_idx (int): Current step number (1-based after the base step).
             X (pd.DataFrame): Original input features (for counts only).
             current_features (list[str]): Features remaining before removal.
-            avg_metric_feature (dict[str, float]): Average metric when removing each feature.
-            fold_base_metric (float): Base metric for the current set of features.
-            features_to_remove (list[str]): Features to remove this step.
+            step_state (dict[str, Any]): Step data from ``_run_step``.
         """
-        for feature in features_to_remove:
+        avg_metric_feature = step_state["avg_metric_feature"]
+        for feature in step_state["features_to_remove"]:
             if feature in self.protected_features:
                 continue
             summary_df["history"] = pd.concat(
@@ -600,7 +662,8 @@ class ShapRecursiveFeatureElimination:
                                 "n_features_remaining": len(current_features) - 1,
                                 "removed_feature_name": feature,
                                 "metric_value": avg_metric_feature[feature],
-                                "metric_change": avg_metric_feature[feature] - fold_base_metric,
+                                "metric_change": avg_metric_feature[feature]
+                                - step_state["fold_metric"],
                             }
                         ]
                     ),
