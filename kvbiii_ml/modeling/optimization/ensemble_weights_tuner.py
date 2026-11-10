@@ -525,14 +525,10 @@ class EnsembleWeightTunerCV:
         return y_valid_true, preds_per_estimator, fold_boundaries
 
     def _private_trainer(self) -> CrossValidationTrainer:
-        """Return a silent shallow copy of the trainer with its own result lists."""
+        """Return a silent shallow copy of the trainer; its fit() binds new result lists."""
         trainer = copy.copy(self.cross_validator)
         trainer.verbose = False
         trainer.fit_verbose = False
-        trainer.train_scores_ = []
-        trainer.valid_scores_ = []
-        trainer.fitted_estimators_ = []
-        trainer.fitted_pipelines_ = []
         return trainer
 
     @overload

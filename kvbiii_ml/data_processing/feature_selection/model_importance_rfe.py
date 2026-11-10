@@ -28,6 +28,8 @@ class ModelImportanceRecursiveFeatureElimination:
     validated after the baseline CV run when the processed column set is known.
     """
 
+    all_processed_features: list[str]
+
     def __init__(  # noqa: PLR0913
         self,
         estimator: Estimator,
@@ -58,7 +60,6 @@ class ModelImportanceRecursiveFeatureElimination:
         self.protected_features = protected_features or []
         self.metric_direction = self.cross_validator.metric_direction
         self.random_state = random_state
-        self.all_processed_features: list[str] = []
         self.history_schema = {
             "step": int,
             "n_features_removed": int,
