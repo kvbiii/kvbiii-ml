@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.exceptions import NotFittedError
 from sklearn.model_selection import KFold
 
 from kvbiii_ml.modeling.optimization.pseudo_labeler import PseudoLabelGenerator
@@ -490,11 +491,11 @@ def test_pseudolabelgenerator_plot_pseudo_label_stats_raises_before_fit(
         pseudo_cv_trainer (CrossValidationTrainer): Configured CV trainer.
 
     Asserts:
-        - RuntimeError is raised instructing the caller to fit first
+        - NotFittedError is raised instructing the caller to fit first
     """
     generator = PseudoLabelGenerator(cross_validator=pseudo_cv_trainer)
 
-    with pytest.raises(RuntimeError, match=r"Call fit\(\) before plot_pseudo_label_stats\(\)\."):
+    with pytest.raises(NotFittedError, match=r"Call fit\(\) first"):
         generator.plot_pseudo_label_stats()
 
 
@@ -561,11 +562,11 @@ def test_pseudolabelgenerator_get_augmented_dataset_raises_before_fit(
         pseudo_cv_trainer (CrossValidationTrainer): Configured CV trainer.
 
     Asserts:
-        - RuntimeError is raised instructing the caller to fit first
+        - NotFittedError is raised instructing the caller to fit first
     """
     generator = PseudoLabelGenerator(cross_validator=pseudo_cv_trainer)
 
-    with pytest.raises(RuntimeError, match=r"Call fit\(\) before get_augmented_dataset\(\)\."):
+    with pytest.raises(NotFittedError, match=r"Call fit\(\) first"):
         generator.get_augmented_dataset()
 
 

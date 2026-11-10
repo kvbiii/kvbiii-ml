@@ -6,6 +6,7 @@ import pandas as pd
 from scipy.stats import gaussian_kde
 
 from kvbiii_ml._typing import Estimator
+from kvbiii_ml._validation import check_fitted
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 from kvbiii_ml.modeling.training.oof_model import _collect_oof_probas
 
@@ -57,6 +58,13 @@ class PseudoLabelGenerator:
     labeled samples receive weight 1.0.
     """
 
+    classes_: np.ndarray
+    thresholds_: dict[int | str, float]
+    pseudo_labels_df_: pd.DataFrame
+    _x_train: pd.DataFrame
+    _y_train: pd.Series
+    _unlabeled_probas: np.ndarray
+
     def __init__(
         self,
         cross_validator: CrossValidationTrainer,
@@ -104,13 +112,6 @@ class PseudoLabelGenerator:
         self.threshold_percentile = threshold_percentile
         self.top_k_pct = top_k_pct
         self.fixed_threshold = fixed_threshold
-
-        self.classes_: np.ndarray = None  # ty: ignore[invalid-assignment]
-        self.thresholds_: dict[int | str, float] = {}
-        self.pseudo_labels_df_: pd.DataFrame = pd.DataFrame()
-        self._x_train: pd.DataFrame | None = None
-        self._y_train: pd.Series = None  # ty: ignore[invalid-assignment]
-        self._unlabeled_probas: np.ndarray = None  # ty: ignore[invalid-assignment]
 
     def fit(
         self,
@@ -177,7 +178,7 @@ class PseudoLabelGenerator:
         return self
 
     def get_augmented_dataset(self) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
-        """Return the combined labeled + pseudo-labeled dataset.
+        """Return the labeled + pseudo-labeled dataset, raising NotFittedError before fit.
 
         Original labeled samples receive sample weight 1.0. Pseudo-labeled
         samples receive weight equal to their predicted confidence.
@@ -185,12 +186,8 @@ class PseudoLabelGenerator:
         Returns:
             tuple[pd.DataFrame, pd.Series, pd.Series]: Feature matrix, target
                 vector, and sample weights - all aligned row-wise.
-
-        Raises:
-            RuntimeError: If called before fit().
         """
-        if self._x_train is None:
-            raise RuntimeError("Call fit() before get_augmented_dataset().")
+        check_fitted(self, "pseudo_labels_df_")
 
         feature_cols = [c for c in self.pseudo_labels_df_.columns if not c.startswith("_")]
         x_pseudo = self.pseudo_labels_df_[feature_cols].reset_index(drop=True)
@@ -209,7 +206,7 @@ class PseudoLabelGenerator:
         return x_combined, y_combined, w_combined
 
     def plot_pseudo_label_stats(self) -> None:
-        """Visualise pseudo-label confidence distributions and class composition.
+        """Plot pseudo-label confidences and class composition; NotFittedError before fit.
 
         Produces two figures:
 
@@ -218,12 +215,8 @@ class PseudoLabelGenerator:
           many of that class's candidates were kept.
         - Class composition shift: normalised proportions of original vs
           pseudo labels, plus the absolute pseudo-label volume per class.
-
-        Raises:
-            RuntimeError: If called before fit().
         """
-        if self._unlabeled_probas is None:
-            raise RuntimeError("Call fit() before plot_pseudo_label_stats().")
+        check_fitted(self, "pseudo_labels_df_")
 
         self._plot_confidence_distributions()
         self._plot_label_distribution()
