@@ -657,6 +657,88 @@ class DataAnalyzer:
         return data_copy.drop(columns=["__bin_idx__"]), quantile_labels
 
     @staticmethod
+    def _target_groups(
+        data: pd.DataFrame, target: str, problem_type: str, n_quantiles: int
+    ) -> tuple[pd.DataFrame, list, str]:
+        """Return the frame, ordered classes and grouping column; regression targets are binned."""
+        if problem_type == "regression":
+            data_work, classes = DataAnalyzer._bin_regression_target(data, target, n_quantiles)
+            return data_work, classes, "__target_bin__"
+        return data, sorted(data[target].dropna().unique()), target
+
+    @staticmethod
+    def _eta_squared(groups: list[np.ndarray], values: pd.Series) -> float:
+        """Return the share of the variance of ``values`` explained by the groups (η²)."""
+        grand_mean = float(values.mean())
+        ss_between = sum(len(grp) * (float(np.mean(grp)) - grand_mean) ** 2 for grp in groups)
+        ss_total = float(((values - grand_mean) ** 2).sum())
+        return ss_between / ss_total if ss_total > 0 else 0.0
+
+    @staticmethod
+    def _kruskal_epsilon(groups: list[np.ndarray], n_total: int) -> tuple[float, float]:
+        """Return the Kruskal-Wallis p-value and ε² effect size over the non-empty groups."""
+        valid_groups = [g for g in groups if len(g) >= 1]
+        k = len(valid_groups)
+        h_stat, p_val = kruskal(*valid_groups) if k >= MIN_ITEMS_TO_COMPARE else (np.nan, np.nan)
+        epsilon_sq = max((h_stat - k + 1) / (n_total - k), 0.0) if n_total > k else 0.0
+        return p_val, epsilon_sq
+
+    @staticmethod
+    def _numerical_association_row(
+        clean: pd.DataFrame, col: str, group_col: str, classes: list
+    ) -> dict:
+        """Return one feature's per-class median/IQR, η², ε², KW p-value and median spread."""
+        groups = [clean.loc[clean[group_col] == cls, col].to_numpy(dtype=float) for cls in classes]
+        row: dict = {"Feature": col}
+        for cls, grp in zip(classes, groups, strict=True):
+            row[f"{cls} Median"] = float(np.median(grp)) if len(grp) else np.nan
+            row[f"{cls} IQR"] = (
+                float(np.percentile(grp, 75) - np.percentile(grp, 25)) if len(grp) else np.nan
+            )
+        p_val, epsilon_sq = DataAnalyzer._kruskal_epsilon(groups, len(clean))
+        valid_medians = [row[f"{c} Median"] for c in classes if not np.isnan(row[f"{c} Median"])]
+        valid_iqrs = [row[f"{c} IQR"] for c in classes if not np.isnan(row[f"{c} IQR"])]
+        mean_iqr = float(np.mean(valid_iqrs)) if valid_iqrs else 1.0
+        row.update(
+            {
+                "η²": DataAnalyzer._eta_squared(groups, clean[col]),
+                "ε²": epsilon_sq,
+                "KW p-value": p_val,
+                "Median Range / IQR": (max(valid_medians) - min(valid_medians)) / mean_iqr
+                if mean_iqr > 0 and len(valid_medians) >= MIN_ITEMS_TO_COMPARE
+                else 0.0,
+            }
+        )
+        return row
+
+    @staticmethod
+    def _cross_distribution_frame(
+        contingency: pd.DataFrame, classes: list, n_total: int
+    ) -> pd.DataFrame:
+        """Return per-category counts and row shares per class, by count, with a Total row."""
+        rows = []
+        for cat in contingency.index:
+            total_count = int(contingency.loc[cat].sum())
+            row: dict = {
+                "Category": cat,
+                "Count": total_count,
+                "Count %": total_count / n_total * 100,
+            }
+            for cls in classes:
+                cls_count = int(contingency.loc[cat, cls]) if cls in contingency.columns else 0
+                row[f"{cls} Count"] = cls_count
+                row[f"{cls} Row %"] = cls_count / total_count * 100 if total_count > 0 else 0.0
+            rows.append(row)
+        df = pd.DataFrame(rows).sort_values("Count", ascending=False).reset_index(drop=True)
+
+        total_row: dict = {"Category": "Total", "Count": n_total, "Count %": 100.0}
+        for cls in classes:
+            cls_total = int(contingency[cls].sum()) if cls in contingency.columns else 0
+            total_row[f"{cls} Count"] = cls_total
+            total_row[f"{cls} Row %"] = cls_total / n_total * 100
+        return pd.concat([df, pd.DataFrame([total_row])], ignore_index=True)
+
+    @staticmethod
     def describe_feature_by_target(
         data: pd.DataFrame,
         feature: str,
@@ -853,64 +935,17 @@ class DataAnalyzer:
         if target not in data.columns:
             raise ValueError(f"Target column '{target}' not found in DataFrame.")
 
-        if problem_type == "regression":
-            data_work, classes = DataAnalyzer._bin_regression_target(data, target, n_quantiles)
-            group_col = "__target_bin__"
-            caption = f"🔗 Numerical Features — Association with {target} (Quantile Bins)"
-        else:
-            data_work = data
-            classes = sorted(data[target].dropna().unique())
-            group_col = target
-            caption = f"🔗 Numerical Features — Association with {target}"
-
-        rows = []
-        for col in numerical_features:
-            clean = data_work[[col, group_col]].dropna()
-            groups = [
-                clean.loc[clean[group_col] == cls, col].to_numpy(dtype=float) for cls in classes
-            ]
-
-            row: dict = {"Feature": col}
-            for cls, grp in zip(classes, groups, strict=True):
-                row[f"{cls} Median"] = float(np.median(grp)) if len(grp) else np.nan
-                row[f"{cls} IQR"] = (
-                    float(np.percentile(grp, 75) - np.percentile(grp, 25)) if len(grp) else np.nan
-                )
-
-            grand_mean = float(clean[col].mean())
-            ss_between = sum(len(grp) * (float(np.mean(grp)) - grand_mean) ** 2 for grp in groups)
-            ss_total = float(((clean[col] - grand_mean) ** 2).sum())
-            eta_sq = ss_between / ss_total if ss_total > 0 else 0.0
-
-            valid_groups = [g for g in groups if len(g) >= 1]
-            if len(valid_groups) >= MIN_ITEMS_TO_COMPARE:
-                h_stat, p_val = kruskal(*valid_groups)
-            else:
-                h_stat, p_val = np.nan, np.nan
-            n_total = len(clean)
-            k = len(valid_groups)
-            epsilon_sq = max((h_stat - k + 1) / (n_total - k), 0.0) if n_total > k else 0.0
-
-            cls_medians = [row[f"{cls} Median"] for cls in classes]
-            cls_iqrs = [row[f"{cls} IQR"] for cls in classes]
-            valid_medians = [m for m in cls_medians if not np.isnan(m)]
-            valid_iqrs = [q for q in cls_iqrs if not np.isnan(q)]
-            mean_iqr = float(np.mean(valid_iqrs)) if valid_iqrs else 1.0
-            median_range_iqr = (
-                (max(valid_medians) - min(valid_medians)) / mean_iqr
-                if mean_iqr > 0 and len(valid_medians) >= MIN_ITEMS_TO_COMPARE
-                else 0.0
+        data_work, classes, group_col = DataAnalyzer._target_groups(
+            data, target, problem_type, n_quantiles
+        )
+        suffix = " (Quantile Bins)" if problem_type == "regression" else ""
+        caption = f"🔗 Numerical Features — Association with {target}{suffix}"
+        rows = [
+            DataAnalyzer._numerical_association_row(
+                data_work[[col, group_col]].dropna(), col, group_col, classes
             )
-
-            row.update(
-                {
-                    "η²": eta_sq,
-                    "ε²": epsilon_sq,
-                    "KW p-value": p_val,
-                    "Median Range / IQR": median_range_iqr,
-                }
-            )
-            rows.append(row)
+            for col in numerical_features
+        ]
 
         df = pd.DataFrame(rows).sort_values("η²", ascending=False).reset_index(drop=True)
 
@@ -1150,15 +1185,11 @@ class DataAnalyzer:
         if problem_type not in {"classification", "regression"}:
             raise ValueError("problem_type must be either 'classification' or 'regression'.")
 
-        if problem_type == "regression":
-            data_work, classes = DataAnalyzer._bin_regression_target(data, target, n_quantiles)
-            group_col = "__target_bin__"
-            caption = f"🔀 {feature} × {target} — Quantile Cross-Distribution"
-        else:
-            data_work = data
-            classes = sorted(data[target].dropna().unique())
-            group_col = target
-            caption = f"🔀 {feature} × {target} — Cross-Distribution"
+        data_work, classes, group_col = DataAnalyzer._target_groups(
+            data, target, problem_type, n_quantiles
+        )
+        quantile = "Quantile " if problem_type == "regression" else ""
+        caption = f"🔀 {feature} × {target} — {quantile}Cross-Distribution"
 
         clean = data_work[[feature, group_col]].dropna().copy()
         n_total = len(clean)
@@ -1175,28 +1206,9 @@ class DataAnalyzer:
                 )
             )
 
-        contingency = pd.crosstab(clean[feature], clean[group_col])
-
-        rows = []
-        for cat in contingency.index:
-            row: dict = {"Category": cat}
-            total_count = int(contingency.loc[cat].sum())
-            row["Count"] = total_count
-            row["Count %"] = total_count / n_total * 100
-            for cls in classes:
-                cls_count = int(contingency.loc[cat, cls]) if cls in contingency.columns else 0
-                row[f"{cls} Count"] = cls_count
-                row[f"{cls} Row %"] = cls_count / total_count * 100 if total_count > 0 else 0.0
-            rows.append(row)
-
-        df = pd.DataFrame(rows).sort_values("Count", ascending=False).reset_index(drop=True)
-
-        total_row: dict = {"Category": "Total", "Count": n_total, "Count %": 100.0}
-        for cls in classes:
-            cls_total = int(contingency[cls].sum()) if cls in contingency.columns else 0
-            total_row[f"{cls} Count"] = cls_total
-            total_row[f"{cls} Row %"] = cls_total / n_total * 100
-        df = pd.concat([df, pd.DataFrame([total_row])], ignore_index=True)
+        df = DataAnalyzer._cross_distribution_frame(
+            pd.crosstab(clean[feature], clean[group_col]), classes, n_total
+        )
 
         format_dict: StylerFormat = {"Count": "{:,.0f}", "Count %": "{:.2f}%"}
         for cls in classes:
