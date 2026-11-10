@@ -10,6 +10,7 @@ from sklearn.base import BaseEstimator, clone
 from sklearn.metrics import accuracy_score, r2_score
 from sklearn.model_selection import BaseCrossValidator, KFold
 from sklearn.utils import ClassifierTags, RegressorTags, Tags
+from sklearn.utils.validation import check_is_fitted
 
 from kvbiii_ml._typing import Estimator
 from kvbiii_ml.modeling.training.base_trainer import (
@@ -28,7 +29,15 @@ DEFAULT_STACKING_SEED = 17
 
 
 class EnsembleModel(BaseEstimator):
-    """Ensemble model combining multiple base estimators."""
+    """
+    Ensemble model combining multiple base estimators.
+
+    ``classes_`` exists only for classification.
+    """
+
+    classes_: np.ndarray
+    fitted_estimators_: list[Estimator]
+    fitted_meta_learner_: Estimator | None
 
     def __init__(  # noqa: PLR0913
         self,
@@ -100,9 +109,6 @@ class EnsembleModel(BaseEstimator):
         self._estimators_list = list(estimators)
         self._weights_normalized = self._validate_and_normalize_weights(weights)
         self.weights = self._weights_normalized
-        self.classes_: np.ndarray | None = None
-        self.fitted_estimators_: list[Estimator] = []
-        self.fitted_meta_learner_: Estimator | None = None
 
     def __sklearn_tags__(self) -> Tags:
         """Tag the ensemble as a classifier or regressor according to problem_type."""
@@ -220,6 +226,7 @@ class EnsembleModel(BaseEstimator):
         if self.problem_type == "classification":
             self.classes_ = np.unique(y_train)
 
+        self.fitted_meta_learner_ = None
         if self.meta_learner is not None:
             meta_features = self._out_of_fold_meta_features(
                 X_train, y_train, eval_pair, sample_weight, verbose
@@ -376,12 +383,8 @@ class EnsembleModel(BaseEstimator):
 
         Returns:
             np.ndarray: Predicted labels for classification or predictions for regression.
-
-        Raises:
-            RuntimeError: If called before fitting, or if every estimator was skipped.
         """
-        if not getattr(self, "fitted_estimators_", None):
-            raise RuntimeError("EnsembleModel must be fitted before calling predict().")
+        check_is_fitted(self, "fitted_estimators_")
 
         if self.fitted_meta_learner_ is not None:
             return self.fitted_meta_learner_.predict(self._generate_meta_features(X))
@@ -389,7 +392,7 @@ class EnsembleModel(BaseEstimator):
         if self.problem_type == "classification":
             proba = self.predict_proba(X)
             labels = np.argmax(proba, axis=1)
-            return self.classes_[labels] if self.classes_ is not None else labels
+            return self.classes_[labels]
 
         predictions, weights = self._collect_predictions(X, self._estimator_output)
         return np.average(predictions, axis=0, weights=weights)
@@ -405,13 +408,11 @@ class EnsembleModel(BaseEstimator):
 
         Raises:
             AttributeError: If problem_type is regression.
-            RuntimeError: If called before fitting, or if every estimator was skipped.
         """
         if self.problem_type == "regression":
             raise AttributeError("predict_proba is not available for regression problems")
 
-        if not getattr(self, "fitted_estimators_", None):
-            raise RuntimeError("EnsembleModel must be fitted before calling predict().")
+        check_is_fitted(self, "fitted_estimators_")
 
         if self.fitted_meta_learner_ is not None:
             meta_features = self._generate_meta_features(X)
@@ -484,14 +485,8 @@ class EnsembleModel(BaseEstimator):
 
         Returns:
             dict[str, np.ndarray]: Dictionary with keys depending on problem type.
-
-        Raises:
-            RuntimeError: If the ensemble has not been fitted.
         """
-        if not hasattr(self, "fitted_estimators_") or len(self.fitted_estimators_) == 0:
-            raise RuntimeError(
-                "EnsembleModel must be fitted before calling predict_with_confidence()."
-            )
+        check_is_fitted(self, "fitted_estimators_")
 
         if self.fitted_meta_learner_ is not None:
             if self.problem_type == "regression":
@@ -599,12 +594,9 @@ class EnsembleModel(BaseEstimator):
             that support this attribute.
 
         Raises:
-            RuntimeError: If called before fitting or if no estimators support feature importances.
+            RuntimeError: If no estimators support feature importances.
         """
-        if not hasattr(self, "fitted_estimators_") or len(self.fitted_estimators_) == 0:
-            raise RuntimeError(
-                "EnsembleModel must be fitted before accessing feature_importances_."
-            )
+        check_is_fitted(self, "fitted_estimators_")
 
         importances = []
         successful_indices = []

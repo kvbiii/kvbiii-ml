@@ -9,6 +9,7 @@ from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 
 from kvbiii_ml._typing import Estimator
+from kvbiii_ml._validation import check_fitted
 from kvbiii_ml.modeling.training.base_trainer import (
     BINARY_N_CLASSES,
     CATBOOST_PREFIX,
@@ -256,8 +257,14 @@ class OOFModel:
     stacking, model evaluation, or meta-learning. When calibrate=True, also fits a
     probability calibrator on OOF probabilities and refits the base estimator on the
     full training data using the average iteration count from the inner folds (or
-    early stopping when eval_set is provided).
+    early stopping when eval_set is provided). ``classes_``, ``calibrator_`` and
+    ``fitted_estimator_`` exist only after a fit with calibrate=True.
     """
+
+    fitted_estimators_: list[Estimator]
+    calibrator_: IsotonicRegression | LogisticRegression | list
+    classes_: np.ndarray
+    fitted_estimator_: Estimator
 
     def __init__(
         self,
@@ -296,11 +303,6 @@ class OOFModel:
         self.eval_metric = cross_validator.metric_fn
         self.metric_type = cross_validator.metric_type
 
-        self.fitted_estimators_: list[Estimator] = []
-        self.calibrator_: IsotonicRegression | LogisticRegression | list | None = None
-        self.classes_: np.ndarray | None = None
-        self.fitted_estimator_: Estimator | None = None
-
     def fit(
         self,
         X: pd.DataFrame,
@@ -330,7 +332,6 @@ class OOFModel:
         Returns:
             OOFModel: Fitted instance with fitted_estimators_ populated.
         """
-        self.fitted_estimators_.clear()
         self.cross_validator.fit(self.estimator, X, y, X_test=X_test)
         self.fitted_estimators_ = self.cross_validator.fitted_estimators_
 
@@ -356,21 +357,17 @@ class OOFModel:
         return self
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
-        """Predict using the calibrated estimator or averaged fold estimators.
+        """Predict with the calibrated or averaged fold estimators; NotFittedError before fit.
 
         Args:
             X (pd.DataFrame): Features to score.
 
         Returns:
             np.ndarray: Predicted labels for classification or values for regression.
-
-        Raises:
-            RuntimeError: If called before fitting.
         """
-        if not self.fitted_estimators_:
-            raise RuntimeError("OOFModel must be fitted before calling predict().")
+        check_fitted(self, "fitted_estimators_")
 
-        if self.calibrate and self.classes_ is not None:
+        if self.calibrate:
             return self.classes_[np.argmax(self.predict_proba(X), axis=1)]
 
         preds = []
@@ -391,7 +388,7 @@ class OOFModel:
         return avg
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
-        """Predict class probabilities, applying calibration when enabled.
+        """Predict class probabilities, calibrated when enabled; NotFittedError before fit.
 
         When calibrate=True uses the single refitted estimator and applies the
         fitted calibrator. Otherwise averages predict_proba outputs across folds.
@@ -403,20 +400,18 @@ class OOFModel:
             np.ndarray: Class probabilities of shape (n_samples, n_classes).
 
         Raises:
-            RuntimeError: If called before fitting.
             ValueError: If called for a regression problem.
         """
         if self.problem_type != "classification":
             raise ValueError("predict_proba is only available for classification problems.")
-        if not self.fitted_estimators_:
-            raise RuntimeError("OOFModel must be fitted before calling predict_proba().")
+        check_fitted(self, "fitted_estimators_")
 
-        if self.calibrate and self.fitted_estimator_ is not None:
+        if self.calibrate:
             x_ord = CrossValidationTrainer._order_x_for_estimator(X, self.fitted_estimator_)  # noqa: SLF001
             raw = self.fitted_estimator_.predict_proba(x_ord)
             if raw.ndim == 1:
                 raw = np.column_stack([1 - raw, raw])
-            return _apply_calibrator(self.calibrator_, raw, self.classes_, self.calibration_method)  # ty: ignore[invalid-argument-type]
+            return _apply_calibrator(self.calibrator_, raw, self.classes_, self.calibration_method)
 
         probs = [
             est.predict_proba(CrossValidationTrainer._order_x_for_estimator(X, est))  # noqa: SLF001
