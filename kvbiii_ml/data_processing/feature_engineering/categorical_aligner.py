@@ -15,7 +15,7 @@ MAX_UNKNOWN_PREVIEW = 5
 class CategoricalAligner(BaseEstimator, TransformerMixin):
     """Align categorical features between train and test sets using stored train categories."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         variables: list[str] | None = None,
         fill_values: dict[str, str] | None = None,

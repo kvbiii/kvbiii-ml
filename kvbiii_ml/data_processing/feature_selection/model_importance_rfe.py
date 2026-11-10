@@ -28,7 +28,7 @@ class ModelImportanceRecursiveFeatureElimination:
     validated after the baseline CV run when the processed column set is known.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         estimator: Estimator,
         cross_validator: CrossValidationTrainer,

@@ -16,7 +16,7 @@ class DecisionTreeDiscretiserWithOriginal(_WithOriginalBase):
 
     _suffix = "PREPROCESS_DT_DISC"
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         variables: list[str] | None = None,
         bin_output: str = "prediction",

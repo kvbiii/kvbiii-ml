@@ -24,7 +24,7 @@ class _NaNIgnoringKBinsDiscretizer:
     ``_WithOriginalSubsetBase`` expects from ``_build_inner()``.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         n_bins: int,
         strategy: Literal["uniform", "quantile", "kmeans"],
@@ -140,7 +140,7 @@ class KBinsDiscretiserWithOriginal(_WithOriginalSubsetBase):
 
     _suppress_warnings = True
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         n_bins: int = 5,
         strategy: Literal["uniform", "quantile", "kmeans"] = "quantile",

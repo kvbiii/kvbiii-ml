@@ -17,7 +17,7 @@ class DecisionTreeEncoderWithOriginal(_WithOriginalBase):
 
     _suffix = "PREPROCESS_DT_ENC"
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         encoding_method: str = "arbitrary",
         cv: int = 3,
