@@ -614,15 +614,17 @@ if __name__ == "__main__":
     def _run_scenario(
         label: str,
         estimator: Estimator,
-        X_train: pd.DataFrame,
-        y_train: pd.Series,
-        x_unlabeled: pd.DataFrame,
+        data: tuple[pd.DataFrame, pd.Series, pd.DataFrame],
         threshold_method: str,
-        metric: str,
-        pipeline: Pipeline | None = None,
+        cv_spec: tuple[str, Pipeline | None],
         **kwargs: float,
     ) -> None:
-        """Run one pseudo-labeling scenario and report augmentation results."""
+        """Run one pseudo-labeling scenario.
+
+        ``data`` is (X_train, y_train, x_unlabeled), ``cv_spec`` is (metric, pipeline).
+        """
+        X_train, y_train, x_unlabeled = data
+        metric, pipeline = cv_spec
         print("=" * 75)
         print(f"Scenario: {label}")
         print("=" * 75)
@@ -669,11 +671,9 @@ if __name__ == "__main__":
         _run_scenario(
             "Binary + LightGBM + top_k threshold",
             lgbm,
-            x_tr,
-            y_tr,
-            x_unl,
-            threshold_method="top_k",
-            metric="Log Loss",
+            (x_tr, y_tr, x_unl),
+            "top_k",
+            ("Log Loss", None),
             top_k_pct=0.20,
         )
 

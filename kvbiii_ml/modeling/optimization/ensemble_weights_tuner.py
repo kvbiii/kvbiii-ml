@@ -789,21 +789,8 @@ if __name__ == "__main__":
     N_FEATURES = 10
     FEATURE_NAMES = [f"feature_{i}" for i in range(N_FEATURES)]
 
-    def _run_demo() -> None:
-        """Run EnsembleWeightTunerCV for both classification and regression."""
-        preprocessing_pipeline = Pipeline(
-            [
-                (
-                    "winsorizer",
-                    WinsorizerWithOriginal(
-                        variables=FEATURE_NAMES,
-                        capping_method="gaussian",
-                        tail="right",
-                    ),
-                ),
-            ]
-        )
-
+    def _classification_demo(preprocessing_pipeline: Pipeline) -> None:
+        """Tune ensemble weights on a binary classification problem."""
         print("=== Binary classification ===")
         x_arr, y_arr = make_classification(
             n_samples=N_SAMPLES,
@@ -839,6 +826,8 @@ if __name__ == "__main__":
         print("Best weights:", tuner_clf.best_weights)
         print("Selected from:", tuner_clf.selection_source_)
 
+    def _regression_demo(preprocessing_pipeline: Pipeline) -> None:
+        """Tune ensemble weights on a regression problem."""
         print("\n=== Regression ===")
         x_reg, y_reg = make_regression(
             n_samples=N_SAMPLES,
@@ -873,5 +862,22 @@ if __name__ == "__main__":
         print("Best trial value:", reg_study.best_value)
         print("Best weights:", tuner_reg.best_weights)
         print("Selected from:", tuner_reg.selection_source_)
+
+    def _run_demo() -> None:
+        """Run EnsembleWeightTunerCV for both classification and regression."""
+        preprocessing_pipeline = Pipeline(
+            [
+                (
+                    "winsorizer",
+                    WinsorizerWithOriginal(
+                        variables=FEATURE_NAMES,
+                        capping_method="gaussian",
+                        tail="right",
+                    ),
+                ),
+            ]
+        )
+        _classification_demo(preprocessing_pipeline)
+        _regression_demo(preprocessing_pipeline)
 
     _run_demo()

@@ -726,6 +726,8 @@ if __name__ == "__main__":
     N_FEATURES = 10
     CAT_FEATURES = ["cat_1", "cat_2"]
     EARLY_STOPPING_ROUNDS = 30
+    CLF_METRIC = ("Balanced Accuracy", "classification")
+    REG_METRIC = ("RMSE", "regression")
 
     def _make_clf_data(n_classes: int) -> tuple[pd.DataFrame, pd.Series]:
         """Generate synthetic classification dataset with numerical and categorical features."""
@@ -758,16 +760,43 @@ if __name__ == "__main__":
         df["cat_2"] = pd.Categorical(rng.choice(["X", "Y", "Z"], size=N_SAMPLES))
         return df, pd.Series(y_arr, name="target")
 
+    def _stringify_cats(data: tuple[pd.DataFrame, pd.Series]) -> tuple[pd.DataFrame, pd.Series]:
+        """Cast the categorical columns of the features to plain strings."""
+        X, y = data
+        return X.assign(**{c: X[c].astype(str) for c in CAT_FEATURES}), y
+
+    def _build_pipeline() -> Pipeline:
+        """Build the imputer, winsorizer, encoder and aligner pipeline used by every scenario."""
+        return Pipeline(
+            [
+                ("imputer", MeanMedianImputer(imputation_method="median")),
+                (
+                    "winsorizer",
+                    Winsorizer(
+                        capping_method="iqr", tail="both", fold=3.0, missing_values="ignore"
+                    ),
+                ),
+                (
+                    "mean_encoder",
+                    MeanEncoder(
+                        variables=cast("list[str | int] | None", CAT_FEATURES),
+                        missing_values="ignore",
+                    ),
+                ),
+                ("categorical_aligner", CategoricalAligner(variables=CAT_FEATURES)),
+            ]
+        )
+
     def _run_scenario(
         label: str,
         estimator: Any,  # noqa: ANN401
-        X: pd.DataFrame,
-        y: pd.Series,
-        metric_name: str,
-        problem_type: str,
+        data: tuple[pd.DataFrame, pd.Series],
+        metric: tuple[str, str],
         preprocessing_pipeline: Pipeline | None = None,
     ) -> None:
         """Run one cross-validation scenario and print a one-line summary."""
+        X, y = data
+        metric_name, problem_type = metric
         cv_cls = StratifiedKFold if problem_type == "classification" else KFold
         trainer = CrossValidationTrainer(
             problem_type=problem_type,
@@ -781,30 +810,12 @@ if __name__ == "__main__":
 
     def _run_demo() -> None:
         """Run CrossValidationTrainer across the demo scenario matrix."""
-        _winsorizer = Winsorizer(
-            capping_method="iqr", tail="both", fold=3.0, missing_values="ignore"
-        )
-        _mean_encoder = MeanEncoder(
-            variables=cast("list[str | int] | None", CAT_FEATURES), missing_values="ignore"
-        )
-        _imputer = MeanMedianImputer(imputation_method="median")
-        _categorial_aligner = CategoricalAligner(variables=CAT_FEATURES)
-        _pipe_steps = [
-            ("imputer", _imputer),
-            ("winsorizer", _winsorizer),
-            ("mean_encoder", _mean_encoder),
-            ("categorical_aligner", _categorial_aligner),
-        ]
-        clf_pipeline = Pipeline(_pipe_steps)
-        reg_pipeline = Pipeline(_pipe_steps)
+        clf_pipeline = _build_pipeline()
+        reg_pipeline = _build_pipeline()
 
-        x_bin, y_bin = _make_clf_data(n_classes=2)
-        x_multi, y_multi = _make_clf_data(n_classes=3)
-        x_reg, y_reg = _make_reg_data()
-
-        x_bin_cat = x_bin.assign(**{c: x_bin[c].astype(str) for c in CAT_FEATURES})
-        x_multi_cat = x_multi.assign(**{c: x_multi[c].astype(str) for c in CAT_FEATURES})
-        x_reg_cat = x_reg.assign(**{c: x_reg[c].astype(str) for c in CAT_FEATURES})
+        bin_data = _stringify_cats(_make_clf_data(n_classes=2))
+        multi_data = _stringify_cats(_make_clf_data(n_classes=3))
+        reg_data = _stringify_cats(_make_reg_data())
 
         es = EARLY_STOPPING_ROUNDS
         _n, _rs = 300, RANDOM_STATE
@@ -828,28 +839,22 @@ if __name__ == "__main__":
         _run_scenario(
             "LightGBM | binary classification",
             _lgbm_clf,
-            x_bin_cat,
-            y_bin,
-            "Balanced Accuracy",
-            "classification",
+            bin_data,
+            CLF_METRIC,
             clf_pipeline,
         )
         _run_scenario(
             "LightGBM | multiclass classification",
             _lgbm_clf,
-            x_multi_cat,
-            y_multi,
-            "Balanced Accuracy",
-            "classification",
+            multi_data,
+            CLF_METRIC,
             clf_pipeline,
         )
         _run_scenario(
             "LightGBM | regression",
             _lgbm_reg,
-            x_reg_cat,
-            y_reg,
-            "RMSE",
-            "regression",
+            reg_data,
+            REG_METRIC,
             reg_pipeline,
         )
 
