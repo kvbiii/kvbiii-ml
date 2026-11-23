@@ -1302,7 +1302,7 @@ def test_randomsearchcv_tune_runs_trials_in_parallel(
         raise AssertionError()
     if len(finished) != len(study.trials):
         raise AssertionError()
-    if study.sampler._constant_liar is not True:  # ty: ignore[unresolved-attribute]
+    if study.sampler._constant_liar is not True:  # ty: ignore[missing-attribute]
         raise AssertionError()
     if tuner.best_params_ is None:
         raise AssertionError()

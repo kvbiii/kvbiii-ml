@@ -180,7 +180,7 @@ def _apply_calibrator(
     """
 
     def _apply_one(cal: IsotonicRegression | LogisticRegression, p: np.ndarray) -> np.ndarray:
-        return cal.predict_proba(p.reshape(-1, 1))[:, 1] if method == "sigmoid" else cal.predict(p)  # ty: ignore[unresolved-attribute]
+        return cal.predict_proba(p.reshape(-1, 1))[:, 1] if method == "sigmoid" else cal.predict(p)  # ty: ignore[missing-union-attribute]
 
     if len(classes) == BINARY_N_CLASSES:
         p_cal = np.clip(

@@ -149,7 +149,7 @@ def predict_with_offset(
         positive = 1.0 / (1.0 + np.exp(-raw))
         if proba:
             return np.column_stack([1.0 - positive, positive])
-        return np.asarray(estimator.classes_)[(positive >= PROBABILITY_THRESHOLD).astype(int)]  # ty: ignore[unresolved-attribute]
+        return np.asarray(estimator.classes_)[(positive >= PROBABILITY_THRESHOLD).astype(int)]  # ty: ignore[missing-attribute]
     if any(token in _objective_name(estimator) for token in EXP_LINK_OBJECTIVES):
         return np.exp(raw)
     return raw
