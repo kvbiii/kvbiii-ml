@@ -2,6 +2,7 @@ from collections import defaultdict
 
 import numpy as np
 import pandas as pd
+from pandas.core.util.hashing import hash_array
 
 BINARY_CARDINALITY = 2
 MAX_GROUP_CARDINALITY = 1000
@@ -118,7 +119,7 @@ class DataCleaner:
 
         for feature in features:
             try:
-                feature_hash = pd.util.hash_array(df[feature].values).tobytes()
+                feature_hash = hash_array(df[feature].values).tobytes()
                 int_hash = hash(feature_hash)
             except (TypeError, AttributeError):
                 int_hash = hash(str(df[feature].to_numpy().tobytes()))
