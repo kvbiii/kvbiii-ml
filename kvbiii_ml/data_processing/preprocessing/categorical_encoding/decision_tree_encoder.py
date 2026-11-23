@@ -1,8 +1,9 @@
-from typing import Any, cast
+from typing import Any
 
 import pandas as pd
 from feature_engine.encoding import DecisionTreeEncoder
 
+from kvbiii_ml._typing import to_feature_engine_variables
 from kvbiii_ml.data_processing.preprocessing.expansion_base import _WithOriginalBase
 
 
@@ -72,7 +73,7 @@ class DecisionTreeEncoderWithOriginal(_WithOriginalBase):
             param_grid=self.param_grid,
             regression=self.regression,
             random_state=self.random_state,
-            variables=cast("list[str | int] | None", self.variables),
+            variables=to_feature_engine_variables(self.variables),
             ignore_format=self.ignore_format,
             precision=self.precision,
             unseen=self.unseen,

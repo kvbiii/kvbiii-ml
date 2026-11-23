@@ -1,8 +1,7 @@
-from typing import cast
-
 import pandas as pd
 from feature_engine.discretisation import EqualWidthDiscretiser
 
+from kvbiii_ml._typing import to_feature_engine_variables
 from kvbiii_ml.data_processing.preprocessing.expansion_base import _WithOriginalBase
 
 
@@ -55,7 +54,7 @@ class EqualWidthDiscretiserWithOriginal(_WithOriginalBase):
             EqualWidthDiscretiser: Unfitted instance.
         """
         return EqualWidthDiscretiser(
-            variables=cast("list[str | int] | None", self.variables),
+            variables=to_feature_engine_variables(self.variables),
             bins=self.bins,
             return_object=self.return_object,
             return_boundaries=self.return_boundaries,

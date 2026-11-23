@@ -1,12 +1,12 @@
 import gc
 from copy import deepcopy
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar
 
 import numpy as np
 import pandas as pd
 from sklearn.pipeline import Pipeline
 
-from kvbiii_ml._typing import Estimator
+from kvbiii_ml._typing import Estimator, to_feature_engine_variables
 from kvbiii_ml.data_processing.preprocessing.pipeline_dependency import (
     PipelineDependencyGraph,
 )
@@ -650,7 +650,7 @@ if __name__ == "__main__":
                 (
                     "mean_encoder",
                     MeanEncoder(
-                        variables=cast("list[str | int] | None", cat_cols), missing_values="ignore"
+                        variables=to_feature_engine_variables(cat_cols), missing_values="ignore"
                     ),
                 ),
             ]

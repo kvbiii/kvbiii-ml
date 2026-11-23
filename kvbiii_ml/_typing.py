@@ -1,6 +1,6 @@
 # ruff: noqa: ANN401
 from collections.abc import Callable
-from typing import Any, Literal, Protocol, TypedDict
+from typing import Any, Literal, Protocol, TypedDict, cast
 
 import pandas as pd
 
@@ -36,3 +36,8 @@ class RfeSummary(TypedDict):
     selected_features: list[str]
     selected_features_names: list[str]
     history: pd.DataFrame
+
+
+def to_feature_engine_variables(variables: list[str] | None) -> list[str | int] | None:
+    """Return ``variables`` unchanged, typed as the ``list[str | int]`` feature_engine annotates."""
+    return cast("list[str | int] | None", variables)

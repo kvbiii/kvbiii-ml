@@ -2,7 +2,6 @@ import warnings
 from collections.abc import Generator
 from contextlib import contextmanager
 from copy import deepcopy
-from typing import cast
 from unittest.mock import patch
 
 import joblib.parallel
@@ -11,7 +10,7 @@ import pandas as pd
 from sklearn.inspection import permutation_importance
 from tqdm import tqdm
 
-from kvbiii_ml._typing import Estimator, RfeSummary
+from kvbiii_ml._typing import Estimator, RfeSummary, to_feature_engine_variables
 from kvbiii_ml.data_processing.preprocessing.pipeline_dependency import (
     PipelineDependencyGraph,
 )
@@ -804,7 +803,7 @@ if __name__ == "__main__":
                 (
                     "mean_encoder",
                     MeanEncoder(
-                        variables=cast("list[str | int] | None", cat_features),
+                        variables=to_feature_engine_variables(cat_features),
                         missing_values="ignore",
                     ),
                 ),

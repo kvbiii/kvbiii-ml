@@ -3,6 +3,7 @@ from typing import Literal, cast
 import pandas as pd
 from feature_engine.outliers import OutlierTrimmer
 
+from kvbiii_ml._typing import to_feature_engine_variables
 from kvbiii_ml.data_processing.preprocessing.expansion_base import _WithOriginalBase
 
 
@@ -50,7 +51,7 @@ class OutlierTrimmerWithOriginal(_WithOriginalBase):
             capping_method=self.capping_method,
             tail=self.tail,
             fold=cast("float | Literal['auto']", self.fold),
-            variables=cast("list[str | int] | None", self.variables),
+            variables=to_feature_engine_variables(self.variables),
             missing_values=self.missing_values,
         )
 
