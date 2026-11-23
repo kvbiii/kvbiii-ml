@@ -75,6 +75,7 @@ class PermutationRecursiveFeatureElimination:
         steps: int = 5,
         alpha: float = 0.95,
         n_repeats: int = 5,
+        *,
         verbose: bool = True,
         protected_features: list[str] | None = None,
         random_state: int = 17,

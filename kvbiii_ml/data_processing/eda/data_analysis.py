@@ -309,7 +309,7 @@ class DataAnalyzer:
 
     @staticmethod
     def describe_categorical_feature(
-        data: pd.DataFrame, feature: str, top_n: int = 10, show_null: bool = True
+        data: pd.DataFrame, feature: str, top_n: int = 10, *, show_null: bool = True
     ) -> Styler:
         """Provides enhanced categorical feature analysis with styling.
 

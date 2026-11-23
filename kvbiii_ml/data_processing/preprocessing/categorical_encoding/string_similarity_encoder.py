@@ -27,6 +27,7 @@ class StringSimilarityEncoderWithOriginal(_WithOriginalBase):
         keywords: dict | None = None,
         missing_values: str = "impute",
         variables: list[str | int] | None = None,
+        *,
         ignore_format: bool = False,
     ) -> None:
         """

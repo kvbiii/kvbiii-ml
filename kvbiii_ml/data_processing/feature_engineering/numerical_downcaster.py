@@ -26,6 +26,7 @@ class NumericalDowncaster(BaseEstimator, TransformerMixin):
     def __init__(
         self,
         variables: list[str] | None = None,
+        *,
         int_downcast: bool = True,
         float_downcast: bool = True,
         float_precision: str = "lossless",

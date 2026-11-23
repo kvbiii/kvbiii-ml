@@ -358,10 +358,10 @@ def test_basetrainer_resolve_verbose_period_caps_truthy_values():
         - False, 0, and None all resolve to False.
     """
     for truthy in (True, 1, 5, 200):
-        if BaseTrainer._resolve_verbose_period(truthy) != VERBOSE_LOG_PERIOD:
+        if BaseTrainer._resolve_verbose_period(verbose=truthy) != VERBOSE_LOG_PERIOD:
             raise AssertionError(f"Expected VERBOSE_LOG_PERIOD for {truthy!r}.")
     for falsy in (False, 0, None):
-        if BaseTrainer._resolve_verbose_period(falsy) is not False:
+        if BaseTrainer._resolve_verbose_period(verbose=falsy) is not False:
             raise AssertionError(f"Expected False for {falsy!r}.")
 
 

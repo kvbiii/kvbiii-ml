@@ -102,6 +102,7 @@ def predict_with_offset(
     estimator: Estimator,
     X: pd.DataFrame,
     offset: np.ndarray,
+    *,
     proba: bool = False,
 ) -> np.ndarray:
     """Predict with a booster trained on an offset: raw score + offset, then the inverse link.
@@ -187,7 +188,7 @@ def to_metric_proba(proba: np.ndarray) -> np.ndarray:
 
 
 def order_x_for_estimator(
-    X: pd.DataFrame, estimator: Estimator, strict: bool = False
+    X: pd.DataFrame, estimator: Estimator, *, strict: bool = False
 ) -> pd.DataFrame:
     """Reorder columns to match a fitted estimator's expected feature order.
 
@@ -313,6 +314,7 @@ class BaseTrainer:
         estimator: Estimator,
         X_valid: pd.DataFrame,
         y_valid: pd.Series,
+        *,
         verbose: bool | int | None = False,
     ) -> dict:
         """Build estimator-specific fit kwargs for eval_set injection and output suppression.
@@ -335,7 +337,7 @@ class BaseTrainer:
                 estimators not in the three recognised boosting families.
         """
         class_name = type(estimator).__name__
-        log_period = BaseTrainer._resolve_verbose_period(verbose)
+        log_period = BaseTrainer._resolve_verbose_period(verbose=verbose)
         if LGBM_PREFIX in class_name:
             fit_kwargs: dict = {"callbacks": [log_evaluation(log_period)]}
             if "eval_X" in signature(estimator.fit).parameters:
@@ -362,6 +364,7 @@ class BaseTrainer:
         fit_params: dict,
         offset_train: np.ndarray,
         offset_valid: np.ndarray | None,
+        *,
         eval_on_train: bool,
     ) -> None:
         """Add each boosting library's offset arguments to fit_params, in place.
@@ -441,7 +444,7 @@ class BaseTrainer:
         return type(estimator)(**{k: v for k, v in params.items() if k not in keys})
 
     @staticmethod
-    def _resolve_verbose_period(verbose: bool | int | None) -> bool | int:
+    def _resolve_verbose_period(*, verbose: bool | int | None) -> bool | int:
         """Cap a truthy verbose request to a fixed once-per-`VERBOSE_LOG_PERIOD` cadence.
 
         LightGBM, XGBoost, and CatBoost all print a log line on every single
@@ -468,6 +471,7 @@ class BaseTrainer:
         sig: Signature,
         train: tuple[pd.DataFrame, pd.Series],
         valid: tuple[pd.DataFrame | None, pd.Series | None],
+        *,
         eval_on_train: bool,
     ) -> dict[str, object]:
         """Build the eval_X/eval_y (LightGBM) or eval_set kwargs; no train set on CatBoost GPU."""
@@ -499,13 +503,13 @@ class BaseTrainer:
 
     @staticmethod
     def _verbose_fit_params(
-        estimator: Estimator, sig: Signature, verbose: bool | int | None
+        estimator: Estimator, sig: Signature, *, verbose: bool | int | None
     ) -> tuple[Estimator, dict[str, object]]:
         """Map ``verbose`` to fit kwargs, a LightGBM log callback or HistGB's constructor flag."""
         fit_params: dict[str, object] = {}
         if verbose is None:
             return estimator, fit_params
-        log_period = BaseTrainer._resolve_verbose_period(verbose)
+        log_period = BaseTrainer._resolve_verbose_period(verbose=verbose)
         name = estimator.__class__.__name__
         if "verbose" in sig.parameters:
             fit_params["verbose"] = log_period
@@ -591,10 +595,10 @@ class BaseTrainer:
         estimator = BaseTrainer._set_categorical_params(estimator, X_train)
 
         sig = signature(estimator.fit)
-        estimator, fit_params = BaseTrainer._verbose_fit_params(estimator, sig, verbose)
+        estimator, fit_params = BaseTrainer._verbose_fit_params(estimator, sig, verbose=verbose)
         fit_params.update(
             BaseTrainer._eval_fit_params(
-                estimator, sig, (X_train, y_train), (X_valid, y_valid), eval_on_train
+                estimator, sig, (X_train, y_train), (X_valid, y_valid), eval_on_train=eval_on_train
             )
         )
 
@@ -616,7 +620,7 @@ class BaseTrainer:
             fit_params.update(BaseTrainer._lgbm_cuda_categorical_override(estimator, sig))
         if offset_train is not None:
             BaseTrainer._add_offset_fit_params(
-                estimator, fit_params, offset_train, offset_valid, eval_on_train
+                estimator, fit_params, offset_train, offset_valid, eval_on_train=eval_on_train
             )
         estimator.fit(X_train, y_train, **fit_params)
         estimator = BaseTrainer._align_xgb_device_to_cpu(estimator)

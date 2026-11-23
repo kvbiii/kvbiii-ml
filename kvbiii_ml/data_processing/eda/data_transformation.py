@@ -13,7 +13,7 @@ class DataTransformer:
 
     @staticmethod
     def optimize_memory(
-        df: pd.DataFrame, categorical_features: list[str], verbose: bool = True
+        df: pd.DataFrame, categorical_features: list[str], *, verbose: bool = True
     ) -> pd.DataFrame:
         """Reduces memory by downcasting numerics and converting selected categories.
 
@@ -64,7 +64,7 @@ class DataTransformer:
 
     @staticmethod
     def encode_target_feature(
-        df: pd.DataFrame, target_feature: str, verbose: bool = True
+        df: pd.DataFrame, target_feature: str, *, verbose: bool = True
     ) -> tuple[pd.DataFrame, dict[int, str]]:
         """Convert the target feature to categorical codes and create label mappings.
 

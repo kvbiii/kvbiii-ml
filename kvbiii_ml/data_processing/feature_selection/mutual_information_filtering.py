@@ -22,6 +22,7 @@ class MutualInformationFiltering:
         problem_type: str,
         threshold: float = 0.1,
         keep_top_k: int | None = None,
+        *,
         verbose: bool = False,
     ) -> None:
         """Initialize the mutual information filter.

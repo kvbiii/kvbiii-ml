@@ -142,7 +142,7 @@ class _OrderedTrialLogger:
     reads exactly as a sequential run would.
     """
 
-    def __init__(self, label: str, total: int, metric_name: str, maximize: bool) -> None:
+    def __init__(self, label: str, total: int, metric_name: str, *, maximize: bool) -> None:
         """Initialize the logger.
 
         Args:
@@ -281,8 +281,8 @@ class RandomSearchCV:
         cross_validator: CrossValidationTrainer,
         n_trials: int = 100,
         seed: int = 17,
-        verbose: bool = True,
         *,
+        verbose: bool = True,
         n_parallel_trials: int = 1,
         explore_fraction: float = 0.25,
         explore_min_rows: int = 100_000,
@@ -512,7 +512,7 @@ class RandomSearchCV:
         previous_verbosity = optuna.logging.get_verbosity()
         optuna.logging.set_verbosity(optuna.logging.WARNING)
         try:
-            self._log_start(valid is not None)
+            self._log_start(use_holdout=valid is not None)
             if valid is not None:
                 X_valid, y_valid = valid
                 plan = self._build_holdout_plan(X, y, self.check_x(X_valid), self.check_y(y_valid))
@@ -529,7 +529,7 @@ class RandomSearchCV:
             optuna.logging.set_verbosity(previous_verbosity)
         return study
 
-    def _baseline_params(self, estimator: Estimator, snap: bool = True) -> dict[str, Any]:
+    def _baseline_params(self, estimator: Estimator, *, snap: bool = True) -> dict[str, Any]:
         """Build the estimator's own parameters for every grid entry it exposes.
 
         Parameters the estimator does not expose through get_params are omitted so the
@@ -587,7 +587,7 @@ class RandomSearchCV:
         return score < reference - margin
 
     @staticmethod
-    def _bound_position(value: float, low: float, high: float, log: bool) -> float:
+    def _bound_position(value: float, low: float, high: float, *, log: bool) -> float:
         """Place a value on a zero-to-one scale between two bounds, in log space if log."""
         if log and value > 0 and low > 0:
             return float((np.log(value) - np.log(low)) / (np.log(high) - np.log(low)))
@@ -832,7 +832,7 @@ class RandomSearchCV:
         return fold_scores, best_iterations
 
     @staticmethod
-    def _expand_bound(name: str, bound: float, at_low: bool) -> float:
+    def _expand_bound(name: str, bound: float, *, at_low: bool) -> float:
         """Push one grid bound outward by a single multiplicative widening step.
 
         Multiplicative expansion respects the parameter's scale (a max_depth floor of 3
@@ -994,7 +994,7 @@ class RandomSearchCV:
                 bound = self.params_grid[name][1][0 if side == "low" else 1]
                 print(f"    {name}: {side.upper()} bound {float(bound):g}")
 
-    def _log_start(self, use_holdout: bool) -> None:
+    def _log_start(self, *, use_holdout: bool) -> None:
         """Print a search-start summary when verbose mode is enabled."""
         if not self.verbose:
             return
@@ -1173,7 +1173,7 @@ class RandomSearchCV:
             label (str): Stage name shown on every trial line.
         """
         maximize = self.metric_direction == "maximize"
-        logger = _OrderedTrialLogger(label, n_trials, self.metric_name, maximize)
+        logger = _OrderedTrialLogger(label, n_trials, self.metric_name, maximize=maximize)
         study.optimize(
             objective,
             n_trials=n_trials,
@@ -1424,7 +1424,9 @@ class RandomSearchCV:
             if not observed or high <= low:
                 continue
             log = bool(options.get("log", False))
-            position = float(np.median([self._bound_position(v, low, high, log) for v in observed]))
+            position = float(
+                np.median([self._bound_position(v, low, high, log=log) for v in observed])
+            )
             hard_low, hard_high = PARAM_HARD_LIMITS.get(name, UNBOUNDED)
             if position <= SATURATION_POSITION and low > hard_low:
                 report[name] = "low"

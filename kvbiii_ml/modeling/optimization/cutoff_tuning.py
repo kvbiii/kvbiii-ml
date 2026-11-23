@@ -58,6 +58,7 @@ class CutoffTunerCV:
         cross_validator: CrossValidationTrainer,
         n_trials: int = 100,
         seed: int = 17,
+        *,
         verbose: bool = True,
     ) -> None:
         """Initialize the tuner.
@@ -146,10 +147,10 @@ class CutoffTunerCV:
             fold_pipeline = self.cross_validator.fitted_pipelines_[0]
             x_proc = CrossValidationTrainer._transform_with_pipeline(fold_pipeline, X)  # noqa: SLF001
             y_proba = self.fitted_estimators_[0].predict_proba(x_proc)
-        return self._apply_cutoffs(y_proba, self.best_cutoffs, self._is_binary)
+        return self._apply_cutoffs(y_proba, self.best_cutoffs, is_binary=self._is_binary)
 
     @staticmethod
-    def _apply_cutoffs(y_proba: np.ndarray, cutoffs: np.ndarray, is_binary: bool) -> np.ndarray:
+    def _apply_cutoffs(y_proba: np.ndarray, cutoffs: np.ndarray, *, is_binary: bool) -> np.ndarray:
         """Convert probabilities and cutoffs into class predictions.
 
         Notes:
@@ -483,7 +484,7 @@ class CutoffTunerCV:
             float | None: Penalized aggregate score, or None if no fold produced a
                 valid metric (e.g. a fold contains a single class for Roc AUC).
         """
-        y_pred = self._apply_cutoffs(y_proba, cutoffs, self._is_binary)
+        y_pred = self._apply_cutoffs(y_proba, cutoffs, is_binary=self._is_binary)
         fold_scores: list[float] = []
         for start, end in itertools.pairwise(fold_boundaries):
             try:
@@ -586,7 +587,7 @@ class CutoffTunerCV:
         print(f"🎛️  Detected {mode} target; tuning {n_cutoffs} cutoff(s).")
 
         default_cutoffs = self._default_cutoffs(y_proba)
-        y_pred = self._apply_cutoffs(y_proba, default_cutoffs, self._is_binary)
+        y_pred = self._apply_cutoffs(y_proba, default_cutoffs, is_binary=self._is_binary)
         fold_scores = []
         for start, end in itertools.pairwise(fold_boundaries):
             try:

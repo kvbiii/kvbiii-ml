@@ -24,6 +24,7 @@ class DecisionTreeEncoderWithOriginal(_WithOriginalBase):
         cv: int = 3,
         scoring: str = "neg_mean_squared_error",
         param_grid: dict | None = None,
+        *,
         regression: bool = True,
         random_state: int | None = None,
         variables: list[str] | None = None,

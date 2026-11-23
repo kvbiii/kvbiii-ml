@@ -19,6 +19,7 @@ def get_top_regression_under_over_errors(
     y_true: pd.Series,
     y_pred: np.ndarray | pd.Series,
     top_n: int = 15,
+    *,
     log: bool = False,
     epsilon: float = 1e-9,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:

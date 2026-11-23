@@ -29,6 +29,7 @@ class ShapRecursiveFeatureElimination:
         cross_validator: CrossValidationTrainer,
         steps: int = 5,
         alpha: float = 0.95,
+        *,
         verbose: bool = True,
         protected_features: list[str] | None = None,
         max_samples_shap: int = 50000,

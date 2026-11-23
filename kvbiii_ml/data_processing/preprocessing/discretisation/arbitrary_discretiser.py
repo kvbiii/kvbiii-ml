@@ -19,6 +19,7 @@ class ArbitraryDiscretiserWithOriginal(_WithOriginalBase):
     def __init__(
         self,
         binning_dict: dict[str, list],
+        *,
         return_object: bool = False,
         return_boundaries: bool = False,
         precision: int = 3,

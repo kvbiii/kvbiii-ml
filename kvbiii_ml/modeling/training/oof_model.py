@@ -272,6 +272,7 @@ class OOFModel:
         estimator: Estimator,
         cross_validator: CrossValidationTrainer,
         problem_type: str,
+        *,
         calibrate: bool = False,
         calibration_method: str = "isotonic",
     ) -> None:

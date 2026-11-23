@@ -33,6 +33,7 @@ class CountFrequencyEncoderWithOriginal(_WithOriginalBase):
         encoding_method: str = "count",
         variables: list[str] | None = None,
         missing_values: str = "raise",
+        *,
         ignore_format: bool = False,
         unseen: str = "encode",
     ) -> None:

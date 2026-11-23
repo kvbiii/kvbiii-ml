@@ -25,6 +25,7 @@ HISTORY_COLUMNS = [
 
 
 def build_small_classification_data(
+    *,
     include_noise: bool = False,
 ) -> tuple[pd.DataFrame, pd.Series]:
     """Builds a tiny synthetic binary classification dataset for RFE-style tests.
