@@ -277,7 +277,7 @@ class PermutationRecursiveFeatureElimination:
         Returns:
             pd.DataFrame: History with the step-0 row.
         """
-        history = pd.DataFrame(columns=self.history_schema.keys()).astype(self.history_schema)  # ty: ignore[invalid-argument-type]
+        history = pd.DataFrame(columns=list(self.history_schema)).astype(self.history_schema)
         return pd.concat(
             [
                 history,

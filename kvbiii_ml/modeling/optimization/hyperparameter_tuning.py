@@ -183,7 +183,9 @@ class _OrderedTrialLogger:
             print(f"{icon} {prefix} {trial.state.name.lower()} ({duration:.2f}s)")
             return
         improved = self._best is None or (
-            trial.value > self._best.value if self.maximize else trial.value < self._best.value  # ty: ignore[unsupported-operator]
+            _trial_value(trial) > _trial_value(self._best)
+            if self.maximize
+            else _trial_value(trial) < _trial_value(self._best)
         )
         if improved:
             self._best = trial
