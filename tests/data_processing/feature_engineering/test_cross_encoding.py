@@ -75,7 +75,6 @@ def test_crossfeaturegenerator_init_custom_parameters():
         ({"features_names": [1, 2, 3]}, "features_names must be a list of strings"),
         ({"degree": 1.5}, "degree must be an integer >= 2"),
         ({"degree": 1}, "degree must be an integer >= 2"),
-        ({"separator": 123}, "separator must be a string"),
         ({"batch_size": 0}, "batch_size must be a positive integer"),
         ({"batch_size": -3}, "batch_size must be a positive integer"),
         ({"chunk_size": 0}, "chunk_size must be a positive integer"),
@@ -98,6 +97,16 @@ def test_crossfeaturegenerator_validate_init_params_raises(kwargs: dict, match: 
     """
     with pytest.raises(ValueError, match=match):
         CrossFeatureGenerator(**kwargs)
+
+
+def test_crossfeaturegenerator_validate_init_params_raises_typeerror_for_non_string_separator():
+    """Tests that a non-string separator raises TypeError.
+
+    Asserts:
+        - TypeError is raised with the separator message
+    """
+    with pytest.raises(TypeError, match="separator must be a string"):
+        CrossFeatureGenerator(separator=123)  # ty: ignore[invalid-argument-type]
 
 
 def test_crossfeaturegenerator_legacy_batch_chunk_kwargs_are_applied():

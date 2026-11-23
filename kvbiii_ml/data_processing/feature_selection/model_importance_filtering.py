@@ -70,14 +70,15 @@ class ModelImportanceFiltering:
         """Validate init parameter values.
 
         Raises:
-            ValueError: When any parameter has an invalid type or value.
+            TypeError: When threshold is not numeric or verbose is not a boolean.
+            ValueError: When any other parameter has an invalid type or value.
         """
         if not isinstance(self.threshold, (float, int)):
-            raise ValueError("threshold must be a numeric value.")
+            raise TypeError("threshold must be a numeric value.")
         if not isinstance(self.max_steps, int) or self.max_steps < 1:
             raise ValueError("max_steps must be a positive integer.")
         if not isinstance(self.verbose, bool):
-            raise ValueError("verbose must be a boolean.")
+            raise TypeError("verbose must be a boolean.")
         if not isinstance(self.protected_features, list) or not all(
             isinstance(item, str) for item in self.protected_features
         ):

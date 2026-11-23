@@ -39,6 +39,7 @@ class CountEncodingFeatureGenerator:
         Validate the initialization parameters.
 
         Raises:
+            TypeError: If fill_value is not numeric.
             ValueError: If parameters are invalid.
         """
         if not isinstance(self.features_names, list) or not all(
@@ -46,7 +47,7 @@ class CountEncodingFeatureGenerator:
         ):
             raise ValueError("features_names must be a list of strings.")
         if not isinstance(self.fill_value, (int, float)):
-            raise ValueError("fill_value must be a numeric value.")
+            raise TypeError("fill_value must be a numeric value.")
         if not isinstance(self.batch_size, int) or self.batch_size < 1:
             raise ValueError("batch_size must be a positive integer.")
         if not isinstance(self.chunk_size, int) or self.chunk_size < 1:

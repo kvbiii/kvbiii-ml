@@ -72,6 +72,7 @@ class CrossFeatureGenerator:
         Validate the parameters for cross feature generation.
 
         Raises:
+            TypeError: If separator is not a string.
             ValueError: If parameters are invalid.
         """
         if not isinstance(self.features_names, list) or not all(
@@ -81,7 +82,7 @@ class CrossFeatureGenerator:
         if not isinstance(self.degree, int) or self.degree < MIN_DEGREE:
             raise ValueError("degree must be an integer >= 2.")
         if not isinstance(self.separator, str):
-            raise ValueError("separator must be a string.")
+            raise TypeError("separator must be a string.")
         if not isinstance(self.batch_size, int) or self.batch_size < 1:
             raise ValueError("batch_size must be a positive integer.")
         if not isinstance(self.chunk_size, int) or self.chunk_size < 1:

@@ -24,9 +24,9 @@ def test_custom_metrics_handler_validate_raises_error_for_non_dict_input():
     """Tests that a non-dict custom_metric is rejected.
 
     Asserts:
-        - ValueError is raised when custom_metric is not a dict.
+        - TypeError is raised when custom_metric is not a dict.
     """
-    with pytest.raises(ValueError, match="dictionary"):
+    with pytest.raises(TypeError, match="dictionary"):
         CustomMetricsHandler.validate_custom_metric_config(["not", "a", "dict"])  # ty: ignore[invalid-argument-type]
 
 
@@ -52,11 +52,11 @@ def test_custom_metrics_handler_validate_raises_error_for_non_callable_function(
     """Tests that a non-callable 'function' value is rejected.
 
     Asserts:
-        - ValueError is raised when custom_metric['function'] is not callable.
+        - TypeError is raised when custom_metric['function'] is not callable.
     """
     config = _valid_metric_config()
     config["function"] = "not_callable"
-    with pytest.raises(ValueError, match="callable"):
+    with pytest.raises(TypeError, match="callable"):
         CustomMetricsHandler.validate_custom_metric_config(config)
 
 

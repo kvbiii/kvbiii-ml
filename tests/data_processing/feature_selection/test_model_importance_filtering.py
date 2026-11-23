@@ -53,10 +53,8 @@ def _build_cv(pipeline: Pipeline | None = None):
 @pytest.mark.parametrize(
     "kwargs,match",
     [
-        ({"threshold": "not_a_number"}, "threshold must be a numeric value"),
         ({"max_steps": 0}, "max_steps must be a positive integer"),
         ({"max_steps": "3"}, "max_steps must be a positive integer"),
-        ({"verbose": "yes"}, "verbose must be a boolean"),
         ({"protected_features": "f0"}, "protected_features must be a list of strings"),
         (
             {"protected_features": [1, 2]},
@@ -75,6 +73,29 @@ def test_modelimportancefiltering_init_raises_valueerror_for_invalid_params(kwar
         - ValueError is raised with a message matching the invalid parameter
     """
     with pytest.raises(ValueError, match=match):
+        ModelImportanceFiltering(
+            estimator=_build_estimator(), cross_validator=_build_cv(), **kwargs
+        )
+
+
+@pytest.mark.parametrize(
+    "kwargs,match",
+    [
+        ({"threshold": "not_a_number"}, "threshold must be a numeric value"),
+        ({"verbose": "yes"}, "verbose must be a boolean"),
+    ],
+)
+def test_modelimportancefiltering_init_raises_typeerror_for_invalid_param_types(kwargs, match):
+    """Tests init validation raises TypeError for a non-numeric threshold or non-bool verbose.
+
+    Args:
+        kwargs (dict): Invalid keyword argument overriding a valid default.
+        match (str): Expected substring of the TypeError message.
+
+    Asserts:
+        - TypeError is raised with a message matching the invalid parameter
+    """
+    with pytest.raises(TypeError, match=match):
         ModelImportanceFiltering(
             estimator=_build_estimator(), cross_validator=_build_cv(), **kwargs
         )

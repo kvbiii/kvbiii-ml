@@ -35,11 +35,10 @@ ignore = [
     "TC001",
     "TC002",
     "TC003",
-    "TRY004",
 ]
 
 [lint.per-file-ignores]
-"tests/**" = ["ANN", "DOC501", "NPY002", "PLR2004", "RSE102", "S101", "SLF001"]
+"tests/**" = ["ANN", "DOC501", "NPY002", "PLR2004", "RSE102", "S101", "SLF001", "TRY004"]
 
 [lint.pydocstyle]
 convention = "google"
