@@ -17,7 +17,7 @@ from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 
-from kvbiii_ml._typing import Estimator
+from kvbiii_ml._typing import Estimator, format_styler
 from kvbiii_ml._validation import check_fitted
 from kvbiii_ml.evaluation.generate_reports import _apply_fancy_styling
 from kvbiii_ml.evaluation.metrics import (
@@ -422,7 +422,7 @@ class ClassificationCalibrator:
                 facecolor=_PLOT_SURFACE,
                 gridspec_kw={"wspace": 0.35},
             )
-            y_bin = cast("np.ndarray", y_true == self._classes[1]).astype(int)
+            y_bin = (y_true == self._classes[1]).astype(int)
             for col, name in enumerate(method_names):
                 ax = axes[0, col]
                 hist_ax = self._draw_reliability_panel(
@@ -452,7 +452,7 @@ class ClassificationCalibrator:
                 probas = self._oof_probas_by_method[name]
                 for col, cls in enumerate(self._classes):
                     ax = axes[row, col]
-                    y_bin = cast("np.ndarray", y_true == cls).astype(int)
+                    y_bin = (y_true == cls).astype(int)
                     panel_title = f"Class {labels[col]}"
                     hist_ax = self._draw_reliability_panel(
                         ax, y_bin, probas[:, col], panel_title, name
@@ -502,7 +502,7 @@ class ClassificationCalibrator:
         check_fitted(self, "calibration_scores_df_")
 
         styled = _apply_fancy_styling(
-            cast("Styler", self.calibration_scores_df_.style.format("{:.4f}")),
+            format_styler(self.calibration_scores_df_.style, "{:.4f}"),
             "🎯 Calibration Method Comparison",
         )
         return styled.apply(self._highlight_best_row, axis=1)
@@ -574,9 +574,7 @@ class ClassificationCalibrator:
             },
         )
 
-        hist_ax = ax.inset_axes(
-            cast("tuple[float, float, float, float]", [0, -0.24, 1, 0.16]), sharex=ax
-        )
+        hist_ax = ax.inset_axes((0, -0.24, 1, 0.16), sharex=ax)
         bin_edges = np.linspace(0.0, 1.0, self.n_bins + 1)
         counts, _ = np.histogram(p, bins=bin_edges)
         hist_ax.bar(

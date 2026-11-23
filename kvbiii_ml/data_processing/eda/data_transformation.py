@@ -30,28 +30,26 @@ class DataTransformer:
 
         numerical_cols = df.select_dtypes(include=["int", "float"]).columns.tolist()
         if numerical_cols:
-            if verbose:
-                num_start_mem = df.memory_usage(deep=True).sum() / 1024**2
+            num_start_mem = df.memory_usage(deep=True).sum() / 1024**2 if verbose else 0.0
             downcaster = NumericalDowncaster(variables=numerical_cols)
             df = downcaster.fit_transform(df)
             if verbose:
                 num_end_mem = df.memory_usage(deep=True).sum() / 1024**2
-                reduction = 100 * (num_start_mem - num_end_mem) / num_start_mem  # ty: ignore[possibly-unresolved-reference]
+                reduction = 100 * (num_start_mem - num_end_mem) / num_start_mem
                 print(
-                    f"Numerical dtypes reduced: {num_start_mem:.2f} MB "  # ty: ignore[possibly-unresolved-reference]
+                    f"Numerical dtypes reduced: {num_start_mem:.2f} MB "
                     f"→ {num_end_mem:.2f} MB ({reduction:.1f}% reduction)"
                 )
 
         if categorical_features:
-            if verbose:
-                cat_start_mem = df.memory_usage(deep=True).sum() / 1024**2
+            cat_start_mem = df.memory_usage(deep=True).sum() / 1024**2 if verbose else 0.0
             aligner = CategoricalAligner(variables=categorical_features, warn_on_unknown=False)
             df = aligner.fit_transform(df)
             if verbose:
                 cat_end_mem = df.memory_usage(deep=True).sum() / 1024**2
-                reduction = 100 * (cat_start_mem - cat_end_mem) / cat_start_mem  # ty: ignore[possibly-unresolved-reference]
+                reduction = 100 * (cat_start_mem - cat_end_mem) / cat_start_mem
                 print(
-                    f"Categorical dtypes converted: {cat_start_mem:.2f} MB "  # ty: ignore[possibly-unresolved-reference]
+                    f"Categorical dtypes converted: {cat_start_mem:.2f} MB "
                     f"→ {cat_end_mem:.2f} MB ({reduction:.1f}% reduction)"
                 )
 

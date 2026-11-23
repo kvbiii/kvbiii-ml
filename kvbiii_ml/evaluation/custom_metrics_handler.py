@@ -4,6 +4,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from kvbiii_ml._typing import Direction
+
 
 class CustomMetricsHandler:
     """Extract and wrap custom metrics from configuration dictionaries."""
@@ -43,7 +45,7 @@ class CustomMetricsHandler:
     @staticmethod
     def extract_metric_details(
         custom_metric: dict[str, Any],
-    ) -> tuple[str, Callable[..., float], str, str]:
+    ) -> tuple[str, Callable[..., float], str, Direction]:
         """Validate a metric configuration, raising ValueError if invalid, and return its details.
 
         Configuration keys:

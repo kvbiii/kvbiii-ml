@@ -3,7 +3,7 @@ import warnings
 from collections import Counter
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from typing import Any, ClassVar, cast, overload
+from typing import Any, ClassVar, overload
 
 import numpy as np
 import optuna
@@ -12,7 +12,7 @@ from sklearn.base import clone
 from sklearn.model_selection import BaseCrossValidator, KFold, StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 
-from kvbiii_ml._typing import Direction, Estimator
+from kvbiii_ml._typing import Estimator
 from kvbiii_ml.modeling.training.base_trainer import BaseTrainer, FitRows, to_metric_proba
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 from kvbiii_ml.modeling.training.oof_model import _get_n_iterations
@@ -79,6 +79,17 @@ PARAM_HARD_LIMITS: dict[str, tuple[float, float]] = {
     "scale_pos_weight": (0.0, float("inf")),
     "subsample": (0.05, 1.0),
 }
+
+
+def _trial_value(trial: optuna.trial.FrozenTrial) -> float:
+    """Return a completed trial's objective value, which Optuna types as optional.
+
+    Raises:
+        ValueError: If the trial has no objective value.
+    """
+    if trial.value is None:
+        raise ValueError(f"Trial {trial.number} has no objective value.")
+    return trial.value
 
 
 @dataclass
@@ -172,7 +183,9 @@ class _OrderedTrialLogger:
             print(f"{icon} {prefix} {trial.state.name.lower()} ({duration:.2f}s)")
             return
         improved = self._best is None or (
-            trial.value > self._best.value if self.maximize else trial.value < self._best.value  # ty: ignore[unsupported-operator]
+            _trial_value(trial) > _trial_value(self._best)
+            if self.maximize
+            else _trial_value(trial) < _trial_value(self._best)
         )
         if improved:
             self._best = trial
@@ -369,7 +382,7 @@ class RandomSearchCV:
             constant_liar=self.n_parallel_trials > 1,
         )
         return optuna.create_study(
-            direction=cast("Direction", self.metric_direction),
+            direction=self.metric_direction,
             sampler=sampler,
             pruner=pruner if pruner is not None else optuna.pruners.NopPruner(),
             study_name="Optuna tuning",
@@ -791,9 +804,9 @@ class RandomSearchCV:
             self._scale_row_params(params, plan.fidelity)
         )
         predict = (
-            (lambda fitted, x: to_metric_proba(BaseTrainer.predict_proba(fitted, x)))
+            (lambda fitted, x: to_metric_proba(BaseTrainer.predict_proba_or_none(fitted, x)))
             if self.metric_type == "probs"
-            else BaseTrainer.predict
+            else BaseTrainer.predict_or_none
         )
         fold_scores: list[float] = []
         best_iterations: list[int] = []
@@ -945,8 +958,7 @@ class RandomSearchCV:
             )
         if self.saturated_params_:
             pressed = ", ".join(
-                f"{name} ({side} bound "
-                f"{float(cast('float', self.params_grid[name][1][side == 'high'])):g})"
+                f"{name} ({side} bound {float(self.params_grid[name][1][side == 'high']):g})"
                 for name, side in self.saturated_params_.items()
             )
             print(f"⚠️  The best configs pressed against grid bounds: {pressed}. Widen and re-run.")
@@ -980,7 +992,7 @@ class RandomSearchCV:
             print("⚠️  Grid bounds the elite configs pressed against (expanded by one step):")
             for name, side in self.saturated_params_.items():
                 bound = self.params_grid[name][1][0 if side == "low" else 1]
-                print(f"    {name}: {side.upper()} bound {float(cast('float', bound)):g}")
+                print(f"    {name}: {side.upper()} bound {float(bound):g}")
 
     def _log_start(self, use_holdout: bool) -> None:
         """Print a search-start summary when verbose mode is enabled."""
@@ -1478,7 +1490,7 @@ class RandomSearchCV:
             trial
             for trial in self._completed_trials(study)
             if self._beats(
-                cast("float", trial.value),
+                _trial_value(trial),
                 self.baseline_score_,
                 self._required_margin(self._fold_scores(trial), baseline_folds),
             )
@@ -1494,7 +1506,7 @@ class RandomSearchCV:
             chosen = self._select_confirm_trial(eligible)
             winner = _Candidate(
                 dict(chosen.user_attrs.get("params", chosen.params)),
-                float(cast("float", chosen.value)),
+                _trial_value(chosen),
                 list(chosen.user_attrs.get("best_iterations", [])),
                 TUNED_LABEL,
             )
@@ -1523,8 +1535,8 @@ class RandomSearchCV:
             trial
             for trial in trials
             if not self._beats(
-                cast("float", best.value),
-                cast("float", trial.value),
+                _trial_value(best),
+                _trial_value(trial),
                 self._required_margin(best_folds, self._fold_scores(trial)),
             )
         ]

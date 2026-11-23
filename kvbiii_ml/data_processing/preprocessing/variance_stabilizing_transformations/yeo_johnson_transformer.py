@@ -1,8 +1,7 @@
-from typing import cast
-
 import pandas as pd
 from feature_engine.transformation import YeoJohnsonTransformer
 
+from kvbiii_ml._typing import to_feature_engine_variables
 from kvbiii_ml.data_processing.preprocessing.expansion_base import _WithOriginalBase
 
 
@@ -30,7 +29,7 @@ class YeoJohnsonTransformerWithOriginal(_WithOriginalBase):
         Returns:
             YeoJohnsonTransformer: Unfitted instance.
         """
-        return YeoJohnsonTransformer(variables=cast("list[str | int] | None", self.variables))
+        return YeoJohnsonTransformer(variables=to_feature_engine_variables(self.variables))
 
     def _fit_inner(
         self, inner: YeoJohnsonTransformer, X: pd.DataFrame, y: object

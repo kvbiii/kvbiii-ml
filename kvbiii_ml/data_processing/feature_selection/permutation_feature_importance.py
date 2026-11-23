@@ -2,7 +2,6 @@ import warnings
 from collections.abc import Generator
 from contextlib import contextmanager
 from copy import deepcopy
-from typing import cast
 from unittest.mock import patch
 
 import joblib.parallel
@@ -11,7 +10,7 @@ import pandas as pd
 from sklearn.inspection import permutation_importance
 from tqdm import tqdm
 
-from kvbiii_ml._typing import Estimator, RfeSummary
+from kvbiii_ml._typing import Estimator, RfeSummary, to_feature_engine_variables
 from kvbiii_ml.data_processing.preprocessing.pipeline_dependency import (
     PipelineDependencyGraph,
 )
@@ -118,7 +117,7 @@ class PermutationRecursiveFeatureElimination:
             "importance_score": float,
         }
 
-    def run(self, X: pd.DataFrame, y: pd.Series | np.ndarray) -> RfeSummary:
+    def run(self, X: pd.DataFrame, y: pd.Series) -> RfeSummary:
         """Run permutation RFE and return the selection summary.
 
         Algorithm:
@@ -134,7 +133,7 @@ class PermutationRecursiveFeatureElimination:
 
         Args:
             X (pd.DataFrame): Feature matrix (raw columns).
-            y (pd.Series | np.ndarray): Target aligned with X.
+            y (pd.Series): Target aligned with X.
 
         Returns:
             RfeSummary: Keys:
@@ -213,13 +212,13 @@ class PermutationRecursiveFeatureElimination:
         return summary_df
 
     def _fit_baseline(
-        self, X: pd.DataFrame, y: pd.Series | np.ndarray
+        self, X: pd.DataFrame, y: pd.Series
     ) -> tuple[PipelineDependencyGraph, list[float]]:
         """Build the dependency graph and fit the baseline CV once.
 
         Args:
             X (pd.DataFrame): Feature matrix (raw columns).
-            y (pd.Series | np.ndarray): Target aligned with X.
+            y (pd.Series): Target aligned with X.
 
         Returns:
             tuple[PipelineDependencyGraph, list[float]]: Dependency graph and per-fold scores.
@@ -228,26 +227,24 @@ class PermutationRecursiveFeatureElimination:
         dependency_graph = PipelineDependencyGraph.build(
             self.cross_validator.preprocessing_pipeline,
             X[all_raw_features],
-            cast("pd.Series", y),
+            y,
         )
         baseline_estimator = self._restrict_catboost_cat_features(
             self.estimator,
             set(dependency_graph.processed_columns),
             dependency_graph.processed_dtypes,
         )
-        _, valid_scores, _ = self.cross_validator.fit(
-            baseline_estimator, X[all_raw_features], cast("pd.Series", y)
-        )
+        _, valid_scores, _ = self.cross_validator.fit(baseline_estimator, X[all_raw_features], y)
         return dependency_graph, valid_scores
 
     def _fold_validation_data(
-        self, X: pd.DataFrame, y: pd.Series | np.ndarray
+        self, X: pd.DataFrame, y: pd.Series
     ) -> list[tuple[Estimator, pd.DataFrame, pd.Series]]:
         """Collect (fitted estimator, processed validation X, validation y) for every fold.
 
         Args:
             X (pd.DataFrame): Feature matrix (raw columns).
-            y (pd.Series | np.ndarray): Target aligned with X.
+            y (pd.Series): Target aligned with X.
 
         Returns:
             list[tuple[Estimator, pd.DataFrame, pd.Series]]: One entry per CV fold.
@@ -260,7 +257,7 @@ class PermutationRecursiveFeatureElimination:
                 CrossValidationTrainer._transform_with_pipeline(  # noqa: SLF001
                     pipe, X[all_raw_features].iloc[val_idx].copy()
                 ),
-                cast("pd.Series", y).iloc[val_idx],
+                y.iloc[val_idx],
             )
             for (_, val_idx), est, pipe in zip(
                 fold_splits,
@@ -280,7 +277,7 @@ class PermutationRecursiveFeatureElimination:
         Returns:
             pd.DataFrame: History with the step-0 row.
         """
-        history = pd.DataFrame(columns=self.history_schema.keys()).astype(self.history_schema)  # ty: ignore[invalid-argument-type]
+        history = pd.DataFrame(columns=list(self.history_schema)).astype(self.history_schema)
         return pd.concat(
             [
                 history,
@@ -345,7 +342,7 @@ class PermutationRecursiveFeatureElimination:
     def _cross_val_step(
         self,
         X: pd.DataFrame,
-        y: pd.Series | np.ndarray,
+        y: pd.Series,
         dependency_graph: PipelineDependencyGraph,
         current_features: list[str],
     ) -> list[float]:
@@ -353,7 +350,7 @@ class PermutationRecursiveFeatureElimination:
 
         Args:
             X (pd.DataFrame): Feature matrix (raw columns).
-            y (pd.Series | np.ndarray): Target aligned with X.
+            y (pd.Series): Target aligned with X.
             dependency_graph (PipelineDependencyGraph): Graph of the full pipeline.
             current_features (list[str]): Active processed feature names.
 
@@ -369,7 +366,7 @@ class PermutationRecursiveFeatureElimination:
         _, valid_scores, _ = self.cross_validator.fit(
             step_estimator,
             X[current_raw_features],
-            cast("pd.Series", y),
+            y,
             preprocessing_pipeline_override=restricted_pipeline,
         )
         return valid_scores
@@ -806,7 +803,7 @@ if __name__ == "__main__":
                 (
                     "mean_encoder",
                     MeanEncoder(
-                        variables=cast("list[str | int] | None", cat_features),
+                        variables=to_feature_engine_variables(cat_features),
                         missing_values="ignore",
                     ),
                 ),

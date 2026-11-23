@@ -1,8 +1,7 @@
-from typing import cast
-
 import pandas as pd
 from feature_engine.transformation import ArcsinTransformer
 
+from kvbiii_ml._typing import to_feature_engine_variables
 from kvbiii_ml.data_processing.preprocessing.expansion_base import _WithOriginalBase
 
 
@@ -30,7 +29,7 @@ class ArcsinTransformerWithOriginal(_WithOriginalBase):
         Returns:
             ArcsinTransformer: Unfitted instance.
         """
-        return ArcsinTransformer(variables=cast("list[str | int] | None", self.variables))
+        return ArcsinTransformer(variables=to_feature_engine_variables(self.variables))
 
     def _fit_inner(self, inner: ArcsinTransformer, X: pd.DataFrame, y: object) -> ArcsinTransformer:
         """Fit the transformer on X.

@@ -655,13 +655,13 @@ class BaseTrainer:
         fitted_estimator = BaseTrainer.fit_estimator(estimator, train, valid, verbose=False)
 
         if metric_type == "preds":
-            y_train_pred = BaseTrainer.predict(fitted_estimator, train.X)
-            y_valid_pred = BaseTrainer.predict(fitted_estimator, valid.X)
-            y_test_pred = BaseTrainer.predict(fitted_estimator, X_test)
+            y_train_pred = BaseTrainer.predict_or_none(fitted_estimator, train.X)
+            y_valid_pred = BaseTrainer.predict_or_none(fitted_estimator, valid.X)
+            y_test_pred = BaseTrainer.predict_or_none(fitted_estimator, X_test)
         elif metric_type == "probs":
-            y_train_pred = BaseTrainer.predict_proba(fitted_estimator, train.X)
-            y_valid_pred = BaseTrainer.predict_proba(fitted_estimator, valid.X)
-            y_test_pred = BaseTrainer.predict_proba(fitted_estimator, X_test)
+            y_train_pred = BaseTrainer.predict_proba_or_none(fitted_estimator, train.X)
+            y_valid_pred = BaseTrainer.predict_proba_or_none(fitted_estimator, valid.X)
+            y_test_pred = BaseTrainer.predict_proba_or_none(fitted_estimator, X_test)
         else:
             raise ValueError(f"Unknown metric type '{metric_type}'. Must be 'preds' or 'probs'.")
 
@@ -669,14 +669,14 @@ class BaseTrainer:
 
     @overload
     @staticmethod
-    def predict(estimator: Estimator, X: pd.DataFrame) -> np.ndarray: ...
+    def predict_or_none(estimator: Estimator, X: pd.DataFrame) -> np.ndarray: ...
 
     @overload
     @staticmethod
-    def predict(estimator: Estimator, X: None) -> None: ...
+    def predict_or_none(estimator: Estimator, X: None) -> None: ...
 
     @staticmethod
-    def predict(
+    def predict_or_none(
         estimator: Estimator,
         X: pd.DataFrame | None,
     ) -> np.ndarray | None:
@@ -695,14 +695,14 @@ class BaseTrainer:
 
     @overload
     @staticmethod
-    def predict_proba(estimator: Estimator, X: pd.DataFrame) -> np.ndarray: ...
+    def predict_proba_or_none(estimator: Estimator, X: pd.DataFrame) -> np.ndarray: ...
 
     @overload
     @staticmethod
-    def predict_proba(estimator: Estimator, X: None) -> None: ...
+    def predict_proba_or_none(estimator: Estimator, X: None) -> None: ...
 
     @staticmethod
-    def predict_proba(
+    def predict_proba_or_none(
         estimator: Estimator,
         X: pd.DataFrame | None,
     ) -> np.ndarray | None:

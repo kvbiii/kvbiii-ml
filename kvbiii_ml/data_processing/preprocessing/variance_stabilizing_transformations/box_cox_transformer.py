@@ -1,8 +1,7 @@
-from typing import cast
-
 import pandas as pd
 from feature_engine.transformation import BoxCoxTransformer
 
+from kvbiii_ml._typing import to_feature_engine_variables
 from kvbiii_ml.data_processing.preprocessing.expansion_base import _WithOriginalBase
 
 
@@ -30,7 +29,7 @@ class BoxCoxTransformerWithOriginal(_WithOriginalBase):
         Returns:
             BoxCoxTransformer: Unfitted instance.
         """
-        return BoxCoxTransformer(variables=cast("list[str | int] | None", self.variables))
+        return BoxCoxTransformer(variables=to_feature_engine_variables(self.variables))
 
     def _fit_inner(self, inner: BoxCoxTransformer, X: pd.DataFrame, y: object) -> BoxCoxTransformer:
         """Fit the transformer on X (estimates lambda per variable).

@@ -11,7 +11,7 @@ from sklearn.model_selection import BaseCrossValidator, KFold
 from sklearn.pipeline import Pipeline
 from tqdm import tqdm
 
-from kvbiii_ml._typing import Estimator
+from kvbiii_ml._typing import Estimator, to_feature_engine_variables
 from kvbiii_ml._validation import check_fitted
 from kvbiii_ml.evaluation.custom_metrics_handler import CustomMetricsHandler
 from kvbiii_ml.evaluation.metrics import (
@@ -511,7 +511,7 @@ class CrossValidationTrainer(BaseTrainer):
             )
         return weights
 
-    def predict(self, X: pd.DataFrame) -> np.ndarray:  # ty: ignore[invalid-method-override]
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
         """Predict with the averaged fold estimators, raising NotFittedError before fit.
 
         Applies each fold's fitted pipeline to X before calling the estimator,
@@ -547,7 +547,7 @@ class CrossValidationTrainer(BaseTrainer):
             )
         return avg
 
-    def predict_proba(self, X: pd.DataFrame) -> np.ndarray:  # ty: ignore[invalid-method-override]
+    def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
         """Average the fold estimators' class probabilities; NotFittedError before fit.
 
         Applies each fold's fitted pipeline to X before calling the estimator.
@@ -728,7 +728,7 @@ if __name__ == "__main__":
                 (
                     "mean_encoder",
                     MeanEncoder(
-                        variables=cast("list[str | int] | None", CAT_FEATURES),
+                        variables=to_feature_engine_variables(CAT_FEATURES),
                         missing_values="ignore",
                     ),
                 ),

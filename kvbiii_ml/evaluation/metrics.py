@@ -20,6 +20,8 @@ from sklearn.metrics import (
     root_mean_squared_log_error,
 )
 
+from kvbiii_ml._typing import Direction
+
 MetricFunction = Callable[..., float]
 TWEEDIE_POWER = 1.5
 PROBA_MATRIX_NDIM = 2
@@ -138,7 +140,7 @@ MINIMIZE_METRICS = frozenset(
     }
 )
 
-METRICS: dict[str, tuple[MetricFunction, str, str]] = {
+METRICS: dict[str, tuple[MetricFunction, str, Direction]] = {
     key: (
         eval_func,
         "probs" if key in PROBS_METRICS else "preds",
@@ -186,14 +188,14 @@ def get_metric_type(metric_name: str) -> str:
     return METRICS[metric_name][1]
 
 
-def get_metric_direction(metric_name: str) -> str:
+def get_metric_direction(metric_name: str) -> Direction:
     """Get the optimization direction for the metric.
 
     Args:
         metric_name (str): Name of the metric.
 
     Returns:
-        str: Either 'minimize' or 'maximize'.
+        Direction: Either 'minimize' or 'maximize'.
 
     Raises:
         ValueError: If metric name is not found.

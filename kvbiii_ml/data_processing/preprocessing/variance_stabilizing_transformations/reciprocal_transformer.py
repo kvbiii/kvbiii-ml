@@ -1,8 +1,7 @@
-from typing import cast
-
 import pandas as pd
 from feature_engine.transformation import ReciprocalTransformer
 
+from kvbiii_ml._typing import to_feature_engine_variables
 from kvbiii_ml.data_processing.preprocessing.expansion_base import _WithOriginalBase
 
 
@@ -30,7 +29,7 @@ class ReciprocalTransformerWithOriginal(_WithOriginalBase):
         Returns:
             ReciprocalTransformer: Unfitted instance.
         """
-        return ReciprocalTransformer(variables=cast("list[str | int] | None", self.variables))
+        return ReciprocalTransformer(variables=to_feature_engine_variables(self.variables))
 
     def _fit_inner(
         self, inner: ReciprocalTransformer, X: pd.DataFrame, y: object

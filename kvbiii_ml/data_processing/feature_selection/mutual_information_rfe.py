@@ -1,5 +1,4 @@
 import gc
-from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -62,12 +61,12 @@ class MutualInformationRecursiveFeatureElimination:
             "mi_score": float,
         }
 
-    def run(self, X: pd.DataFrame, y: pd.Series | np.ndarray) -> RfeSummary:
+    def run(self, X: pd.DataFrame, y: pd.Series) -> RfeSummary:
         """Run MI-based selection and return the selection summary.
 
         Args:
             X (pd.DataFrame): Feature matrix.
-            y (pd.Series | np.ndarray): Target aligned with X.
+            y (pd.Series): Target aligned with X.
 
         Returns:
             RfeSummary: Dictionary with keys:
@@ -88,9 +87,7 @@ class MutualInformationRecursiveFeatureElimination:
 
         prev_metric = None
         for step_idx, n_remove in enumerate(removal_schedule, start=1):
-            step_metric, step_metric_std = self._cross_val_base_metric(
-                X, cast("pd.Series", y), current_features
-            )
+            step_metric, step_metric_std = self._cross_val_base_metric(X, y, current_features)
 
             if self.verbose:
                 print(

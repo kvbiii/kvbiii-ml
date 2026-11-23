@@ -1,8 +1,9 @@
-from typing import Any, cast
+from typing import Any
 
 import pandas as pd
 from feature_engine.encoding import CountFrequencyEncoder
 
+from kvbiii_ml._typing import to_feature_engine_variables
 from kvbiii_ml.data_processing.preprocessing.expansion_base import (
     _cast_numeric_variables_to_object,
     _WithOriginalBase,
@@ -59,7 +60,7 @@ class CountFrequencyEncoderWithOriginal(_WithOriginalBase):
         """
         return CountFrequencyEncoder(
             encoding_method=self.encoding_method,
-            variables=cast("list[str | int] | None", self.variables),
+            variables=to_feature_engine_variables(self.variables),
             missing_values=self.missing_values,
             ignore_format=self.ignore_format,
             unseen=self.unseen,

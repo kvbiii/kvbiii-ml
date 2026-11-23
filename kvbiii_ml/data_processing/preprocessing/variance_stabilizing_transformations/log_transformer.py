@@ -1,8 +1,7 @@
-from typing import cast
-
 import pandas as pd
 from feature_engine.transformation import LogTransformer
 
+from kvbiii_ml._typing import to_feature_engine_variables
 from kvbiii_ml.data_processing.preprocessing.expansion_base import _WithOriginalBase
 
 
@@ -36,9 +35,7 @@ class LogTransformerWithOriginal(_WithOriginalBase):
         Returns:
             LogTransformer: Unfitted instance.
         """
-        return LogTransformer(
-            variables=cast("list[str | int] | None", self.variables), base=self.base
-        )
+        return LogTransformer(variables=to_feature_engine_variables(self.variables), base=self.base)
 
     def _fit_inner(self, inner: LogTransformer, X: pd.DataFrame, y: object) -> LogTransformer:
         """Fit the transformer on X.

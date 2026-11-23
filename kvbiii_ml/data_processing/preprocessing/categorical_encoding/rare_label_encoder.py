@@ -1,8 +1,7 @@
-from typing import cast
-
 import pandas as pd
 from feature_engine.encoding import RareLabelEncoder
 
+from kvbiii_ml._typing import to_feature_engine_variables
 from kvbiii_ml.data_processing.preprocessing.expansion_base import _WithOriginalBase
 
 
@@ -58,7 +57,7 @@ class RareLabelEncoderWithOriginal(_WithOriginalBase):
             n_categories=self.n_categories,
             max_n_categories=self.max_n_categories,
             replace_with=self.replace_with,
-            variables=cast("list[str | int] | None", self.variables),
+            variables=to_feature_engine_variables(self.variables),
             missing_values=self.missing_values,
             ignore_format=self.ignore_format,
         )
