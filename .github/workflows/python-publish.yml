@@ -51,9 +51,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Check formatting with ruff
         run: uv run --only-group dev ruff format --check --diff
-      # Advisory until the lint baseline is clean; remove continue-on-error to enforce.
       - name: Lint with ruff
-        continue-on-error: true
         run: uv run --only-group dev ruff check --output-format github
 
   ty:
@@ -72,10 +70,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install project and dev dependencies
         run: uv sync
-      # Advisory until the type-check baseline is clean; remove continue-on-error to enforce.
       - name: Type check with ty
-        continue-on-error: true
-        run: uv run ty check --output-format github
+        run: uv run ty check --error-on-warning --output-format github
 
   requirements-check:
     name: requirements-check

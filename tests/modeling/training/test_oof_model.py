@@ -499,9 +499,9 @@ def test_fit_calibrator_binary_accepts_non_numeric_labels(method):
 
     p = oof_probas[:, 1]
     if method == "sigmoid":
-        calibrator.predict_proba(p.reshape(-1, 1))  # ty: ignore[unresolved-attribute]
+        calibrator.predict_proba(p.reshape(-1, 1))  # ty: ignore[missing-union-attribute]
     else:
-        calibrator.predict(p)  # ty: ignore[unresolved-attribute]
+        calibrator.predict(p)  # ty: ignore[missing-union-attribute]
 
 
 if __name__ == "__main__":

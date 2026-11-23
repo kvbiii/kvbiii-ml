@@ -494,7 +494,7 @@ def test_crossvalidationtrainer_fit_in_parallel_matches_sequential_fit(
             random_forest_estimator, X, y, X_test=X_test
         )
         fold_probas = [
-            estimator.predict_proba(fitted_pipeline.transform(X_test))  # ty: ignore[unresolved-attribute]
+            estimator.predict_proba(fitted_pipeline.transform(X_test))  # ty: ignore[missing-union-attribute]
             for estimator, fitted_pipeline in zip(
                 trainer.fitted_estimators_, trainer.fitted_pipelines_, strict=False
             )
@@ -569,7 +569,7 @@ def test_crossvalidationtrainer_fit_computes_sample_weights_per_fold(
         if not seen.equals(expected):
             raise AssertionError()
     for estimator in trainer.fitted_estimators_:
-        if not np.allclose(estimator.class_prior_, [0.0, 1.0]):  # ty: ignore[unresolved-attribute]
+        if not np.allclose(estimator.class_prior_, [0.0, 1.0]):  # ty: ignore[missing-attribute]
             raise AssertionError()
 
 
@@ -717,10 +717,10 @@ def test_crossvalidationtrainer_early_stopping_holdout_keeps_validation_fold_out
     for (train_idx, valid_idx), est in zip(splits, trainer.fitted_estimators_, strict=False):
         train_index = list(X.index[train_idx])
         n_holdout = round(len(train_index) * 0.25)
-        if est.eval_index_ != train_index[-n_holdout:]:  # ty: ignore[unresolved-attribute]
+        if est.eval_index_ != train_index[-n_holdout:]:  # ty: ignore[missing-attribute]
             raise AssertionError("eval set is not the tail of the training fold")
-        if set(est.eval_index_) & set(X.index[valid_idx]) or set(est.eval_index_) & set(  # ty: ignore[unresolved-attribute]
-            est.fit_index_  # ty: ignore[unresolved-attribute]
+        if set(est.eval_index_) & set(X.index[valid_idx]) or set(est.eval_index_) & set(  # ty: ignore[missing-attribute]
+            est.fit_index_  # ty: ignore[missing-attribute]
         ):
             raise AssertionError("eval set overlaps validation or fit rows")
 
@@ -728,7 +728,7 @@ def test_crossvalidationtrainer_early_stopping_holdout_keeps_validation_fold_out
         problem_type="regression", metric_name="RMSE", cv=cv, verbose=False
     )
     default.fit(_EvalSetRecordingRegressor(), X, y)  # ty: ignore[invalid-argument-type]
-    if default.fitted_estimators_[0].eval_index_ != list(X.index[splits[0][1]]):  # ty: ignore[unresolved-attribute]
+    if default.fitted_estimators_[0].eval_index_ != list(X.index[splits[0][1]]):  # ty: ignore[missing-attribute]
         raise AssertionError()
 
     with pytest.raises(ValueError, match="early_stopping_holdout"):

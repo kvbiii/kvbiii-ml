@@ -289,7 +289,7 @@ class CutoffTunerCV:
                 four decimals.
         """
         labels = (
-            self.fitted_estimators_[0].classes_ if self.fitted_estimators_ else range(len(cutoffs))  # ty: ignore[unresolved-attribute]
+            self.fitted_estimators_[0].classes_ if self.fitted_estimators_ else range(len(cutoffs))  # ty: ignore[missing-attribute]
         )
         return {
             str(label): round(float(cutoff), 4)
