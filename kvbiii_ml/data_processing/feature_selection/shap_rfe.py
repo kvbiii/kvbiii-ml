@@ -1,5 +1,5 @@
 import gc
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -69,12 +69,12 @@ class ShapRecursiveFeatureElimination:
         self._cv_cache_key = None
         self._cv_cache_result: dict[str, Any] | None = None
 
-    def run(self, X: pd.DataFrame, y: pd.Series | np.ndarray) -> RfeSummary:
+    def run(self, X: pd.DataFrame, y: pd.Series) -> RfeSummary:
         """Run SHAP-RFE and return the selection summary.
 
         Args:
             X (pd.DataFrame): Feature matrix.
-            y (pd.Series | np.ndarray): Target array/series aligned with X.
+            y (pd.Series): Target array/series aligned with X.
 
         Returns:
             RfeSummary: Dictionary with keys:
@@ -91,7 +91,7 @@ class ShapRecursiveFeatureElimination:
         if missing_protected:
             raise ValueError(f"Protected features not found in dataset: {missing_protected}")
 
-        avg_base_metric, _ = self._cross_val_base_metric(X, cast("pd.Series", y), current_features)
+        avg_base_metric, _ = self._cross_val_base_metric(X, y, current_features)
         summary_df: RfeSummary = {
             "selected_features": [],
             "selected_features_names": [],
@@ -152,7 +152,7 @@ class ShapRecursiveFeatureElimination:
     def _run_step(
         self,
         X: pd.DataFrame,
-        y: pd.Series | np.ndarray,
+        y: pd.Series,
         current_features: list[str],
         n_features_to_remove: int,
     ) -> dict[str, Any]:
@@ -160,7 +160,7 @@ class ShapRecursiveFeatureElimination:
 
         Args:
             X (pd.DataFrame): Feature matrix.
-            y (pd.Series | np.ndarray): Target aligned with X.
+            y (pd.Series): Target aligned with X.
             current_features (list[str]): Active feature names.
             n_features_to_remove (int): Number of features this step may remove.
 
@@ -168,7 +168,7 @@ class ShapRecursiveFeatureElimination:
             dict[str, Any]: Step data: per-feature metrics, fold metric/std, features to remove.
         """
         avg_metric_feature, fold_base_metric, fold_base_metric_std = (
-            self._cross_val_feature_metrics(X, cast("pd.Series", y), current_features)
+            self._cross_val_feature_metrics(X, y, current_features)
         )
         removable_metrics = {
             k: v for k, v in avg_metric_feature.items() if k not in self.protected_features
