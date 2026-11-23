@@ -71,8 +71,9 @@ def _resolve_new_column_sources(
         return {}
 
     declared: dict[str, list[str]] = {}
-    if hasattr(step, "get_derived_column_dependencies"):
-        declared = step.get_derived_column_dependencies()  # ty: ignore[call-non-callable]
+    get_declared = getattr(step, "get_derived_column_dependencies", None)
+    if get_declared is not None:
+        declared = get_declared()
 
     return {
         column: declared[column] if column in declared else list(cols_before)
