@@ -22,9 +22,9 @@ class RareLabelEncoderWithOriginal(_WithOriginalBase):
         n_categories: int = 10,
         max_n_categories: int | None = None,
         replace_with: str | int | float = "Rare",
+        *,
         variables: list[str] | None = None,
         missing_values: str = "raise",
-        *,
         ignore_format: bool = False,
     ) -> None:
         """

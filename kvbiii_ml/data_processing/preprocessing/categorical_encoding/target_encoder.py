@@ -40,6 +40,7 @@ class TargetEncoderWithOriginal(_WithOriginalSubsetBase):
         target_type: Literal["auto", "continuous", "binary", "multiclass"] = "auto",
         smooth: float | Literal["auto"] = "auto",
         cv: int = 5,
+        *,
         variables: list[str] | None = None,
         random_state: int | None = None,
     ) -> None:

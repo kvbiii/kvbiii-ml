@@ -264,6 +264,7 @@ class ClassificationCalibrator:
         cross_validator: CrossValidationTrainer,
         methods: Iterable[str] | None = None,
         n_bins: int = _DEFAULT_N_BINS,
+        *,
         seed: int = _DEFAULT_SEED,
         id2label: dict[int, str] | None = None,
         selection_metric_name: str | None = "Brier Score",
