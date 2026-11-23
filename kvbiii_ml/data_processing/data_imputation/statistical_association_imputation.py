@@ -38,6 +38,7 @@ class StatisticalAssociationImputer:
         self,
         metrics: list[str] | None = None,
         top_n: int = 2,
+        *,
         verbose: bool = False,
     ) -> None:
         """
@@ -216,7 +217,7 @@ class StatisticalAssociationImputer:
         }
 
     def bin_dataframe(
-        self, df: pd.DataFrame, feature_name: str, fit_bins: bool = True
+        self, df: pd.DataFrame, feature_name: str, *, fit_bins: bool = True
     ) -> pd.DataFrame:
         """
         Bin numerical features to reduce cardinality for association metrics.

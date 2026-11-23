@@ -35,6 +35,7 @@ class MeanEncoderWithOriginal(_WithOriginalBase):
         self,
         variables: list[str] | None = None,
         missing_values: str = "raise",
+        *,
         ignore_format: bool = False,
         unseen: str = "encode",
         smoothing: int | float | str = 0.0,

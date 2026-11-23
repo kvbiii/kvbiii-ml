@@ -21,6 +21,7 @@ class CategoricalAligner(BaseEstimator, TransformerMixin):
         fill_values: dict[str, str] | None = None,
         fill_strategy: Literal["mode", "constant"] = "constant",
         default_value: str = DEFAULT_FILL_VALUE,
+        *,
         warn_on_unknown: bool = True,
         categorical_features: list[str] | None = None,
     ) -> None:

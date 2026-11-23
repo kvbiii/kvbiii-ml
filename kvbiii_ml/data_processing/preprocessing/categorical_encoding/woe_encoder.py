@@ -24,6 +24,7 @@ class WoEEncoderWithOriginal(_WithOriginalBase):
     def __init__(
         self,
         variables: list[str] | None = None,
+        *,
         ignore_format: bool = False,
         unseen: str = "ignore",
         fill_value: int | float | None = None,

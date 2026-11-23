@@ -44,6 +44,7 @@ class ModelImportanceFiltering:
         threshold: float = 0.0,
         protected_features: list[str] | None = None,
         max_steps: int = 10,
+        *,
         verbose: bool = False,
     ) -> None:
         """Initialize the filter and validate the options.

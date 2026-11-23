@@ -18,6 +18,7 @@ class EqualFrequencyDiscretiserWithOriginal(_WithOriginalBase):
         self,
         variables: list[str] | None = None,
         q: int = 10,
+        *,
         return_object: bool = False,
         return_boundaries: bool = False,
         precision: int = 3,

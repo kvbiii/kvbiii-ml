@@ -64,6 +64,7 @@ class EnsembleWeightTunerCV:
         cross_validator: CrossValidationTrainer,
         n_trials: int = 50,
         seed: int = 17,
+        *,
         allow_negative_weights: bool = False,
         verbose: bool = True,
     ) -> None:
@@ -538,6 +539,7 @@ class EnsembleWeightTunerCV:
         y_true: pd.Series,
         preds_list: list[pd.Series | pd.DataFrame],
         fold_boundaries: list[int],
+        *,
         return_fold_scores: Literal[False] = False,
     ) -> float | None: ...
 
@@ -548,6 +550,7 @@ class EnsembleWeightTunerCV:
         y_true: pd.Series,
         preds_list: list[pd.Series | pd.DataFrame],
         fold_boundaries: list[int],
+        *,
         return_fold_scores: Literal[True],
     ) -> tuple[float | None, list[float]]: ...
 
@@ -557,6 +560,7 @@ class EnsembleWeightTunerCV:
         y_true: pd.Series,
         preds_list: list[pd.Series | pd.DataFrame],
         fold_boundaries: list[int],
+        *,
         return_fold_scores: bool = False,
     ) -> float | tuple[float | None, list[float]] | None:
         """Scores one weight vector as mean-minus-std across cross-validation folds.

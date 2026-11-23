@@ -18,6 +18,7 @@ class EqualWidthDiscretiserWithOriginal(_WithOriginalBase):
         self,
         variables: list[str] | None = None,
         bins: int = 10,
+        *,
         return_object: bool = False,
         return_boundaries: bool = False,
         precision: int = 3,

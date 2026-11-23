@@ -563,7 +563,7 @@ class EnsembleModel(BaseEstimator):
         return float(metric(y, self.predict(X), sample_weight=sample_weight))
 
     def _estimator_output(
-        self, estimator: Estimator, X: pd.DataFrame, proba: bool = False
+        self, estimator: Estimator, X: pd.DataFrame, *, proba: bool = False
     ) -> np.ndarray:
         """Predict (or predict_proba) one base estimator on X, applying the offset column."""
         X, offset = split_offset(X, self.offset_column)

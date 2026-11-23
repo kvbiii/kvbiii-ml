@@ -24,6 +24,7 @@ class RareLabelEncoderWithOriginal(_WithOriginalBase):
         replace_with: str | int | float = "Rare",
         variables: list[str] | None = None,
         missing_values: str = "raise",
+        *,
         ignore_format: bool = False,
     ) -> None:
         """

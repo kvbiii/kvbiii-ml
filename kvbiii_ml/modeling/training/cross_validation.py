@@ -64,6 +64,7 @@ class CrossValidationTrainer(BaseTrainer):
         metric_name: str | None = None,
         cv: BaseCrossValidator | None = None,
         preprocessing_pipeline: Pipeline | None = None,
+        *,
         verbose: bool | int = True,
         custom_metric: dict[str, Any] | None = None,
         n_jobs: int = 1,
@@ -175,12 +176,12 @@ class CrossValidationTrainer(BaseTrainer):
         self.sample_weight_fn = sample_weight_fn
         self.early_stopping_holdout = early_stopping_holdout
         self.offset_column = offset_column
-        self.fit_verbose = self._resolve_fit_verbose(verbose)
+        self.fit_verbose = self._resolve_fit_verbose(verbose=verbose)
 
         self.validate_pipeline()
 
     @staticmethod
-    def _resolve_fit_verbose(verbose: bool | int) -> bool | int | None:
+    def _resolve_fit_verbose(*, verbose: bool | int) -> bool | int | None:
         """Map cross-validation verbosity to estimator fit verbosity.
 
         Args:
@@ -480,6 +481,7 @@ class CrossValidationTrainer(BaseTrainer):
         estimator: Estimator,
         X: pd.DataFrame,
         offset: np.ndarray | None,
+        *,
         proba: bool,
     ) -> np.ndarray:
         """Call predict / predict_proba, going through the offset path when an offset is set."""
@@ -535,7 +537,7 @@ class CrossValidationTrainer(BaseTrainer):
             proba = self.problem_type == "classification" and hasattr(
                 fitted_estimator, "predict_proba"
             )
-            preds.append(self._estimator_output(fitted_estimator, x_ordered, offset, proba))
+            preds.append(self._estimator_output(fitted_estimator, x_ordered, offset, proba=proba))
 
         preds_arr = np.asarray(preds, dtype=float)
         avg = preds_arr.mean(axis=0)
