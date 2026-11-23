@@ -30,6 +30,7 @@ class _NaNIgnoringKBinsDiscretizer:
         strategy: Literal["uniform", "quantile", "kmeans"],
         quantile_method: str,
         dtype: type | None,
+        *,
         subsample: int | None,
         random_state: int | None,
     ) -> None:
@@ -146,6 +147,7 @@ class KBinsDiscretiserWithOriginal(_WithOriginalSubsetBase):
         strategy: Literal["uniform", "quantile", "kmeans"] = "quantile",
         quantile_method: str = "averaged_inverted_cdf",
         dtype: type | None = None,
+        *,
         subsample: int | None = 200_000,
         random_state: int | None = None,
         variables: list[str] | None = None,

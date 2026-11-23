@@ -45,6 +45,7 @@ class EnsembleModel(BaseEstimator):
         problem_type: str,
         weights: Sequence[float] | np.ndarray | None = None,
         meta_learner: Estimator | None = None,
+        *,
         n_jobs: int = 1,
         cv: BaseCrossValidator | None = None,
         on_estimator_error: str = "raise",
