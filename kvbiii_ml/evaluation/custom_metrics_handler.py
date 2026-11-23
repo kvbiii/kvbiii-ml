@@ -18,10 +18,11 @@ class CustomMetricsHandler:
             custom_metric (dict[str, Any]): Custom metric configuration with required keys.
 
         Raises:
-            ValueError: If the configuration is invalid.
+            TypeError: If custom_metric is not a dict or its function is not callable.
+            ValueError: If the configuration is otherwise invalid.
         """
         if not isinstance(custom_metric, dict):
-            raise ValueError("custom_metric must be a dictionary")
+            raise TypeError("custom_metric must be a dictionary")
 
         required_keys = {"name", "function", "metric_type", "direction"}
         missing_keys = required_keys - set(custom_metric.keys())
@@ -29,7 +30,7 @@ class CustomMetricsHandler:
             raise ValueError(f"Missing required keys in custom_metric: {missing_keys}")
 
         if not callable(custom_metric["function"]):
-            raise ValueError("custom_metric['function'] must be callable")
+            raise TypeError("custom_metric['function'] must be callable")
 
         metric_type = custom_metric["metric_type"]
         if metric_type not in {"preds", "probs"}:

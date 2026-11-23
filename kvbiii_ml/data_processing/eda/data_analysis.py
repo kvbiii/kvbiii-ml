@@ -1673,10 +1673,10 @@ class DataAnalyzer:
         """Prepare feature matrix for mutual information computation.
 
         Raises:
-            ValueError: If X is not a pandas DataFrame.
+            TypeError: If X is not a pandas DataFrame.
         """
         if not isinstance(X, pd.DataFrame):
-            raise ValueError("X must be a pandas DataFrame.")
+            raise TypeError("X must be a pandas DataFrame.")
 
         discrete_columns = X.select_dtypes(include=["category", "object", "bool"]).columns
         if len(discrete_columns) == 0:
@@ -1711,7 +1711,8 @@ class DataAnalyzer:
                 from highest to lowest.
 
         Raises:
-            ValueError: If input types are invalid or problem_type is unsupported.
+            TypeError: If y is not a pandas Series or numpy array.
+            ValueError: If problem_type is unsupported.
 
         Note:
             Time complexity is dominated by sklearn MI estimation and is approximately
@@ -1719,7 +1720,7 @@ class DataAnalyzer:
             O(n_features * log(n_features)).
         """
         if not isinstance(y, (pd.Series, np.ndarray)):
-            raise ValueError("y must be a pandas Series or numpy array.")
+            raise TypeError("y must be a pandas Series or numpy array.")
         if problem_type not in {"classification", "regression"}:
             raise ValueError("problem_type must be either 'classification' or 'regression'.")
 
