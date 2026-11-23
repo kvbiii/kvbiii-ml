@@ -178,10 +178,11 @@ class DigitsEncodingFeatureGenerator(BaseEstimator, TransformerMixin):
         end = min(max_power, self.max_digits // 2)
 
         span = end - start
-        if span < cast("int", self.min_digits):
+        min_digits = cast("int", self.min_digits)
+        if span < min_digits:
             center = (start + end) // 2
-            start = center - cast("int", self.min_digits) // 2
-            end = start + cast("int", self.min_digits)
+            start = center - min_digits // 2
+            end = start + min_digits
         elif span > self.max_digits:
             end = start + self.max_digits
 

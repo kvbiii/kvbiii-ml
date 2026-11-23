@@ -1,4 +1,4 @@
-from typing import Literal, cast
+from typing import Literal
 
 import pandas as pd
 from feature_engine.outliers import OutlierTrimmer
@@ -21,7 +21,7 @@ class OutlierTrimmerWithOriginal(_WithOriginalBase):
         self,
         capping_method: str = "gaussian",
         tail: str = "right",
-        fold: int | float | str = "auto",
+        fold: float | Literal["auto"] = "auto",
         variables: list[str] | None = None,
         missing_values: str = "raise",
     ) -> None:
@@ -31,7 +31,7 @@ class OutlierTrimmerWithOriginal(_WithOriginalBase):
         Args:
             capping_method (str): "gaussian", "iqr", "mad" or "quantiles". Defaults to "gaussian".
             tail (str): Which tail(s) to trim - "right", "left", or "both". Defaults to "right".
-            fold (int | float | str): Boundary multiplier; "auto" is the method default.
+            fold (float | Literal["auto"]): Boundary multiplier; "auto" is the method default.
             variables (list[str] | None): Numerical columns to trim. Defaults to None (auto-detect).
             missing_values (str): How to handle NaN - "raise" or "ignore". Defaults to "raise".
         """
@@ -50,7 +50,7 @@ class OutlierTrimmerWithOriginal(_WithOriginalBase):
         return OutlierTrimmer(
             capping_method=self.capping_method,
             tail=self.tail,
-            fold=cast("float | Literal['auto']", self.fold),
+            fold=self.fold,
             variables=to_feature_engine_variables(self.variables),
             missing_values=self.missing_values,
         )

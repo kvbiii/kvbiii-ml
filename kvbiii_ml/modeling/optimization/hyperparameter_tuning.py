@@ -12,7 +12,7 @@ from sklearn.base import clone
 from sklearn.model_selection import BaseCrossValidator, KFold, StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 
-from kvbiii_ml._typing import Direction, Estimator
+from kvbiii_ml._typing import Estimator
 from kvbiii_ml.modeling.training.base_trainer import BaseTrainer, FitRows, to_metric_proba
 from kvbiii_ml.modeling.training.cross_validation import CrossValidationTrainer
 from kvbiii_ml.modeling.training.oof_model import _get_n_iterations
@@ -369,7 +369,7 @@ class RandomSearchCV:
             constant_liar=self.n_parallel_trials > 1,
         )
         return optuna.create_study(
-            direction=cast("Direction", self.metric_direction),
+            direction=self.metric_direction,
             sampler=sampler,
             pruner=pruner if pruner is not None else optuna.pruners.NopPruner(),
             study_name="Optuna tuning",
