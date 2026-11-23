@@ -104,7 +104,9 @@ class TargetEncoderWithOriginal(_WithOriginalSubsetBase):
         """
         return _cast_numeric_variables_to_object(X, self.variables_)
 
-    def fit_transform(self, X: pd.DataFrame, y: object = None) -> pd.DataFrame:  # ty: ignore[invalid-method-override]
+    def fit_transform(
+        self, X: pd.DataFrame, y: object = None, **fit_params: object
+    ) -> pd.DataFrame:
         """Fit using cross-fitted target statistics and transform in one pass.
 
         Overrides the inherited fit().transform() so the training set is
@@ -115,6 +117,7 @@ class TargetEncoderWithOriginal(_WithOriginalSubsetBase):
         Args:
             X (pd.DataFrame): Training features.
             y (object): Target used to fit the per-category encodings.
+            **fit_params (object): Forwarded to the inner encoder, which accepts none.
 
         Returns:
             pd.DataFrame: Original columns plus one cross-fitted encoded column
@@ -130,9 +133,9 @@ class TargetEncoderWithOriginal(_WithOriginalSubsetBase):
                     message=r".*TargetEncoder\.shuffle.*",
                     category=FutureWarning,
                 )
-                encoded = self._inner.fit_transform(prepared, y)
+                encoded = self._inner.fit_transform(prepared, y, **fit_params)
         else:
-            encoded = self._inner.fit_transform(prepared, y)
+            encoded = self._inner.fit_transform(prepared, y, **fit_params)
         return pd.concat([X.copy(), self._derived_frame(encoded, X.index)], axis=1)
 
 

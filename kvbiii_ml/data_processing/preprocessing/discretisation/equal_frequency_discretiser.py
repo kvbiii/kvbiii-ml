@@ -40,7 +40,7 @@ class EqualFrequencyDiscretiserWithOriginal(_WithOriginalBase):
         self.precision = precision
 
     @property
-    def _suffix(self) -> str:  # ty: ignore[invalid-property-type-override]
+    def _suffix(self) -> str:
         """Derived-column suffix, dynamically keyed on ``q``.
 
         Returns:

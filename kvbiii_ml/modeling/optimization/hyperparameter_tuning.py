@@ -791,9 +791,9 @@ class RandomSearchCV:
             self._scale_row_params(params, plan.fidelity)
         )
         predict = (
-            (lambda fitted, x: to_metric_proba(BaseTrainer.predict_proba(fitted, x)))
+            (lambda fitted, x: to_metric_proba(BaseTrainer.predict_proba_or_none(fitted, x)))
             if self.metric_type == "probs"
-            else BaseTrainer.predict
+            else BaseTrainer.predict_or_none
         )
         fold_scores: list[float] = []
         best_iterations: list[int] = []

@@ -61,7 +61,11 @@ class _WithOriginalBase(BaseEstimator, TransformerMixin, abc.ABC):
         _transform_inner: Apply the fitted inner transformer and return the result.
     """
 
-    _suffix: str = ""
+    @property
+    def _suffix(self) -> str:
+        """Non-empty string appended to each derived column name, set by subclasses."""
+        return ""
+
     _suppress_warnings: bool = False
 
     @abc.abstractmethod
@@ -202,7 +206,11 @@ class _WithOriginalSubsetBase(BaseEstimator, TransformerMixin, abc.ABC):
         _default_variables: Auto-detect columns to transform when ``variables`` is None.
     """
 
-    _suffix: str = ""
+    @property
+    def _suffix(self) -> str:
+        """Non-empty string appended to each derived column name, set by subclasses."""
+        return ""
+
     _suppress_warnings: bool = False
     variables: list[str] | None
 

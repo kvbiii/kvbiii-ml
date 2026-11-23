@@ -511,7 +511,7 @@ class CrossValidationTrainer(BaseTrainer):
             )
         return weights
 
-    def predict(self, X: pd.DataFrame) -> np.ndarray:  # ty: ignore[invalid-method-override]
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
         """Predict with the averaged fold estimators, raising NotFittedError before fit.
 
         Applies each fold's fitted pipeline to X before calling the estimator,
@@ -547,7 +547,7 @@ class CrossValidationTrainer(BaseTrainer):
             )
         return avg
 
-    def predict_proba(self, X: pd.DataFrame) -> np.ndarray:  # ty: ignore[invalid-method-override]
+    def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
         """Average the fold estimators' class probabilities; NotFittedError before fit.
 
         Applies each fold's fitted pipeline to X before calling the estimator.

@@ -260,7 +260,7 @@ def test_basetrainer_predict_returns_predictions_when_data_provided(mock_estimat
     expected_predictions = np.array([0, 1, 0])
     mock_estimator.predict.return_value = expected_predictions
 
-    predictions = BaseTrainer.predict(mock_estimator, X_test)
+    predictions = BaseTrainer.predict_or_none(mock_estimator, X_test)
 
     mock_estimator.predict.assert_called_once_with(X_test)
     np.testing.assert_array_equal(predictions, expected_predictions)
@@ -277,7 +277,7 @@ def test_basetrainer_predict_returns_none_when_no_data_provided(mock_estimator):
         - Estimator predict method is not called
         - Method handles None input gracefully
     """
-    predictions = BaseTrainer.predict(mock_estimator, None)
+    predictions = BaseTrainer.predict_or_none(mock_estimator, None)
 
     if predictions is not None:
         raise AssertionError()
@@ -302,7 +302,7 @@ def test_basetrainer_predict_proba_returns_probabilities_when_data_provided(
     expected_proba = np.array([[0.1, 0.7, 0.2], [0.8, 0.1, 0.1], [0.3, 0.3, 0.4]])
     mock_estimator.predict_proba.return_value = expected_proba
 
-    probabilities = BaseTrainer.predict_proba(mock_estimator, X_test)
+    probabilities = BaseTrainer.predict_proba_or_none(mock_estimator, X_test)
 
     mock_estimator.predict_proba.assert_called_once_with(X_test)
     np.testing.assert_array_equal(probabilities, expected_proba)
@@ -325,7 +325,7 @@ def test_basetrainer_predict_proba_returns_full_matrix_for_binary_classification
     binary_proba = np.array([[0.8, 0.2], [0.3, 0.7], [0.9, 0.1]])
     mock_estimator.predict_proba.return_value = binary_proba
 
-    probabilities = BaseTrainer.predict_proba(mock_estimator, X_test)
+    probabilities = BaseTrainer.predict_proba_or_none(mock_estimator, X_test)
 
     np.testing.assert_array_equal(probabilities, binary_proba)
     if probabilities.shape != (3, 2):
@@ -343,7 +343,7 @@ def test_basetrainer_predict_proba_returns_none_when_no_data_provided(mock_estim
         - Estimator predict_proba method is not called
         - Method handles None input gracefully
     """
-    probabilities = BaseTrainer.predict_proba(mock_estimator, None)
+    probabilities = BaseTrainer.predict_proba_or_none(mock_estimator, None)
 
     if probabilities is not None:
         raise AssertionError()
