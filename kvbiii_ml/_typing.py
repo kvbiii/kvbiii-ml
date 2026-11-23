@@ -44,7 +44,9 @@ def to_feature_engine_variables(variables: list[str] | None) -> list[str | int] 
     return cast("list[str | int] | None", variables)
 
 
-def format_styler(styler: Styler, formatter: StylerFormat, na_rep: str | None = None) -> Styler:
+def format_styler(
+    styler: Styler, formatter: StylerFormat | str, na_rep: str | None = None
+) -> Styler:
     """Apply ``formatter`` in place and return the same ``Styler``, typed as ``Styler``."""
     styler.format(formatter, na_rep=na_rep)
     return styler

@@ -3,7 +3,7 @@ import warnings
 from collections import Counter
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from typing import Any, ClassVar, cast, overload
+from typing import Any, ClassVar, overload
 
 import numpy as np
 import optuna
@@ -79,6 +79,17 @@ PARAM_HARD_LIMITS: dict[str, tuple[float, float]] = {
     "scale_pos_weight": (0.0, float("inf")),
     "subsample": (0.05, 1.0),
 }
+
+
+def _trial_value(trial: optuna.trial.FrozenTrial) -> float:
+    """Return a completed trial's objective value, which Optuna types as optional.
+
+    Raises:
+        ValueError: If the trial has no objective value.
+    """
+    if trial.value is None:
+        raise ValueError(f"Trial {trial.number} has no objective value.")
+    return trial.value
 
 
 @dataclass
@@ -945,8 +956,7 @@ class RandomSearchCV:
             )
         if self.saturated_params_:
             pressed = ", ".join(
-                f"{name} ({side} bound "
-                f"{float(cast('float', self.params_grid[name][1][side == 'high'])):g})"
+                f"{name} ({side} bound {float(self.params_grid[name][1][side == 'high']):g})"
                 for name, side in self.saturated_params_.items()
             )
             print(f"⚠️  The best configs pressed against grid bounds: {pressed}. Widen and re-run.")
@@ -980,7 +990,7 @@ class RandomSearchCV:
             print("⚠️  Grid bounds the elite configs pressed against (expanded by one step):")
             for name, side in self.saturated_params_.items():
                 bound = self.params_grid[name][1][0 if side == "low" else 1]
-                print(f"    {name}: {side.upper()} bound {float(cast('float', bound)):g}")
+                print(f"    {name}: {side.upper()} bound {float(bound):g}")
 
     def _log_start(self, use_holdout: bool) -> None:
         """Print a search-start summary when verbose mode is enabled."""
@@ -1478,7 +1488,7 @@ class RandomSearchCV:
             trial
             for trial in self._completed_trials(study)
             if self._beats(
-                cast("float", trial.value),
+                _trial_value(trial),
                 self.baseline_score_,
                 self._required_margin(self._fold_scores(trial), baseline_folds),
             )
@@ -1494,7 +1504,7 @@ class RandomSearchCV:
             chosen = self._select_confirm_trial(eligible)
             winner = _Candidate(
                 dict(chosen.user_attrs.get("params", chosen.params)),
-                float(cast("float", chosen.value)),
+                _trial_value(chosen),
                 list(chosen.user_attrs.get("best_iterations", [])),
                 TUNED_LABEL,
             )
@@ -1523,8 +1533,8 @@ class RandomSearchCV:
             trial
             for trial in trials
             if not self._beats(
-                cast("float", best.value),
-                cast("float", trial.value),
+                _trial_value(best),
+                _trial_value(trial),
                 self._required_margin(best_folds, self._fold_scores(trial)),
             )
         ]
