@@ -1,5 +1,5 @@
 from ast import literal_eval
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -7,7 +7,7 @@ from pandas.io.formats.style import Styler
 from scipy.stats import chi2_contingency, kruskal, ks_2samp, wasserstein_distance
 from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
 
-from kvbiii_ml._typing import StylerFormat
+from kvbiii_ml._typing import StylerFormat, format_styler
 
 if TYPE_CHECKING:
     from pandas.io.formats.style_render import CSSDict
@@ -116,16 +116,14 @@ class DataAnalyzer:
         df["Count"] = data.count().to_numpy()
         df = df.reset_index().rename(columns={"index": "Feature"})
         styled_df = (
-            cast(
-                "Styler",
-                df.style.set_caption("📝 Base Information").format(
-                    {
-                        "Number of missing values": "{:,.0f}",
-                        "Percentage of missing values": "{:.2f}%",
-                        "Unique values": "{:,.0f}",
-                        "Count": "{:,.0f}",
-                    }
-                ),
+            format_styler(
+                df.style.set_caption("📝 Base Information"),
+                {
+                    "Number of missing values": "{:,.0f}",
+                    "Percentage of missing values": "{:.2f}%",
+                    "Unique values": "{:,.0f}",
+                    "Count": "{:,.0f}",
+                },
             )
             .bar(
                 subset=["Percentage of missing values"],
@@ -265,27 +263,25 @@ class DataAnalyzer:
         stats_df = stats.to_frame().T
 
         styled_stats = (
-            cast(
-                "Styler",
-                stats_df.style.set_caption(f"📈 {feature} Statistics").format(
-                    {
-                        "Count": "{:,.0f}",
-                        "Mean": "{:,.2f}",
-                        "Std": "{:,.2f}",
-                        "Min": "{:,.2f}",
-                        "5%": "{:,.2f}",
-                        "Q1": "{:,.2f}",
-                        "Median": "{:,.2f}",
-                        "Q3": "{:,.2f}",
-                        "95%": "{:,.2f}",
-                        "Max": "{:,.2f}",
-                        "variance": "{:,.2f}",
-                        "skewness": "{:,.2f}",
-                        "kurtosis": "{:,.2f}",
-                        "Missing": "{:,.0f}",
-                        "Missing (%)": "{:.2f}%",
-                    }
-                ),
+            format_styler(
+                stats_df.style.set_caption(f"📈 {feature} Statistics"),
+                {
+                    "Count": "{:,.0f}",
+                    "Mean": "{:,.2f}",
+                    "Std": "{:,.2f}",
+                    "Min": "{:,.2f}",
+                    "5%": "{:,.2f}",
+                    "Q1": "{:,.2f}",
+                    "Median": "{:,.2f}",
+                    "Q3": "{:,.2f}",
+                    "95%": "{:,.2f}",
+                    "Max": "{:,.2f}",
+                    "variance": "{:,.2f}",
+                    "skewness": "{:,.2f}",
+                    "kurtosis": "{:,.2f}",
+                    "Missing": "{:,.0f}",
+                    "Missing (%)": "{:.2f}%",
+                },
             )
             .set_properties(
                 **{
@@ -348,11 +344,9 @@ class DataAnalyzer:
         )
 
         styled_stats = (
-            cast(
-                "Styler",
-                stats.style.set_caption(f"📊 {feature} Distribution").format(
-                    {"Count": "{:,.0f}", "Percentage (%)": "{:.2f}%"}
-                ),
+            format_styler(
+                stats.style.set_caption(f"📊 {feature} Distribution"),
+                {"Count": "{:,.0f}", "Percentage (%)": "{:.2f}%"},
             )
             .bar(subset=["Percentage (%)"], color="#4a90e2", vmin=0, vmax=100)
             .set_properties(
@@ -425,9 +419,7 @@ class DataAnalyzer:
             )
 
         styled_df = (
-            cast(
-                "Styler", df.style.set_caption(caption.format(feature)).format({"Count": "{:,.0f}"})
-            )
+            format_styler(df.style.set_caption(caption.format(feature)), {"Count": "{:,.0f}"})
             .bar(subset=["Count"], color="#4a90e2", vmin=0, vmax=df["Count"].max())
             .set_properties(
                 **{
@@ -545,19 +537,17 @@ class DataAnalyzer:
         df = pd.DataFrame(rows)
 
         styled = (
-            cast(
-                "Styler",
-                df.style.set_caption("📊 Numerical Feature Statistics").format(
-                    {
-                        "Min": "{:.3f}",
-                        "Mean": "{:.3f}",
-                        "Median": "{:.3f}",
-                        "Max": "{:.3f}",
-                        "Std": "{:.3f}",
-                        "Skewness": "{:.3f}",
-                        "Kurtosis": "{:.3f}",
-                    }
-                ),
+            format_styler(
+                df.style.set_caption("📊 Numerical Feature Statistics"),
+                {
+                    "Min": "{:.3f}",
+                    "Mean": "{:.3f}",
+                    "Median": "{:.3f}",
+                    "Max": "{:.3f}",
+                    "Std": "{:.3f}",
+                    "Skewness": "{:.3f}",
+                    "Kurtosis": "{:.3f}",
+                },
             )
             .map(DataAnalyzer._skewness_cell_color, subset=["Skewness"])
             .set_table_styles(_REPORT_TABLE_STYLES)
@@ -852,22 +842,20 @@ class DataAnalyzer:
             ] * len(row)
 
         styled = (
-            cast(
-                "Styler",
-                df.style.set_caption(caption).format(
-                    {
-                        "Count": "{:,.0f}",
-                        "Mean": "{:.3f}",
-                        "Std": "{:.3f}",
-                        "Min": "{:.3f}",
-                        "Q25": "{:.3f}",
-                        "Median": "{:.3f}",
-                        "Q75": "{:.3f}",
-                        "Max": "{:.3f}",
-                        "Skewness": "{:.3f}",
-                        "Missing (%)": "{:.2f}%",
-                    }
-                ),
+            format_styler(
+                df.style.set_caption(caption),
+                {
+                    "Count": "{:,.0f}",
+                    "Mean": "{:.3f}",
+                    "Std": "{:.3f}",
+                    "Min": "{:.3f}",
+                    "Q25": "{:.3f}",
+                    "Median": "{:.3f}",
+                    "Q75": "{:.3f}",
+                    "Max": "{:.3f}",
+                    "Skewness": "{:.3f}",
+                    "Missing (%)": "{:.2f}%",
+                },
             )
             .map(DataAnalyzer._skewness_cell_color, subset=["Skewness"])
             .apply(_highlight_overall, axis=1)
@@ -960,7 +948,7 @@ class DataAnalyzer:
             format_dict[f"{cls} IQR"] = "{:.5f}"
 
         styled = (
-            cast("Styler", df.style.set_caption(caption).format(format_dict))
+            format_styler(df.style.set_caption(caption), format_dict)
             .map(DataAnalyzer._effect_size_cell_color, subset=["η²", "ε²"])
             .map(DataAnalyzer._pvalue_cell_color, subset=["KW p-value"])
             .set_table_styles(_REPORT_TABLE_STYLES)
@@ -1116,18 +1104,16 @@ class DataAnalyzer:
         df = pd.DataFrame(rows).sort_values("N Unique").reset_index(drop=True)
 
         styled = (
-            cast(
-                "Styler",
-                df.style.set_caption("📋 Categorical Feature Statistics").format(
-                    {
-                        "N Unique": "{:,.0f}",
-                        "Mode %": "{:.2f}%",
-                        "Top-3 Coverage %": "{:.2f}%",
-                        "Entropy (norm.)": "{:.3f}",
-                        "Rare Categories": "{:,.0f}",
-                        "Missing %": "{:.2f}%",
-                    }
-                ),
+            format_styler(
+                df.style.set_caption("📋 Categorical Feature Statistics"),
+                {
+                    "N Unique": "{:,.0f}",
+                    "Mode %": "{:.2f}%",
+                    "Top-3 Coverage %": "{:.2f}%",
+                    "Entropy (norm.)": "{:.3f}",
+                    "Rare Categories": "{:,.0f}",
+                    "Missing %": "{:.2f}%",
+                },
             )
             .map(DataAnalyzer._entropy_cell_color, subset=["Entropy (norm.)"])
             .bar(subset=["Missing %"], color="#4a90e2", vmin=0, vmax=100)
@@ -1232,7 +1218,7 @@ class DataAnalyzer:
         row_pct_cols = [f"{cls} Row %" for cls in classes]
 
         styled = (
-            cast("Styler", df.style.set_caption(caption).format(format_dict))
+            format_styler(df.style.set_caption(caption), format_dict)
             .background_gradient(subset=row_pct_cols, cmap="Blues", axis=0, vmin=0, vmax=100)
             .apply(_highlight_total, axis=1)
             .set_table_styles(_REPORT_TABLE_STYLES)
@@ -1327,17 +1313,15 @@ class DataAnalyzer:
         df = pd.DataFrame(rows).sort_values("Cramér's V", ascending=False).reset_index(drop=True)
 
         styled = (
-            cast(
-                "Styler",
-                df.style.set_caption(caption).format(
-                    {
-                        "N Unique": "{:,.0f}",
-                        "Cramér's V": "{:.5f}",
-                        "Theil's U": "{:.5f}",
-                        "χ²": "{:,.3f}",
-                        "p-value": "{:.3e}",
-                    }
-                ),
+            format_styler(
+                df.style.set_caption(caption),
+                {
+                    "N Unique": "{:,.0f}",
+                    "Cramér's V": "{:.5f}",
+                    "Theil's U": "{:.5f}",
+                    "χ²": "{:,.3f}",
+                    "p-value": "{:.3e}",
+                },
             )
             .map(DataAnalyzer._association_cell_color, subset=["Cramér's V", "Theil's U"])
             .map(DataAnalyzer._pvalue_cell_color, subset=["p-value"])
@@ -1529,20 +1513,18 @@ class DataAnalyzer:
         df = pd.DataFrame(rows).sort_values("KS Stat", ascending=False).reset_index(drop=True)
 
         styled = (
-            cast(
-                "Styler",
-                df.style.set_caption("📉 Numerical Feature Drift Analysis").format(
-                    {
-                        "KS Stat": "{:.5f}",
-                        "KS p-value": "{:.3e}",
-                        "Wasserstein": "{:.5f}",
-                        "SMD": "{:.5f}",
-                        "PSI": "{:.5f}",
-                        "Mean Δ%": "{:.2f}%",
-                        "Std Ratio": "{:.3f}",
-                    },
-                    na_rep="—",
-                ),
+            format_styler(
+                df.style.set_caption("📉 Numerical Feature Drift Analysis"),
+                {
+                    "KS Stat": "{:.5f}",
+                    "KS p-value": "{:.3e}",
+                    "Wasserstein": "{:.5f}",
+                    "SMD": "{:.5f}",
+                    "PSI": "{:.5f}",
+                    "Mean Δ%": "{:.2f}%",
+                    "Std Ratio": "{:.3f}",
+                },
+                na_rep="—",
             )
             .map(DataAnalyzer._drift_score_cell_color, subset=["KS Stat", "PSI"])
             .map(DataAnalyzer._drift_pvalue_cell_color, subset=["KS p-value"])
@@ -1650,18 +1632,16 @@ class DataAnalyzer:
         df = pd.DataFrame(rows).sort_values("JS Distance", ascending=False).reset_index(drop=True)
 
         styled = (
-            cast(
-                "Styler",
-                df.style.set_caption("📉 Categorical Feature Drift Analysis").format(
-                    {
-                        "JS Distance": "{:.5f}",
-                        "PSI": "{:.5f}",
-                        "χ² p-value": "{:.3e}",
-                        "New Categories": "{:,.0f}",
-                        "Missing Categories": "{:,.0f}",
-                    },
-                    na_rep="—",
-                ),
+            format_styler(
+                df.style.set_caption("📉 Categorical Feature Drift Analysis"),
+                {
+                    "JS Distance": "{:.5f}",
+                    "PSI": "{:.5f}",
+                    "χ² p-value": "{:.3e}",
+                    "New Categories": "{:,.0f}",
+                    "Missing Categories": "{:,.0f}",
+                },
+                na_rep="—",
             )
             .map(DataAnalyzer._drift_score_cell_color, subset=["JS Distance", "PSI"])
             .map(DataAnalyzer._drift_pvalue_cell_color, subset=["χ² p-value"])
