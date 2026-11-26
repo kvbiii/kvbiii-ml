@@ -10,7 +10,7 @@ import pytest
 from catboost import CatBoostRegressor
 from lightgbm import LGBMRegressor
 from sklearn.base import BaseEstimator, RegressorMixin
-from sklearn.dummy import DummyClassifier
+from sklearn.dummy import DummyClassifier, DummyRegressor
 from sklearn.exceptions import NotFittedError
 from sklearn.linear_model import LogisticRegression, SGDClassifier
 from sklearn.model_selection import KFold
@@ -803,3 +803,49 @@ def test_crossvalidationtrainer_offset_column_scales_predictions_with_exposure(
         raise AssertionError()
     if not np.all(np.isfinite(valid_scores)):
         raise AssertionError(valid_scores)
+
+
+def test_crossvalidationtrainer_oof_predictions_match_valid_scores(binary_classification_data):
+    """Tests fit keeps the out-of-fold probabilities aligned to the input rows.
+
+    Asserts:
+        - oof_predictions_ is the (n, 2) proba matrix in X's row order
+        - The ROC AUC of each fold's OOF rows equals that fold's valid_scores_ entry
+    """
+    from sklearn.metrics import roc_auc_score  # noqa: PLC0415
+
+    X, y = binary_classification_data
+    cv = KFold(n_splits=4, shuffle=True, random_state=3)
+    trainer = CrossValidationTrainer(
+        problem_type="classification", metric_name="Roc AUC", cv=cv, verbose=False
+    )
+    trainer.fit(LogisticRegression(max_iter=500), X, y)
+
+    oof = trainer.oof_predictions_
+    if oof.shape != (len(X), 2) or np.isnan(oof).any():
+        raise AssertionError(oof.shape)
+    for (_, valid_idx), score in zip(cv.split(X, y), trainer.valid_scores_, strict=True):
+        if not np.isclose(roc_auc_score(y.iloc[valid_idx], oof[valid_idx, 1]), score):
+            raise AssertionError(score)
+
+
+def test_crossvalidationtrainer_oof_predictions_nan_for_rows_never_validated(regression_data):
+    """Tests rows outside every validation fold stay NaN in oof_predictions_.
+
+    Asserts:
+        - Regression OOF is 1-D, NaN on rows no fold validates, finite elsewhere
+    """
+    X, y = regression_data
+    n = len(X)
+    splits = [(np.arange(0, n // 2), np.arange(n // 2, n))]
+    trainer = CrossValidationTrainer(
+        problem_type="regression",
+        metric_name="RMSE",
+        cv=Mock(split=Mock(return_value=splits)),
+        verbose=False,
+    )
+    trainer.fit(DummyRegressor(), X, y)  # ty: ignore[invalid-argument-type]
+
+    oof = trainer.oof_predictions_
+    if oof.shape != (n,) or not np.isnan(oof[: n // 2]).all() or np.isnan(oof[n // 2 :]).any():
+        raise AssertionError(oof)

@@ -40,6 +40,7 @@ class _FoldResult:
 
     train_score: Any
     valid_score: Any
+    valid_pred: np.ndarray
     fitted_estimator: Estimator
     fitted_pipeline: Pipeline | None
     test_pred: np.ndarray | None
@@ -57,6 +58,7 @@ class CrossValidationTrainer(BaseTrainer):
     valid_scores_: list[float]
     fitted_estimators_: list[Estimator]
     fitted_pipelines_: list[Pipeline | None]
+    oof_predictions_: np.ndarray
 
     def __init__(  # noqa: PLR0913
         self,
@@ -367,6 +369,7 @@ class CrossValidationTrainer(BaseTrainer):
         self.valid_scores_ = [result.valid_score for result in fold_results]
         self.fitted_estimators_ = [result.fitted_estimator for result in fold_results]
         self.fitted_pipelines_ = [result.fitted_pipeline for result in fold_results]
+        self.oof_predictions_ = self._pool_oof(len(X), splits, fold_results)
 
         test_pred_sum: np.ndarray | None = None
         n_folds_for_test = 0
@@ -435,10 +438,7 @@ class CrossValidationTrainer(BaseTrainer):
                 y_train,
                 self._metric_predictions(fitted_estimator, x_train_proc, off_train),
             ),
-            valid_score=self.metric_fn(
-                y_valid,
-                self._metric_predictions(fitted_estimator, valid_rows.X, off_valid),
-            ),
+            **self._score_valid(fitted_estimator, valid_rows),
             fitted_estimator=fitted_estimator,
             fitted_pipeline=fitted_pipeline,
             test_pred=None
@@ -450,6 +450,33 @@ class CrossValidationTrainer(BaseTrainer):
                 proba=self.problem_type == "classification",
             ),
         )
+
+    def _score_valid(self, estimator: Estimator, valid: FitRows) -> dict[str, Any]:
+        """Return ``valid_score`` and ``valid_pred`` (OOF proba matrix or predict) of a fold."""
+        # Classifiers without predict_proba (e.g. hinge SGD) keep their hard labels as OOF.
+        use_proba = self.problem_type == "classification" and hasattr(estimator, "predict_proba")
+        pred = np.asarray(
+            self._estimator_output(estimator, valid.X, valid.offset, proba=use_proba), dtype=float
+        )
+        metric_input = (
+            to_metric_proba(pred)
+            if self.metric_type == "probs" and use_proba
+            else self._metric_predictions(estimator, valid.X, valid.offset)
+        )
+        return {"valid_score": self.metric_fn(valid.y, metric_input), "valid_pred": pred}
+
+    @staticmethod
+    def _pool_oof(
+        n_rows: int,
+        splits: list[tuple[np.ndarray, np.ndarray]],
+        fold_results: list[_FoldResult],
+    ) -> np.ndarray:
+        """Scatter each fold's validation predictions back to input row order; NaN elsewhere."""
+        first = fold_results[0].valid_pred
+        oof = np.full((n_rows, *first.shape[1:]), np.nan)
+        for (_, valid_idx), result in zip(splits, fold_results, strict=True):
+            oof[valid_idx] = result.valid_pred
+        return oof
 
     def _fit_fold_estimator(
         self, estimator: Estimator, train: FitRows, early_stopping: FitRows
